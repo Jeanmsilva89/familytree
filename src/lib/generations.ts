@@ -51,6 +51,17 @@ function parentsLabel(child: Person): string {
   return `${first}'s parents`;
 }
 
+export function siblingsOf(tree: TreeData, personId: string): Person[] {
+  const parentIds = new Set(parentsOf(tree, personId).map((p) => p.id));
+  if (!parentIds.size) return [];
+  const ids = new Set<string>();
+  for (const link of tree.childLinks) {
+    if (link.childId === personId) continue;
+    if (link.parentIds.some((id) => parentIds.has(id))) ids.add(link.childId);
+  }
+  return tree.people.filter((p) => ids.has(p.id));
+}
+
 export function parentSideGroup(tree: TreeData, child: Person): GenerationGroup | undefined {
   const people = parentsOf(tree, child.id);
   if (!people.length) return undefined;
@@ -122,7 +133,19 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
   if (parentLanePeople.length) {
     lanes.push({ id: "parents", people: parentLanePeople, groups: parentGroups });
   }
-  lanes.push({ id: "focus", people: couple, coupleBar });
+  const siblings = uniquePeople(siblingsOf(tree, focus.id));
+  const focusPeople = uniquePeople([...couple, ...siblings]);
+  const focusGroups: GenerationGroup[] | undefined = siblings.length
+    ? [
+        { parentId: `couple-${focus.id}`, label: "", people: couple, coupleBar },
+        {
+          parentId: `sibs-${focus.id}`,
+          label: `${focus.givenName.trim()} siblings`,
+          people: siblings,
+        },
+      ]
+    : undefined;
+  lanes.push({ id: "focus", people: focusPeople, coupleBar, groups: focusGroups });
   if (children.length) lanes.push({ id: "children", people: children });
   if (grandchildren.length) lanes.push({ id: "grandchildren", people: grandchildren, groups });
   return lanes;
