@@ -85,14 +85,14 @@ export function TreeApp() {
 
   if (!treeState.ready) {
     return (
-      <div className="app-shell">
+      <div className="app-shell tree-shell">
         <p>Opening your tree on this device…</p>
       </div>
     );
   }
 
   return (
-    <div className={narrow ? "app-shell is-narrow" : "app-shell is-wide"}>
+    <div className={narrow ? "app-shell tree-shell is-narrow" : "app-shell tree-shell is-wide"}>
       <header className="topbar">
         <Link className="brand" href="/">
           <BrandMark className="brand-mark" />

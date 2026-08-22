@@ -1,10 +1,14 @@
 html, body {
   height: 100%;
+}
+
+.tree-shell {
   overflow: hidden;
 }
 
-.app-shell {
-  overflow: hidden;
+.print-page,
+.printables {
+  overflow-y: auto;
 }
 
 .gen-stack {
