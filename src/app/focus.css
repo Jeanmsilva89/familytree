@@ -6,9 +6,15 @@
   gap: 8px;
   margin: 0 0 12px;
   padding-bottom: 2px;
+  min-width: 0;
 }
 
-.view-toggle .btn { flex: 1; min-height: var(--tap); }
+.view-toggle .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap);
+  padding-inline: 10px;
+}
 
 .focus-family {
   display: flex;
@@ -18,7 +24,8 @@
   overflow-x: hidden;
 }
 
-.focus-toolbar { display: flex; gap: 8px; }
+.focus-toolbar { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.focus-toolbar .btn { min-width: 0; flex: 1 1 auto; }
 
 .gen-stack {
   display: flex;
@@ -193,13 +200,24 @@
 
 .card-actions {
   display: flex;
-  gap: 4px;
-  justify-content: space-between;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  width: 100%;
 }
+.card-actions .btn,
 .card-remove {
-  font-size: 0.75rem;
-  min-height: 36px;
-  padding-inline: 8px;
+  flex: none;
+  width: 100%;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 0 8px;
+  font-size: 0.82rem;
+  line-height: 1.15;
+  text-align: center;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 .focus-card.is-flash {
   animation: flash-card 1.2s ease;
@@ -208,9 +226,37 @@
   0%, 100% { box-shadow: var(--shadow); }
   35% { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
 }
-.remove-confirm { display: grid; gap: 8px; margin: 8px 0; }
+.remove-confirm { display: grid; gap: 8px; margin: 8px 0; min-width: 0; }
+.remove-confirm .error { overflow-wrap: anywhere; }
+.remove-confirm .actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.remove-confirm .actions .btn {
+  min-width: 0;
+  width: 100%;
+  padding-inline: 8px;
+}
 .btn.danger {
-  background: color-mix(in srgb, #b42318 12%, var(--card));
-  color: #8a1c14;
-  border-color: color-mix(in srgb, #b42318 35%, var(--line));
+  background: color-mix(in srgb, var(--danger) 12%, var(--card));
+  color: var(--danger);
+  border-color: var(--danger-line);
+}
+
+.focus-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.focus-actions .btn {
+  min-width: 0;
+  width: 100%;
+  padding-inline: 8px;
+  overflow-wrap: anywhere;
+}
+
+.people-row span:last-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
