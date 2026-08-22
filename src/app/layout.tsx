@@ -2,13 +2,13 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Family Tree",
+  title: "Kinstart",
   description: "A free local-first family tree. One name is enough. Stays on this device. No account.",
-  applicationName: "Family Tree",
+  applicationName: "Kinstart",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
     capable: true,
-    title: "Family Tree",
+    title: "Kinstart",
     statusBarStyle: "default",
   },
   icons: {
