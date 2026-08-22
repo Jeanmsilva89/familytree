@@ -41,27 +41,23 @@ function PersonChip({
   onRemove: () => void;
 }) {
   const age = ageFromBirthDate(person.birthDate);
+  const name = displayName(person);
   const cls = ["focus-card", focused ? "is-focus" : "", flash ? "is-flash" : ""].filter(Boolean).join(" ");
   return (
     <article className={cls} data-person-id={person.id}>
-      <button type="button" className="focus-face" onClick={onFocus} aria-label={`Focus ${displayName(person)}`}>
+      <button type="button" className="focus-face" onClick={onFocus} aria-label={`Focus ${name}`}>
         <span className="avatar" aria-hidden>
           {person.photo ? <img src={person.photo} alt="" /> : initials(person)}
         </span>
-        <span className="focus-name">{displayName(person)}</span>
+        <span className="focus-name">{name}</span>
         {age ? <span className="hint">{age}</span> : null}
       </button>
       <div className="card-actions">
-        <button type="button" className="btn ghost" onClick={onOpen} aria-label={`Edit ${displayName(person)}`}>
+        <button type="button" className="icon-btn" onClick={onOpen} aria-label={`Edit ${name}`}>
           Edit
         </button>
-        <button
-          type="button"
-          className="btn ghost card-remove"
-          onClick={onRemove}
-          aria-label={`Remove ${displayName(person)}`}
-        >
-          Drop
+        <button type="button" className="icon-btn" onClick={onRemove} aria-label={`Remove ${name}`}>
+          X
         </button>
       </div>
     </article>
@@ -157,7 +153,8 @@ function LaneRow({
   return (
     <div className="gen-lane">
       <div className="gen-stem" aria-hidden />
-      <div className="gen-scroll" aria-label={lane.id}>
+      <h2 className="gen-lane-title">{lane.title}</h2>
+      <div className="gen-scroll" aria-label={lane.title}>
         {lane.groups
           ? lane.groups.map((group) => (
               <SideGroup
