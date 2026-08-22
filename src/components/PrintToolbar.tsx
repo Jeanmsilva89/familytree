@@ -7,7 +7,7 @@ export function PrintToolbar({ title }: { title: string }) {
     <div className="no-print app-shell" style={{ paddingBottom: 8 }}>
       <p>
         <Link href="/printables">← Kid printables</Link>
-        {" \u00b7 "}
+        {" · "}
         <Link href="/">Tree</Link>
       </p>
       <h1 style={{ fontFamily: "Palatino, serif" }}>{title}</h1>

@@ -27,7 +27,7 @@ export function AppMenu({ open, onClose, onExport, onImport, onReset, canInstall
   if (!open) return null;
 
   return (
-    <div className="menu" ref={ref} role="menu" aria-label="Kinstart menu">
+    <div className="menu" ref={ref} role="menu" aria-label="Family Tree menu">
       <Link href="/print" role="menuitem" onClick={onClose}>
         Print tree
       </Link>
@@ -46,7 +46,7 @@ export function AppMenu({ open, onClose, onExport, onImport, onReset, canInstall
         </button>
       ) : (
         <p className="hint" style={{ padding: "8px 10px" }}>
-          Install from your browser menu to use Kinstart like an app.
+          Install from your browser menu to use Family Tree like an app.
         </p>
       )}
       <button type="button" role="menuitem" onClick={onReset}>
