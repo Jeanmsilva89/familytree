@@ -1,35 +1,54 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useId, useRef } from "react";
 
 type Props = {
   label: string;
-  onAdd: (name: string) => Promise<void> | void;
-  onCancel?: () => void;
+  placeholder?: string;
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: () => void | Promise<void>;
+  onCancel: () => void;
+  autoFocus?: boolean;
 };
 
-export function AddNameRow({ label, onAdd, onCancel }: Props) {
-  const [name, setName] = useState("");
-  const [busy, setBusy] = useState(false);
+export function AddNameRow({
+  label,
+  placeholder = "Name",
+  value,
+  onChange,
+  onSubmit,
+  onCancel,
+  autoFocus = true,
+}: Props) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const inputId = useId();
+
+  useEffect(() => {
+    if (autoFocus) inputRef.current?.focus();
+  }, [autoFocus]);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    const next = name.trim();
-    if (!next || busy) return;
-    setBusy(true);
-    try {
-      await onAdd(next);
-      setName("");
-    } finally {
-      setBusy(false);
-    }
+    if (!value.trim()) return;
+    await onSubmit();
   }
 
   return (
-    <form className="add-name-row" onSubmit={submit}>
-      <input aria-label={label} placeholder={label} value={name} onChange={(e) => setName(e.target.value)} autoFocus required />
-      <button className="btn primary" type="submit" disabled={busy}>Add</button>
-      {onCancel ? <button className="btn ghost" type="button" onClick={onCancel}>Cancel</button> : null}
+    <form className="inline-add" onSubmit={(e) => void submit(e)} aria-label={label}>
+      <label className="sr-only" htmlFor={inputId}>{label}</label>
+      <input
+        ref={inputRef}
+        id={inputId}
+        className="inline-add-input"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        autoComplete="name"
+        enterKeyHint="done"
+      />
+      <button type="submit" className="btn primary" disabled={!value.trim()}>Add</button>
+      <button type="button" className="btn ghost" onClick={onCancel}>Cancel</button>
     </form>
   );
 }

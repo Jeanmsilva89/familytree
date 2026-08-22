@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { addChild, addPartner, startWithName } from "./tree";
+import { addChild, addParent, addPartner, addSibling, addUnlinkedPerson, startWithName } from "./tree";
 import {
   loadTree,
   resetTreeStoreForTests,
@@ -63,5 +63,21 @@ describe("tree persist", () => {
     resetTreeStoreForTests();
     const after = await loadTree(backend);
     assert.equal(after.people.some((p) => p.givenName === "Riley"), true);
+  });
+
+  it("parent partner sibling and unlinked survive reload", async () => {
+    resetTreeStoreForTests();
+    const backend = memoryBackend();
+    let tree = startWithName("Alex");
+    const alex = tree.people[0].id;
+    tree = addParent(tree, alex, "Pat");
+    tree = addPartner(tree, alex, "Sam");
+    tree = addSibling(tree, alex, "Jordan");
+    tree = addUnlinkedPerson(tree, "Casey");
+    await saveTree(tree, backend);
+    resetTreeStoreForTests();
+    const reloaded = await loadTree(backend);
+    const names = reloaded.people.map((p) => p.givenName).sort();
+    assert.deepEqual(names, ["Alex", "Casey", "Jordan", "Pat", "Sam"]);
   });
 });
