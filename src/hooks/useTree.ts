@@ -88,7 +88,12 @@ export function useTree() {
   );
 
   const sibling = useCallback(
-    async (personId: string, name: string) => persist(addSibling(tree, personId, name)),
+    async (personId: string, name: string) => {
+      const before = new Set(tree.people.map((p) => p.id));
+      const next = addSibling(tree, personId, name);
+      await persist(next);
+      return next.people.find((p) => !before.has(p.id))?.id;
+    },
     [persist, tree],
   );
 
@@ -119,7 +124,16 @@ export function useTree() {
   );
 
   const remove = useCallback(
-    async (id: string) => persist(removePerson(tree, id)),
+    async (id: string) => {
+      const next = removePerson(tree, id);
+      if (next.people.length === 0) {
+        await clearTree();
+        setTree(emptyTree());
+        setError(null);
+        return;
+      }
+      await persist(next);
+    },
     [persist, tree],
   );
 
