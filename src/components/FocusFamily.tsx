@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import type { Person, TreeData, UnionKind } from "@/lib/types";
 import { ageFromBirthDate, displayName, initials } from "@/lib/types";
-import { buildGenerationLanes, type GenerationLane } from "@/lib/layout";
+import { buildGenerationLanes, type GenerationLane } from "@/lib/generations";
 import { unionsFor } from "@/lib/tree";
 import { PeopleList } from "./PeopleList";
 
