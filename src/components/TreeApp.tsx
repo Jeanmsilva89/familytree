@@ -142,7 +142,7 @@ export function TreeApp() {
             <button type="button" role="tab" aria-selected={mobileView === "family"} className={mobileView === "family" ? "btn primary" : "btn ghost"} onClick={() => chooseView("family")}>Family</button>
             <button type="button" role="tab" aria-selected={mobileView === "graph"} className={mobileView === "graph" ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Graph</button>
           </div>
-          {lookingName ? <p className="looking-at" aria-live="polite">Looking at {lookingName}</p> : null}
+          {lookingName ? <p className="sr-only" aria-live="polite">Looking at {lookingName}</p> : null}
           {mobileView === "family" ? (
             <FocusFamily
               tree={treeState.tree}

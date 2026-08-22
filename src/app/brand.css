@@ -17,18 +17,6 @@
   border-radius: 16px;
 }
 
-.looking-at {
-  position: sticky;
-  top: 0;
-  z-index: 3;
-  margin: -4px 0 10px;
-  padding: 6px 4px 8px;
-  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
-  font-size: 1.02rem;
-  font-weight: 700;
-  background: var(--paper, var(--cream));
-}
-
 .focus-card.is-focus {
   box-shadow: 0 0 0 3px var(--accent), var(--shadow);
 }
