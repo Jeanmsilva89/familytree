@@ -15,7 +15,8 @@ type BeforeInstallPrompt = Event & { prompt: () => Promise<void> };
 
 export function TreeApp() {
   const treeState = useTree();
-  const [selected, setSelected] = useState<Person | undefined>();
+  const [highlighted, setHighlighted] = useState<Person | undefined>();
+  const [sheetPerson, setSheetPerson] = useState<Person | undefined>();
   const [menuOpen, setMenuOpen] = useState(false);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPrompt | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -67,7 +68,7 @@ export function TreeApp() {
           <BrandMark className="brand-mark" />
           <div>
             <h1>Family Tree</h1>
-            <p className="privacy">Stays on this device. No account.</p>
+            <p className="privacy">On this device</p>
           </div>
         </Link>
         <button
@@ -89,7 +90,8 @@ export function TreeApp() {
         onReset={async () => {
           if (confirm("Clear the tree saved on this device?")) {
             await treeState.reset();
-            setSelected(undefined);
+            setHighlighted(undefined);
+            setSheetPerson(undefined);
             setMenuOpen(false);
           }
         }}
@@ -109,19 +111,20 @@ export function TreeApp() {
         <>
           <TreeCanvas
             tree={treeState.tree}
-            selectedId={selected?.id}
-            onSelect={(person) => setSelected(person)}
+            highlightedId={highlighted?.id}
+            onHighlight={setHighlighted}
+            onOpen={setSheetPerson}
           />
           <p className="hint" style={{ marginTop: 16 }}>
-            Tap a person to add a parent, partner, or child. Dates and bios stay optional.
+            Tap once to see a line. Tap again to open. Pinch or drag the graph.
           </p>
         </>
       )}
 
       <PersonSheet
         tree={treeState.tree}
-        person={selected}
-        onClose={() => setSelected(undefined)}
+        person={sheetPerson}
+        onClose={() => setSheetPerson(undefined)}
         onAddParent={treeState.parent}
         onAddPartner={treeState.partner}
         onAddChild={treeState.child}
