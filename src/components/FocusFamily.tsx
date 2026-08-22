@@ -3,7 +3,8 @@
 import { useMemo, useState } from "react";
 import type { Person, TreeData, UnionKind } from "@/lib/types";
 import { ageFromBirthDate, displayName, initials } from "@/lib/types";
-import { buildGenerationLanes, type GenerationLane } from "@/lib/generations";
+import { buildGenerationLanes, type GenerationGroup, type GenerationLane } from "@/lib/generations";
+import { highlightedCoupleIds } from "@/lib/graphView";
 import { unionsFor } from "@/lib/tree";
 import { PeopleList } from "./PeopleList";
 
@@ -51,48 +52,100 @@ function PersonChip({
   );
 }
 
+function CoupleUnit({
+  people,
+  coupleBar,
+  lit,
+  focusIds,
+  onFocus,
+  onOpen,
+}: {
+  people: Person[];
+  coupleBar?: boolean;
+  lit?: boolean;
+  focusIds: Set<string>;
+  onFocus: (id: string) => void;
+  onOpen: (person: Person) => void;
+}) {
+  const unit = Boolean(coupleBar && people.length >= 2);
+  return (
+    <div className={`couple-unit${unit ? " is-unit" : ""}${lit && unit ? " is-lit" : ""}`}>
+      {people.map((p) => (
+        <PersonChip
+          key={p.id}
+          person={p}
+          focused={focusIds.has(p.id)}
+          onFocus={() => onFocus(p.id)}
+          onOpen={() => onOpen(p)}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SideGroup({
+  group,
+  focusIds,
+  onFocus,
+  onOpen,
+}: {
+  group: GenerationGroup;
+  focusIds: Set<string>;
+  onFocus: (id: string) => void;
+  onOpen: (person: Person) => void;
+}) {
+  const lit = group.people.some((p) => focusIds.has(p.id));
+  return (
+    <div className="gen-group">
+      {group.label ? <p className="gen-group-label">{group.label}</p> : null}
+      <CoupleUnit
+        people={group.people}
+        coupleBar={group.coupleBar}
+        lit={lit}
+        focusIds={focusIds}
+        onFocus={onFocus}
+        onOpen={onOpen}
+      />
+    </div>
+  );
+}
+
 function LaneRow({
   lane,
-  focusId,
+  focusIds,
   onFocus,
   onOpen,
 }: {
   lane: GenerationLane;
-  focusId?: string;
+  focusIds: Set<string>;
   onFocus: (id: string) => void;
   onOpen: (person: Person) => void;
 }) {
-  const couple = lane.id === "focus";
+  const focusCouple = lane.id === "focus";
   return (
     <div className="gen-lane">
       <div className="gen-stem" aria-hidden />
-      <div
-        className={`gen-scroll${couple && lane.coupleBar ? " has-bar" : ""}`}
-        aria-label={lane.id}
-      >
+      <div className="gen-scroll" aria-label={lane.id}>
         {lane.groups
           ? lane.groups.map((group) => (
-              <div key={group.parentId} className="gen-group">
-                {group.people.map((p) => (
-                  <PersonChip
-                    key={p.id}
-                    person={p}
-                    focused={p.id === focusId}
-                    onFocus={() => onFocus(p.id)}
-                    onOpen={() => onOpen(p)}
-                  />
-                ))}
-              </div>
-            ))
-          : lane.people.map((p) => (
-              <PersonChip
-                key={p.id}
-                person={p}
-                focused={p.id === focusId}
-                onFocus={() => onFocus(p.id)}
-                onOpen={() => onOpen(p)}
+              <SideGroup
+                key={group.parentId}
+                group={group}
+                focusIds={focusIds}
+                onFocus={onFocus}
+                onOpen={onOpen}
               />
-            ))}
+            ))
+          : (
+              <CoupleUnit
+                people={lane.people}
+                coupleBar={focusCouple ? lane.coupleBar : false}
+                lit={focusCouple && Boolean(lane.coupleBar)}
+                focusIds={focusIds}
+                onFocus={onFocus}
+                onOpen={onOpen}
+              />
+            )}
       </div>
     </div>
   );
@@ -114,6 +167,10 @@ export function FocusFamily({
   const primaryUnion = unions[0];
   const childParents = primaryUnion?.partnerIds ?? (focus ? [focus.id] : []);
   const hasParents = lanes.some((l) => l.id === "parents");
+  const focusIds = useMemo(
+    () => highlightedCoupleIds(tree, focus?.id),
+    [tree, focus?.id],
+  );
 
   if (!focus) return null;
 
@@ -130,7 +187,7 @@ export function FocusFamily({
           <LaneRow
             key={lane.id}
             lane={lane}
-            focusId={focus.id}
+            focusIds={focusIds}
             onFocus={onFocus}
             onOpen={onOpen}
           />
@@ -138,61 +195,27 @@ export function FocusFamily({
       </div>
 
       <div className="actions focus-actions">
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            const name = promptName("Parent's name");
-            if (name) await onAddParent(focus.id, name);
-          }}
-        >
-          Add parent
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            const name = promptName("Partner's name");
-            if (name) await onAddPartner(focus.id, name, "partnered");
-          }}
-        >
-          Add partner
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            const name = promptName("Child's name");
-            if (name) await onAddChild(childParents, name, primaryUnion?.id);
-          }}
-        >
-          Add child
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            if (!hasParents) {
-              window.alert("Add a parent first");
-              return;
-            }
-            const name = promptName("Sibling's name");
-            if (name) await onAddSibling(focus.id, name);
-          }}
-        >
-          Add sibling
-        </button>
+        <button type="button" className="btn" onClick={async () => {
+          const name = promptName("Parent's name");
+          if (name) await onAddParent(focus.id, name);
+        }}>Add parent</button>
+        <button type="button" className="btn" onClick={async () => {
+          const name = promptName("Partner's name");
+          if (name) await onAddPartner(focus.id, name, "partnered");
+        }}>Add partner</button>
+        <button type="button" className="btn" onClick={async () => {
+          const name = promptName("Child's name");
+          if (name) await onAddChild(childParents, name, primaryUnion?.id);
+        }}>Add child</button>
+        <button type="button" className="btn" onClick={async () => {
+          if (!hasParents) { window.alert("Add a parent first"); return; }
+          const name = promptName("Sibling's name");
+          if (name) await onAddSibling(focus.id, name);
+        }}>Add sibling</button>
       </div>
 
       {peopleOpen ? (
-        <PeopleList
-          tree={tree}
-          onClose={() => setPeopleOpen(false)}
-          onPick={(person) => {
-            onFocus(person.id);
-            setPeopleOpen(false);
-          }}
-        />
+        <PeopleList tree={tree} onClose={() => setPeopleOpen(false)} onPick={(person) => { onFocus(person.id); setPeopleOpen(false); }} />
       ) : null}
     </section>
   );

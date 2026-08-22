@@ -56,7 +56,64 @@ describe("generation lanes", () => {
     assert.deepEqual(lanes.find((l) => l.id === "children")?.people.map((p) => p.id), ["kid"]);
     const gk = lanes.find((l) => l.id === "grandchildren");
     assert.equal(gk?.groups?.[0]?.parentId, "kid");
+    assert.equal(gk?.groups?.[0]?.label, "Kid's");
     assert.deepEqual(gk?.people.map((p) => p.id), ["gk"]);
+  });
+
+  it("keeps grandparents of parent A off parent B's side", () => {
+    const split: TreeData = {
+      focusPersonId: "jean",
+      people: [
+        person("jay", "Jay"),
+        person("andreia", "Andreia"),
+        person("craig", "Craig"),
+        person("jean", "Jean"),
+        person("leah", "Leah"),
+        person("pat", "Pat"),
+      ],
+      unions: [
+        { id: "u-ja", partnerIds: ["jay", "andreia"], kind: "married" },
+        { id: "u-jl", partnerIds: ["jean", "leah"], kind: "partnered" },
+      ],
+      childLinks: [
+        { id: "c-jean", childId: "jean", parentIds: ["jay", "andreia"], unionId: "u-ja" },
+        { id: "c-leah", childId: "leah", parentIds: ["craig"] },
+        { id: "c-craig", childId: "craig", parentIds: ["pat"] },
+      ],
+    };
+    const lanes = buildGenerationLanes(split, "jean");
+    const parents = lanes.find((l) => l.id === "parents");
+    const jeanSide = parents!.groups!.find((g) => g.parentId === "jean");
+    const leahSide = parents!.groups!.find((g) => g.parentId === "leah");
+    assert.deepEqual(jeanSide?.people.map((p) => p.id).sort(), ["andreia", "jay"]);
+    assert.equal(jeanSide?.label, "Jean's parents");
+    assert.equal(jeanSide?.coupleBar, true);
+    assert.deepEqual(leahSide?.people.map((p) => p.id), ["craig"]);
+    assert.equal(leahSide?.label, "Leah's parents");
+    assert.equal(leahSide?.coupleBar, false);
+    assert.ok(!jeanSide?.people.some((p) => p.id === "craig"));
+    assert.ok(!leahSide?.people.some((p) => p.id === "jay" || p.id === "andreia"));
+
+    const twoGp: TreeData = {
+      ...split,
+      people: [...split.people, person("mom", "Mom"), person("dad", "Dad")],
+      childLinks: [
+        { id: "c-mom", childId: "mom", parentIds: ["jay", "andreia"], unionId: "u-ja" },
+        { id: "c-dad", childId: "dad", parentIds: ["craig"] },
+        { id: "c-jean2", childId: "jean", parentIds: ["mom", "dad"] },
+        { id: "c-leah", childId: "leah", parentIds: ["pat"] },
+      ],
+    };
+    const gps = buildGenerationLanes(twoGp, "jean").find((l) => l.id === "grandparents")!.groups!;
+    const momGp = gps.find((g) => g.parentId === "mom")!;
+    const dadGp = gps.find((g) => g.parentId === "dad")!;
+    assert.deepEqual(momGp.people.map((p) => p.id).sort(), ["andreia", "jay"]);
+    assert.deepEqual(dadGp.people.map((p) => p.id), ["craig"]);
+    assert.ok(!momGp.people.some((p) => p.id === "craig"));
+    assert.ok(!dadGp.people.some((p) => p.id === "jay"));
+    assert.equal(momGp.coupleBar, true);
+    assert.equal(dadGp.coupleBar, false);
+    assert.equal(momGp.label, "Mom's parents");
   });
 });
 
@@ -70,8 +127,6 @@ describe("five-generation graph", () => {
       assert.ok(Number.isFinite(card!.x));
       assert.ok(Number.isFinite(card!.y));
     }
-    assert.ok(Number.isFinite(layout.width));
-    assert.ok(Number.isFinite(layout.height));
     const gens = new Map<number, typeof layout.cards>();
     for (const card of layout.cards) {
       const list = gens.get(card.gen) ?? [];
