@@ -1,0 +1,30 @@
+{
+  "name": "kinstart",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Free local-first PWA for a living family tree. No signup.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts"
+  },
+  "dependencies": {
+    "idb": "^8.0.3",
+    "next": "^15.4.6",
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@types/node": "^22.17.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "eslint": "^9.33.0",
+    "eslint-config-next": "^15.4.6",
+    "tsx": "^4.20.4",
+    "typescript": "^5.9.2"
+  }
+}
