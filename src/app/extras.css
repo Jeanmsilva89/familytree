@@ -1,0 +1,52 @@
+:root, html[data-theme="light"] {
+  --topbar: calc(64px + var(--safe-top));
+}
+html[data-theme="dark"] { --topbar: calc(64px + var(--safe-top)); }
+
+.gen-lane {
+  min-height: 100%;
+}
+.gen-lane-title {
+  margin: 0 0 8px;
+  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+}
+.gen-group-label { font-size: 0.92rem; }
+.gen-scroll { scroll-snap-type: x proximity; }
+.card-actions { justify-content: center; gap: 8px; }
+.card-actions .icon-btn {
+  flex: none;
+  width: var(--tap);
+  height: var(--tap);
+  min-width: var(--tap);
+  box-shadow: none;
+  font-size: 0.82rem;
+}
+.sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.sheet-close { min-height: auto; min-width: auto; max-width: none; height: auto; padding: 4px 0; font-size: 0.95rem; line-height: 1.2; box-shadow: none; background: transparent; border: 0; color: var(--accent); }
+.sheet h2 { margin: 0; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.theme-picks { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.theme-picks button { height: 48px; min-height: 48px; min-width: 48px; padding: 4px 2px; font-size: 0.82rem; }
+.menu button, .menu a, .menu summary { min-height: var(--tap); }
+.menu details { padding: 4px 6px 8px; }
+.menu summary { display: flex; align-items: center; cursor: pointer; font-weight: 600; }
+.portrait-card strong { overflow-wrap: anywhere; white-space: normal; }
+.print-toolbar { display: grid; gap: 10px; padding: 16px 16px 8px; }
+.print-unit { page-break-after: always; break-after: page; }
+.print-unit:last-child { page-break-after: auto; break-after: auto; }
+.birth-label { display: block; font-size: 0.92rem; color: var(--muted); }
+.canvas { display: grid; gap: 12px; }
+.unit {
+  display: grid; gap: 6px; padding: 16px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); box-shadow: var(--shadow);
+  text-decoration: none; color: inherit; min-height: var(--tap);
+}
+.unit-label { margin: 0; font-size: 0.92rem; color: var(--muted); font-weight: 600; }
+.empty-state { display: grid; gap: 12px; justify-items: start; }
+.link-roles { display: grid; gap: 8px; }
+.link-roles .btn { width: 100%; min-height: 48px; }
+.people-embed { min-width: 0; }
+.print-page h1 { font-family: Palatino, "Iowan Old Style", "Times New Roman", serif; }
