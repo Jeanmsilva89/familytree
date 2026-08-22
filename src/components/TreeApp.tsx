@@ -66,7 +66,7 @@ export function TreeApp() {
         <Link className="brand" href="/">
           <BrandMark className="brand-mark" />
           <div>
-            <h1>Kinstart</h1>
+            <h1>Family Tree</h1>
             <p className="privacy">Stays on this device. No account.</p>
           </div>
         </Link>
