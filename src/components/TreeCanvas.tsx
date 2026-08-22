@@ -65,28 +65,20 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
 
   useEffect(() => {
     const stage = stageRef.current;
-    const card = layout.cards.find((c) => c.id === focusId);
-    if (!stage || !card) return;
+    const pack = layout.cards.filter((c) => isFiniteBox(c.x, c.y));
+    if (!stage || pack.length === 0) return;
     const vw = stage.clientWidth || 360;
     const vh = stage.clientHeight || 480;
-    const couple = layout.couples.find((c) => c.bar && c.partnerIds.includes(focusId ?? ""));
-    const unitIds = new Set(couple?.partnerIds ?? [focusId]);
-    const kids = layout.cards.filter((c) => c.gen === -1);
-    const unit = layout.cards.filter((c) => unitIds.has(c.id));
-    const pack = [...unit, ...kids];
     const xs = pack.map((c) => c.x);
     const ys = pack.map((c) => c.y);
     const minX = Math.min(...xs) - CARD.w / 2;
     const maxX = Math.max(...xs) + CARD.w / 2;
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys) + CARD.h;
-    const narrow = vw < 720;
-    const scale = narrow
-      ? fitContentScale(vw, vh, Math.max(maxX - minX, CARD.w * 2), Math.max(maxY - minY, CARD.h * 2))
-      : viewRef.current.s || 1;
-    viewRef.current = centerTransform(vw, vh, card.x, card.y + CARD.h / 2, scale);
+    const scale = fitContentScale(vw, vh, Math.max(maxX - minX, CARD.w), Math.max(maxY - minY, CARD.h));
+    viewRef.current = centerTransform(vw, vh, (minX + maxX) / 2, (minY + maxY) / 2, scale);
     applyWorld();
-  }, [focusId, layout]);
+  }, [focusId, layout, tree.people.length]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
