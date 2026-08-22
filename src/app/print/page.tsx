@@ -24,16 +24,16 @@ export default function PrintTreePage() {
     <div className="print-page">
       <div className="no-print app-shell" style={{ paddingBottom: 12 }}>
         <p>
-          <Link href="/">← Back to Family Tree</Link>
+          <Link href="/">\u2190 Back to Kinstart</Link>
         </p>
         <button className="btn primary" type="button" onClick={() => window.print()}>
           Print or save PDF
         </button>
-        <p className="hint">Use your browser’s print dialog to save a PDF. Nothing is uploaded.</p>
+        <p className="hint">Use your browser print dialog to save a PDF. Nothing is uploaded.</p>
       </div>
       <article className="print-tree">
-        <h1>Family Tree</h1>
-        {!ready ? <p>Loading…</p> : null}
+        <h1>Kinstart</h1>
+        {!ready ? <p>Loading\u2026</p> : null}
         {ready && tree.people.length === 0 ? <p>No tree on this device yet.</p> : null}
         {view.parentUnits.map((unit) => (
           <section key={unit.id} className="print-unit">
