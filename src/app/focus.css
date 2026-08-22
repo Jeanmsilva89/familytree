@@ -273,41 +273,12 @@
   line-height: 1;
   color: var(--ink-soft);
 }
-.card-menu {
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 4px);
-  z-index: 4;
-  display: grid;
-  min-width: 140px;
-  padding: 6px;
-  background: var(--card);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  box-shadow: var(--shadow);
-}
-.card-menu .btn {
-  width: 100%;
-  min-height: var(--tap);
-}
 .focus-card.is-flash {
   animation: flash-card 1.2s ease;
 }
 @keyframes flash-card {
   0%, 100% { box-shadow: var(--shadow); }
   35% { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
-}
-.remove-confirm { display: grid; gap: 8px; margin: 8px 0; min-width: 0; }
-.remove-confirm .error { overflow-wrap: anywhere; }
-.remove-confirm .actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 8px;
-}
-.remove-confirm .actions .btn {
-  min-width: 0;
-  width: 100%;
-  padding-inline: 8px;
 }
 .btn.danger {
   background: color-mix(in srgb, var(--danger) 12%, var(--card));

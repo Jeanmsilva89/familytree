@@ -17,7 +17,6 @@ type Props = {
   onAddPartner: (personId: string, name: string, kind: UnionKind) => Promise<void>;
   onAddChild: (parentIds: string[], name: string, unionId?: string) => Promise<void>;
   onAddSibling: (personId: string, name: string) => Promise<string | void>;
-  onRemove: (id: string) => Promise<void>;
 };
 
 const LANE_WORDS: Record<string, string> = {
@@ -56,7 +55,7 @@ function PersonChip({ person, focused, flash, onFocus, onOpen }: {
 
 function CoupleUnit({ people, coupleBar, lit, focusIds, onFocus, onOpen, flashId }: {
   people: Person[]; coupleBar?: boolean; lit?: boolean; focusIds: Set<string>;
-  onFocus: (id: string) => void; onOpen: (person: Person) => void; onRemove?: (id: string) => void; flashId?: string;
+  onFocus: (id: string) => void; onOpen: (person: Person) => void; flashId?: string;
 }) {
   const unit = Boolean(coupleBar && people.length >= 2);
   return (
@@ -68,20 +67,20 @@ function CoupleUnit({ people, coupleBar, lit, focusIds, onFocus, onOpen, flashId
   );
 }
 
-function SideGroup({ group, focusIds, onFocus, onOpen, onRemove, flashId }: {
-  group: GenerationGroup; focusIds: Set<string>; onFocus: (id: string) => void; onOpen: (person: Person) => void; onRemove: (id: string) => void; flashId?: string;
+function SideGroup({ group, focusIds, onFocus, onOpen, flashId }: {
+  group: GenerationGroup; focusIds: Set<string>; onFocus: (id: string) => void; onOpen: (person: Person) => void; flashId?: string;
 }) {
   const lit = group.people.some((p) => focusIds.has(p.id));
   return (
     <div className="gen-group">
       {group.label ? <p className="gen-group-label">{group.label}</p> : null}
-      <CoupleUnit people={group.people} coupleBar={group.coupleBar} lit={lit} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} onRemove={onRemove} flashId={flashId} />
+      <CoupleUnit people={group.people} coupleBar={group.coupleBar} lit={lit} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} flashId={flashId} />
     </div>
   );
 }
 
-function LaneRow({ lane, focusIds, onFocus, onOpen, onRemove, flashId }: {
-  lane: GenerationLane; focusIds: Set<string>; onFocus: (id: string) => void; onOpen: (person: Person) => void; onRemove: (id: string) => void; flashId?: string;
+function LaneRow({ lane, focusIds, onFocus, onOpen, flashId }: {
+  lane: GenerationLane; focusIds: Set<string>; onFocus: (id: string) => void; onOpen: (person: Person) => void; flashId?: string;
 }) {
   const focusCouple = lane.id === "focus";
   return (
@@ -90,20 +89,19 @@ function LaneRow({ lane, focusIds, onFocus, onOpen, onRemove, flashId }: {
       <div className="gen-stem" aria-hidden />
       <div className="gen-scroll" aria-label={lane.id}>
         {lane.groups ? lane.groups.map((group) => (
-          <SideGroup key={group.parentId} group={group} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} onRemove={onRemove} flashId={flashId} />
+          <SideGroup key={group.parentId} group={group} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} flashId={flashId} />
         )) : (
-          <CoupleUnit people={lane.people} coupleBar={focusCouple ? lane.coupleBar : false} lit={Boolean(lane.coupleBar) && lane.people.some((p) => focusIds.has(p.id))} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} onRemove={onRemove} flashId={flashId} />
+          <CoupleUnit people={lane.people} coupleBar={focusCouple ? lane.coupleBar : false} lit={Boolean(lane.coupleBar) && lane.people.some((p) => focusIds.has(p.id))} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} flashId={flashId} />
         )}
       </div>
     </div>
   );
 }
 
-export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, onAddChild, onAddSibling, onRemove }: Props) {
+export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, onAddChild, onAddSibling }: Props) {
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | undefined>();
   const [adding, setAdding] = useState<"parent" | "partner" | "child" | "sibling" | null>(null);
-  const [removeId, setRemoveId] = useState<string | undefined>();
   const [viewId, setViewId] = useState(tree.focusPersonId);
   useEffect(() => {
     if (tree.focusPersonId) setViewId(tree.focusPersonId);
@@ -119,7 +117,6 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
   const childParents = primaryUnion?.partnerIds ?? (focus ? [focus.id] : []);
   const hasParents = lanes.some((l) => l.id === "parents");
   const focusIds = useMemo(() => highlightedCoupleIds(tree, focus?.id), [tree, focus?.id]);
-  const removePerson = removeId ? tree.people.find((p) => p.id === removeId) : undefined;
 
   useEffect(() => {
     if (!flashId) return;
@@ -152,18 +149,9 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
       </div>
       <div className="gen-stack">
         {lanes.map((lane) => (
-          <LaneRow key={lane.id} lane={lane} focusIds={focusIds} onFocus={handleFocus} onOpen={onOpen} onRemove={(id) => setRemoveId(id)} flashId={flashId} />
+          <LaneRow key={lane.id} lane={lane} focusIds={focusIds} onFocus={handleFocus} onOpen={onOpen} flashId={flashId} />
         ))}
       </div>
-      {removePerson ? (
-        <div className="remove-confirm" role="alertdialog">
-          <p className="error">Remove {displayName(removePerson)} from this tree?</p>
-          <div className="actions">
-            <button type="button" className="btn ghost" onClick={() => setRemoveId(undefined)}>Cancel</button>
-            <button type="button" className="btn danger" onClick={async () => { await onRemove(removePerson.id); setRemoveId(undefined); }}>Remove</button>
-          </div>
-        </div>
-      ) : null}
       <div className="actions focus-actions">
         <button type="button" className="btn" onClick={() => setAdding("parent")}>Add parent</button>
         <button type="button" className="btn" onClick={() => setAdding("partner")}>Add partner</button>
