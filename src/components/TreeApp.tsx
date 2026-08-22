@@ -55,7 +55,7 @@ export function TreeApp() {
   if (!treeState.ready) {
     return (
       <div className="app-shell">
-        <p>Opening your tree on this device.</p>
+        <p>Opening your tree on this device…</p>
       </div>
     );
   }
@@ -66,7 +66,7 @@ export function TreeApp() {
         <Link className="brand" href="/">
           <BrandMark className="brand-mark" />
           <div>
-            <h1>Kinstart</h1>
+            <h1>Family Tree</h1>
             <p className="privacy">Stays on this device. No account.</p>
           </div>
         </Link>
@@ -77,7 +77,7 @@ export function TreeApp() {
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((v) => !v)}
         >
-          Menu
+          ☰
         </button>
       </header>
 

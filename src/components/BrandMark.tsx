@@ -1,6 +1,6 @@
 export function BrandMark({ className }: { className?: string }) {
   return (
-    <svg className={className} viewBox="0 0 64 64" role="img" aria-label="Kinstart tree mark">
+    <svg className={className} viewBox="0 0 64 64" role="img" aria-label="Family Tree mark">
       <rect width="64" height="64" rx="16" fill="#efe3d0" />
       <path d="M32 50 V30" stroke="#6a4d38" strokeWidth="3.2" strokeLinecap="round" />
       <path
