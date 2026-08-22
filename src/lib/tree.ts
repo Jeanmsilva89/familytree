@@ -178,6 +178,18 @@ export function setUnionKind(tree: TreeData, unionId: string, kind: UnionKind): 
   };
 }
 
+export function nextFocusAfterRemove(tree: TreeData, id: string): string | undefined {
+  const remaining = tree.people.filter((p) => p.id !== id);
+  if (!remaining.length) return undefined;
+  const partnerIds = unionsFor(tree, id).flatMap((u) => u.partnerIds).filter((pid) => pid !== id);
+  const parentIds = parentsOf(tree, id).map((p) => p.id);
+  return (
+    remaining.find((p) => partnerIds.includes(p.id))?.id ??
+    remaining.find((p) => parentIds.includes(p.id))?.id ??
+    remaining[0]?.id
+  );
+}
+
 export function removePerson(tree: TreeData, id: string): TreeData {
   const people = tree.people.filter((p) => p.id !== id);
   const unions = tree.unions
@@ -185,9 +197,9 @@ export function removePerson(tree: TreeData, id: string): TreeData {
     .filter((u) => u.partnerIds.length > 0);
   const childLinks = tree.childLinks
     .filter((l) => l.childId !== id)
-    .map((l) => ({ ...l, parentIds: l.parentIds.filter((pid) => pid !== id) }))
-    .filter((l) => l.parentIds.length > 0);
-  const focusPersonId = tree.focusPersonId === id ? people[0]?.id : tree.focusPersonId;
+    .map((l) => ({ ...l, parentIds: l.parentIds.filter((pid) => pid !== id) }));
+  const focusPersonId =
+    tree.focusPersonId === id ? nextFocusAfterRemove(tree, id) : tree.focusPersonId;
   return { people, unions, childLinks, focusPersonId };
 }
 
