@@ -119,11 +119,8 @@ export function TreeApp() {
           setPeopleOpen(true);
           setMenuOpen(false);
         }}
-        onAddSomeone={async () => {
-          const name = window.prompt("Name of the person to add");
-          if (name?.trim()) {
-            await treeState.unlinked(name);
-          }
+        onAddSomeone={async (name) => {
+          await treeState.unlinked(name);
           setMenuOpen(false);
         }}
         onExport={exportGedcom}
