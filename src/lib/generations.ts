@@ -1,4 +1,4 @@
-import type { Person, TreeData } from "./types";
+import type { Person, TreeData, Union } from "./types";
 import { kidsUnderUnion, parentsOf, unionsFor } from "./tree";
 import { showsCoupleBar } from "./layout";
 
@@ -11,7 +11,9 @@ export type GenerationLaneId =
 
 export type GenerationGroup = {
   parentId: string;
+  label: string;
   people: Person[];
+  coupleBar?: boolean;
 };
 
 export type GenerationLane = {
@@ -39,20 +41,63 @@ function childrenOfPerson(tree: TreeData, parentId: string): Person[] {
   return tree.people.filter((p) => ids.has(p.id));
 }
 
+function sharedUnion(tree: TreeData, people: Person[]): Union | undefined {
+  if (people.length < 2) return undefined;
+  return tree.unions.find((u) => people.every((p) => u.partnerIds.includes(p.id)));
+}
+
+function parentsLabel(child: Person): string {
+  const first = child.givenName.trim() || "Their";
+  return `${first}'s parents`;
+}
+
+export function parentSideGroup(tree: TreeData, child: Person): GenerationGroup | undefined {
+  const people = parentsOf(tree, child.id);
+  if (!people.length) return undefined;
+  const union = sharedUnion(tree, people);
+  return {
+    parentId: child.id,
+    label: parentsLabel(child),
+    people,
+    coupleBar: showsCoupleBar(union?.kind, people.length),
+  };
+}
+
 export function buildGenerationLanes(tree: TreeData, focusHint?: string): GenerationLane[] {
   const focusId = focusHint ?? tree.focusPersonId ?? tree.people[0]?.id;
   const focus = focusId ? tree.people.find((p) => p.id === focusId) : undefined;
   if (!focus) return [];
 
   const parents = parentsOf(tree, focus.id);
-  const grandparents = uniquePeople(parents.flatMap((parent) => parentsOf(tree, parent.id)));
-
   const unions = unionsFor(tree, focus.id);
   const primary = unions[0];
   const partnerIds = new Set(unions.flatMap((u) => u.partnerIds).filter((id) => id !== focus.id));
   const partners = tree.people.filter((p) => partnerIds.has(p.id));
   const couple = uniquePeople([focus, ...partners]);
   const coupleBar = showsCoupleBar(primary?.kind, couple.length);
+
+  const grandGroups: GenerationGroup[] = [];
+  for (const parent of parents) {
+    const group = parentSideGroup(tree, parent);
+    if (group) grandGroups.push(group);
+  }
+  const grandparents = uniquePeople(grandGroups.flatMap((g) => g.people));
+
+  const parentGroups: GenerationGroup[] = [];
+  if (parents.length) {
+    const union = sharedUnion(tree, parents);
+    parentGroups.push({
+      parentId: focus.id,
+      label: parentsLabel(focus),
+      people: parents,
+      coupleBar: showsCoupleBar(union?.kind, parents.length),
+    });
+  }
+  for (const partner of partners) {
+    const group = parentSideGroup(tree, partner);
+    if (group) parentGroups.push(group);
+  }
+  const parentLanePeople = uniquePeople(parentGroups.flatMap((g) => g.people));
 
   const fromUnions = unions.flatMap((u) => kidsUnderUnion(tree, u));
   const lone = childrenOfPerson(tree, focus.id);
@@ -61,13 +106,22 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
   const groups: GenerationGroup[] = [];
   for (const child of children) {
     const gkids = childrenOfPerson(tree, child.id);
-    if (gkids.length) groups.push({ parentId: child.id, people: gkids });
+    if (!gkids.length) continue;
+    groups.push({
+      parentId: child.id,
+      label: `${child.givenName.trim()}'s`,
+      people: gkids,
+    });
   }
   const grandchildren = uniquePeople(groups.flatMap((g) => g.people));
 
   const lanes: GenerationLane[] = [];
-  if (grandparents.length) lanes.push({ id: "grandparents", people: grandparents });
-  if (parents.length) lanes.push({ id: "parents", people: parents });
+  if (grandparents.length) {
+    lanes.push({ id: "grandparents", people: grandparents, groups: grandGroups });
+  }
+  if (parentLanePeople.length) {
+    lanes.push({ id: "parents", people: parentLanePeople, groups: parentGroups });
+  }
   lanes.push({ id: "focus", people: couple, coupleBar });
   if (children.length) lanes.push({ id: "children", people: children });
   if (grandchildren.length) lanes.push({ id: "grandchildren", people: grandchildren, groups });
