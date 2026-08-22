@@ -5,8 +5,9 @@
   "description": "Free local-first PWA for a living family tree. No signup.",
   "license": "MIT",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
+    "icons": "node scripts/generate-icons.mjs",
+    "dev": "node scripts/generate-icons.mjs && next dev",
+    "build": "node scripts/generate-icons.mjs && next build",
     "start": "next start",
     "lint": "next lint",
     "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts"
