@@ -62,9 +62,9 @@ export function TreeCanvas({ tree, selectedId, onSelect }: Props) {
           <p className="unit-label">
             {unit.partners.length > 1
               ? unit.union?.kind === "married"
-                ? "Couple \u00b7 married"
+                ? "Couple · married"
                 : unit.union?.kind === "separated"
-                  ? "Couple \u00b7 two households"
+                  ? "Couple · two households"
                   : "Couple"
               : "Family"}
           </p>
