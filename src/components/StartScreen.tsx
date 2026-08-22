@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { BrandMark } from "./BrandMark";
 import { ExamplePreview } from "./ExamplePreview";
 
 type Props = {
@@ -25,6 +26,9 @@ export function StartScreen({ onStart, onTryExample }: Props) {
 
   return (
     <section className="hero splash">
+      <div className="splash-mark">
+        <BrandMark className="splash-icon" />
+      </div>
       <h2>Who are you starting with?</h2>
       <p className="lede">One name is enough. Add a parent, partner, or child whenever you are ready.</p>
       <form onSubmit={handleSubmit}>
