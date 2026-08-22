@@ -408,6 +408,8 @@ html[data-theme="dark"] .portrait-card .swatch {
   display: block;
   font-size: 0.92rem;
   line-height: 1.15;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
 .portrait-card em {
@@ -463,8 +465,10 @@ html[data-theme="dark"] .portrait-card .swatch {
   top: calc(8px + var(--safe-top));
   min-height: var(--tap);
   min-width: var(--tap);
-  max-width: 72px;
-  padding: 0 8px;
+  max-width: var(--tap);
+  padding: 0;
+  font-size: 1.5rem;
+  line-height: 1;
   border: 0;
   background: transparent;
   color: var(--accent);
@@ -472,7 +476,7 @@ html[data-theme="dark"] .portrait-card .swatch {
 }
 
 .sheet h2 {
-  margin: 0 48px 6px 0;
+  margin: 0 56px 6px 0;
   font-family: Palatino, "Iowan Old Style", serif;
   overflow-wrap: anywhere;
 }
@@ -535,7 +539,8 @@ html[data-theme="dark"] .portrait-card .swatch {
 
 .print-page { padding: 24px; }
 .print-tree { display: grid; gap: 24px; justify-items: center; }
-.print-unit { text-align: center; }
+.print-unit { text-align: center; page-break-after: always; break-after: page; }
+.print-unit:last-child { page-break-after: auto; break-after: auto; }
 .print-couple { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
 .print-person {
   min-width: 140px;
@@ -619,3 +624,23 @@ html[data-theme="dark"] .portrait-card .swatch {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
 }
+
+.print-toolbar { display: grid; gap: 10px; padding: 16px 16px 8px; }
+.print-toolbar-title {
+  margin: 0;
+  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.35rem;
+}
+.birth-label { display: block; font-size: 0.92rem; color: var(--muted); }
+.canvas { display: grid; gap: 12px; }
+.unit {
+  display: grid; gap: 6px; padding: 16px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); box-shadow: var(--shadow);
+  text-decoration: none; color: inherit; min-height: var(--tap);
+}
+.unit-label { margin: 0; font-size: 0.92rem; color: var(--muted); font-weight: 600; }
+.link-roles { display: grid; gap: 8px; }
+.link-roles .btn { width: 100%; }
+.menu details { padding: 4px 6px 8px; }
+.menu summary { display: flex; align-items: center; min-height: var(--tap); cursor: pointer; font-weight: 600; }
