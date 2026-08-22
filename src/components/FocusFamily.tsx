@@ -44,7 +44,7 @@ function PersonChip({ person, focused, flash, onFocus, onOpen, onRemove }: {
         {age ? <span className="hint">{age}</span> : null}
       </button>
       <div className="card-actions">
-        <button type="button" className="icon-btn" aria-label={`More for ${label}`} aria-expanded={menu} onClick={() => setMenu((open) => !open)}>{"\u22ee"}</button>
+        <button type="button" className="icon-btn" aria-label={`Edit / Remove ${label}`} aria-expanded={menu} onClick={() => setMenu((open) => !open)}>{"⋮"}</button>
         {menu ? (
           <div className="card-menu" role="menu">
             <button type="button" className="btn ghost" role="menuitem" onClick={() => { setMenu(false); onOpen(); }}>Edit</button>
@@ -94,7 +94,7 @@ function LaneRow({ lane, focusIds, onFocus, onOpen, onRemove, flashId }: {
         {lane.groups ? lane.groups.map((group) => (
           <SideGroup key={group.parentId} group={group} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} onRemove={onRemove} flashId={flashId} />
         )) : (
-          <CoupleUnit people={lane.people} coupleBar={focusCouple ? lane.coupleBar : false} lit={focusCouple && Boolean(lane.coupleBar)} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} onRemove={onRemove} flashId={flashId} />
+          <CoupleUnit people={lane.people} coupleBar={focusCouple ? lane.coupleBar : false} lit={Boolean(lane.coupleBar) && lane.people.some((p) => focusIds.has(p.id))} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} onRemove={onRemove} flashId={flashId} />
         )}
       </div>
     </div>
@@ -106,7 +106,15 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
   const [flashId, setFlashId] = useState<string | undefined>();
   const [adding, setAdding] = useState<"parent" | "partner" | "child" | "sibling" | null>(null);
   const [removeId, setRemoveId] = useState<string | undefined>();
-  const focus = tree.people.find((p) => p.id === tree.focusPersonId) ?? tree.people[0];
+  const [viewId, setViewId] = useState(tree.focusPersonId);
+  useEffect(() => {
+    if (tree.focusPersonId) setViewId(tree.focusPersonId);
+  }, [tree.focusPersonId]);
+  const handleFocus = (id: string) => {
+    setViewId(id);
+    onFocus(id);
+  };
+  const focus = tree.people.find((p) => p.id === viewId) ?? tree.people.find((p) => p.id === tree.focusPersonId) ?? tree.people[0];
   const lanes = useMemo(() => buildGenerationLanes(tree, focus?.id), [tree, focus?.id]);
   const unions = useMemo(() => (focus ? unionsFor(tree, focus.id) : []), [tree, focus]);
   const primaryUnion = unions[0];
@@ -146,7 +154,7 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
       </div>
       <div className="gen-stack">
         {lanes.map((lane) => (
-          <LaneRow key={lane.id} lane={lane} focusIds={focusIds} onFocus={onFocus} onOpen={onOpen} onRemove={(id) => setRemoveId(id)} flashId={flashId} />
+          <LaneRow key={lane.id} lane={lane} focusIds={focusIds} onFocus={handleFocus} onOpen={onOpen} onRemove={(id) => setRemoveId(id)} flashId={flashId} />
         ))}
       </div>
       {removePerson ? (
@@ -169,7 +177,7 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
         <AddNameRow label={addLabel} onAdd={submitAdd} onCancel={() => setAdding(null)} />
       ) : null}
       {peopleOpen ? (
-        <PeopleList tree={tree} onClose={() => setPeopleOpen(false)} onPick={(person) => { onFocus(person.id); setPeopleOpen(false); }} />
+        <PeopleList tree={tree} onClose={() => setPeopleOpen(false)} onPick={(person) => { handleFocus(person.id); setPeopleOpen(false); }} />
       ) : null}
     </section>
   );
