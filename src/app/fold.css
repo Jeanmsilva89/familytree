@@ -1,0 +1,36 @@
+/* Folded extras with matching markup only. */
+.print-toolbar { display: grid; gap: 10px; padding: 16px 16px 8px; }
+.print-toolbar-title {
+  margin: 0;
+  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.35rem;
+}
+.print-unit { page-break-after: always; break-after: page; }
+.print-unit:last-child { page-break-after: auto; break-after: auto; }
+.birth-label { display: block; font-size: 0.92rem; color: var(--muted); }
+.canvas { display: grid; gap: 12px; }
+.unit {
+  display: grid; gap: 6px; padding: 16px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); box-shadow: var(--shadow);
+  text-decoration: none; color: inherit; min-height: var(--tap);
+}
+.unit-label { margin: 0; font-size: 0.92rem; color: var(--muted); font-weight: 600; }
+.link-roles { display: grid; gap: 8px; }
+.link-roles .btn { width: 100%; min-height: 48px; }
+.portrait-card strong { overflow-wrap: anywhere; white-space: normal; }
+.sheet-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.sheet-close { min-height: auto; min-width: auto; max-width: none; height: auto; padding: 4px 0; font-size: 0.95rem; line-height: 1.2; box-shadow: none; background: transparent; border: 0; color: var(--accent); }
+.sheet h2 { margin: 0; flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+.menu details { padding: 4px 6px 8px; }
+.menu summary { display: flex; align-items: center; min-height: var(--tap); cursor: pointer; font-weight: 600; }
+.empty-state { display: grid; gap: 12px; justify-items: start; }
+.people-embed { min-width: 0; }
+.print-page h1 { font-family: Palatino, "Iowan Old Style", "Times New Roman", serif; }
+.theme-picks button { height: 48px; min-height: 48px; min-width: 48px; }
+.inline-add { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; min-width: 0; }
+.inline-add-input { width: 100%; min-height: var(--tap); border-radius: 14px; border: 1px solid var(--line); background: var(--cream); padding: 12px 14px; }
+.add-name-row { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; min-width: 0; }
+.add-name-row input { width: 100%; min-height: var(--tap); border-radius: 14px; border: 1px solid var(--line); background: var(--cream); padding: 12px 14px; }
+.card-overflow { position: absolute; top: 4px; right: 4px; z-index: 3; width: var(--tap); height: var(--tap); min-width: var(--tap); min-height: var(--tap); padding: 0; box-shadow: none; border: 0; background: transparent; }
+.gen-stack::-webkit-scrollbar { display: none; width: 0; height: 0; }
