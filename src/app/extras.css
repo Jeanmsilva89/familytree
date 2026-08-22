@@ -4,7 +4,7 @@
 html[data-theme="dark"] { --topbar: calc(64px + var(--safe-top)); }
 
 .gen-lane {
-  min-height: calc(100dvh - var(--topbar));
+  min-height: 100%;
 }
 .gen-lane-title {
   margin: 0 0 8px;
