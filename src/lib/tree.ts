@@ -19,6 +19,7 @@ export function createPerson(givenName: string, extras: Partial<Person> = {}): P
     otherDates: extras.otherDates,
     emails: extras.emails,
     phones: extras.phones,
+    photo: extras.photo,
     ...stamp(),
   };
 }
@@ -208,3 +209,114 @@ export function mergeTree(base: TreeData, incoming: TreeData): TreeData {
 }
 
 export { emptyTree };
+
+export function addUnlinkedPerson(tree: TreeData, givenName: string): TreeData {
+  const person = createPerson(givenName);
+  return {
+    ...withPerson(tree, person),
+    focusPersonId: tree.focusPersonId ?? person.id,
+  };
+}
+
+export function addSibling(tree: TreeData, personId: string, givenName: string): TreeData {
+  const person = getPerson(tree, personId);
+  if (!person) throw new Error("Person not found.");
+  const parents = parentsOf(tree, personId);
+  if (parents.length === 0) throw new Error("Add a parent first");
+  const parentIds = parents.map((p) => p.id);
+  const unionId = tree.childLinks.find((l) => l.childId === personId)?.unionId;
+  return addChild(tree, parentIds, givenName, unionId);
+}
+
+export function setFocus(tree: TreeData, personId: string): TreeData {
+  if (!getPerson(tree, personId)) throw new Error("Person not found.");
+  return { ...tree, focusPersonId: personId };
+}
+
+export type LinkRole = "parent" | "partner" | "child";
+
+export function linkExisting(
+  tree: TreeData,
+  personId: string,
+  otherId: string,
+  role: LinkRole,
+  kind: UnionKind = "partnered",
+): TreeData {
+  if (personId === otherId) throw new Error("Cannot link a person to themselves.");
+  const person = getPerson(tree, personId);
+  const other = getPerson(tree, otherId);
+  if (!person || !other) throw new Error("Person not found.");
+
+  if (role === "partner") {
+    const already = tree.unions.find(
+      (u) => u.partnerIds.includes(personId) && u.partnerIds.includes(otherId),
+    );
+    if (already) return setUnionKind(tree, already.id, kind);
+    const union: Union = { id: newId("u"), partnerIds: [personId, otherId], kind };
+    return { ...tree, unions: [...tree.unions, union] };
+  }
+
+  if (role === "parent") {
+    const existing = tree.childLinks.find((link) => link.childId === personId);
+    if (!existing) {
+      const link: ChildLink = { id: newId("c"), childId: personId, parentIds: [otherId] };
+      return { ...tree, childLinks: [...tree.childLinks, link] };
+    }
+    if (existing.parentIds.includes(otherId)) return tree;
+    if (existing.parentIds.length === 1) {
+      const otherParentId = existing.parentIds[0];
+      let unions = tree.unions;
+      let unionId = existing.unionId;
+      if (!unionId) {
+        const union: Union = {
+          id: newId("u"),
+          partnerIds: [otherParentId, otherId],
+          kind: "unspecified",
+        };
+        unions = [...unions, union];
+        unionId = union.id;
+      }
+      return {
+        ...tree,
+        unions,
+        childLinks: tree.childLinks.map((l) =>
+          l.id === existing.id ? { ...existing, parentIds: [otherParentId, otherId], unionId } : l,
+        ),
+      };
+    }
+    const link: ChildLink = { id: newId("c"), childId: personId, parentIds: [otherId] };
+    return { ...tree, childLinks: [...tree.childLinks, link] };
+  }
+
+  const unions = unionsFor(tree, personId);
+  const parentIds = unions[0]?.partnerIds ?? [personId];
+  const unionId = unions[0]?.id;
+  if (tree.childLinks.some((l) => l.childId === otherId && parentIds.every((id) => l.parentIds.includes(id)))) {
+    return tree;
+  }
+  const link: ChildLink = { id: newId("c"), childId: otherId, parentIds: [...new Set(parentIds)], unionId };
+  return { ...tree, childLinks: [...tree.childLinks, link] };
+}
+
+export function serializeTreeJson(tree: TreeData): string {
+  return JSON.stringify(tree);
+}
+
+export function parseTreeJson(text: string): TreeData {
+  let data: unknown;
+  try {
+    data = JSON.parse(text);
+  } catch {
+    throw new Error("Not a Family Tree backup.");
+  }
+  if (
+    !data ||
+    typeof data !== "object" ||
+    !Array.isArray((data as TreeData).people) ||
+    !Array.isArray((data as TreeData).unions) ||
+    !Array.isArray((data as TreeData).childLinks)
+  ) {
+    throw new Error("Not a Family Tree backup.");
+  }
+  return data as TreeData;
+}
