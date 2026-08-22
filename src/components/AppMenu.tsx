@@ -55,6 +55,15 @@ export function AppMenu({
       <button type="button" role="menuitem" onClick={onPeople}>
         People
       </button>
+      <Link href="/print" role="menuitem" onClick={onClose}>
+        Print
+      </Link>
+      <Link href="/printables" role="menuitem" onClick={onClose}>
+        Printables
+      </Link>
+      <button type="button" role="menuitem" onClick={onReset}>
+        Start over
+      </button>
       <button type="button" role="menuitem" onClick={onAddSomeone}>
         Add someone
       </button>
@@ -74,24 +83,21 @@ export function AppMenu({
           ))}
         </div>
       </div>
-      <Link href="/print" role="menuitem" onClick={onClose}>
-        Print
-      </Link>
-      <Link href="/printables" role="menuitem" onClick={onClose}>
-        Printables
-      </Link>
-      <button type="button" role="menuitem" onClick={onExport}>
-        Export GEDCOM
-      </button>
-      <button type="button" role="menuitem" onClick={onImport}>
-        Import GEDCOM
-      </button>
-      <button type="button" role="menuitem" onClick={onExportJson}>
-        Export backup JSON
-      </button>
-      <button type="button" role="menuitem" onClick={onImportJson}>
-        Import backup JSON
-      </button>
+      <details>
+        <summary>Move data</summary>
+        <button type="button" role="menuitem" onClick={onExport}>
+          Export GEDCOM
+        </button>
+        <button type="button" role="menuitem" onClick={onImport}>
+          Import GEDCOM
+        </button>
+        <button type="button" role="menuitem" onClick={onExportJson}>
+          Export backup JSON
+        </button>
+        <button type="button" role="menuitem" onClick={onImportJson}>
+          Import backup JSON
+        </button>
+      </details>
       {canInstall ? (
         <button type="button" role="menuitem" onClick={onInstall}>
           Install
@@ -101,9 +107,6 @@ export function AppMenu({
           Install from your browser menu to use Family Tree like an app.
         </p>
       )}
-      <button type="button" role="menuitem" onClick={onReset}>
-        Start over
-      </button>
     </div>
   );
 }

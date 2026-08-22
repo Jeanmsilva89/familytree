@@ -2,15 +2,20 @@
 
 import Link from "next/link";
 
-export function PrintToolbar({ title }: { title: string }) {
+export function PrintToolbar({
+  backHref = "/printables",
+  backLabel = "Kid printables",
+}: {
+  backHref?: string;
+  backLabel?: string;
+}) {
   return (
-    <div className="no-print app-shell" style={{ paddingBottom: 8 }}>
+    <div className="no-print print-toolbar">
       <p>
-        <Link href="/printables">← Kid printables</Link>
-        {" \u00b7 "}
-        <Link href="/">Tree</Link>
+        <Link href={backHref}>{"← "}{backLabel}</Link>
+        {" · "}
+        <Link href="/">Family Tree</Link>
       </p>
-      <h1 style={{ fontFamily: "Palatino, serif" }}>{title}</h1>
       <button className="btn primary" type="button" onClick={() => window.print()}>
         Print or save PDF
       </button>
