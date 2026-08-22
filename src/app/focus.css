@@ -99,7 +99,7 @@
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
-  padding: 4px 2px 10px;
+  padding: 40px 36px 10px;
   scroll-snap-type: x mandatory;
   scroll-snap-stop: always;
   overscroll-behavior-x: contain;
@@ -161,10 +161,73 @@
 }
 
 .couple-unit.is-lit {
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 75%, transparent);
 }
 
 .couple-unit.is-unit .focus-card { z-index: 1; }
+
+.focus-cluster {
+  position: relative;
+  z-index: 2;
+  flex: 0 0 132px;
+  width: 132px;
+  max-width: 132px;
+}
+
+.focus-sats {
+  position: absolute;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.focus-sats-parents {
+  left: 50%;
+  bottom: calc(100% + 4px);
+  transform: translateX(-50%);
+}
+
+.focus-sats-partner {
+  left: calc(100% + 4px);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.couple-unit.has-sats {
+  overflow: visible;
+}
+
+.focus-sat {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--card);
+  box-shadow: none;
+  overflow: hidden;
+  line-height: 0;
+}
+
+.focus-sat-face {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  font-size: 0.62rem;
+  font-weight: 800;
+  background: var(--leaf-soft);
+  color: var(--leaf);
+}
+
+.focus-sat-face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 
 .focus-card {
   position: relative;
@@ -185,7 +248,7 @@
 }
 
 .focus-card.is-focus {
-  box-shadow: 0 0 0 2px var(--accent), var(--shadow);
+  box-shadow: 0 0 0 3px var(--accent), var(--shadow);
 }
 
 .focus-face {
