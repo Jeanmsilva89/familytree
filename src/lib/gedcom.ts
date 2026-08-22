@@ -181,9 +181,9 @@ export function serializeGedcom(tree: TreeData): string {
   tree.people.forEach((p, idx) => idToXref.set(p.id, `@I${idx + 1}@`));
   const lines: string[] = [
     "0 HEAD",
-    "1 SOUR Kinstart",
+    "1 SOUR Family Tree",
     "2 VERS 0.1",
-    "2 NAME Kinstart",
+    "2 NAME Family Tree",
     "1 GEDC",
     "2 VERS 5.5.1",
     "2 FORM LINEAGE-LINKED",

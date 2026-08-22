@@ -4,16 +4,16 @@ import { openDB, type IDBPDatabase } from "idb";
 import type { TreeData } from "./types";
 import { emptyTree } from "./types";
 
-const DB_NAME = "kinstart";
+const DB_NAME = "familytree";
 const DB_VERSION = 1;
 const TREE_STORE = "tree";
 const TREE_KEY = "living";
 
-type KinstartDB = IDBPDatabase<{ tree: { key: string; value: TreeData } }>;
+type FamilyTreeDB = IDBPDatabase<{ tree: { key: string; value: TreeData } }>;
 
-let dbPromise: Promise<KinstartDB> | null = null;
+let dbPromise: Promise<FamilyTreeDB> | null = null;
 
-function getDb(): Promise<KinstartDB> {
+function getDb(): Promise<FamilyTreeDB> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
       upgrade(db) {
@@ -21,7 +21,7 @@ function getDb(): Promise<KinstartDB> {
           db.createObjectStore(TREE_STORE);
         }
       },
-    }) as Promise<KinstartDB>;
+    }) as Promise<FamilyTreeDB>;
   }
   return dbPromise;
 }

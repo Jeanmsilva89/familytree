@@ -55,7 +55,7 @@ export function TreeApp() {
   if (!treeState.ready) {
     return (
       <div className="app-shell">
-        <p>Opening your tree on this device.</p>
+        <p>Opening your tree on this device…</p>
       </div>
     );
   }
@@ -77,7 +77,7 @@ export function TreeApp() {
           aria-expanded={menuOpen}
           onClick={() => setMenuOpen((v) => !v)}
         >
-          Menu
+          ☰
         </button>
       </header>
 
