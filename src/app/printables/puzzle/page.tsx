@@ -21,7 +21,7 @@ export default function PuzzlePage() {
     ...(unit?.children ?? []).map((p) => displayName(p)),
   ].slice(0, 4);
 
-  while (pieces.length < 4) pieces.push("family");
+  while (pieces.length < 4) pieces.push("piece");
 
   return (
     <div className="print-page">
