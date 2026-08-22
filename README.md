@@ -5,6 +5,8 @@ One name is enough. Stays on this device. No account.
 
 Family Tree is a couple-centered living graph for modern families, not a pedigree from a dead ancestor.
 
+On a phone the living tree is a pan-and-zoom generation graph: the household couple sits in the middle, older relatives above, children clustered under the couple that produced them.
+
 ## What it does
 
 - Start with a single given name

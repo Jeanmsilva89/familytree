@@ -24,11 +24,11 @@ export function StartScreen({ onStart, onTryExample }: Props) {
   }
 
   return (
-    <section className="hero">
+    <section className="hero splash">
       <h2>Who are you starting with?</h2>
       <p className="lede">One name is enough. Add a parent, partner, or child whenever you are ready.</p>
       <form onSubmit={handleSubmit}>
-        <div className="start-row">
+        <div className="start-stack">
           <label className="sr-only" htmlFor="start-name">
             First name
           </label>
@@ -41,7 +41,7 @@ export function StartScreen({ onStart, onTryExample }: Props) {
             onChange={(e) => setName(e.target.value)}
             required
           />
-          <button className="btn primary" type="submit" disabled={busy || !name.trim()}>
+          <button className="btn primary start-btn" type="submit" disabled={busy || !name.trim()}>
             Start
           </button>
         </div>
