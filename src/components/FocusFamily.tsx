@@ -6,6 +6,7 @@ import { ageFromBirthDate, displayName, initials } from "@/lib/types";
 import { buildGenerationLanes, type GenerationGroup, type GenerationLane } from "@/lib/generations";
 import { highlightedCoupleIds } from "@/lib/graphView";
 import { unionsFor } from "@/lib/tree";
+import { AddNameRow } from "./AddNameRow";
 import { PeopleList } from "./PeopleList";
 
 type Props = {
@@ -18,12 +19,6 @@ type Props = {
   onAddSibling: (personId: string, name: string) => Promise<string | void>;
   onRemove: (id: string) => Promise<void>;
 };
-
-function promptName(label: string): string | null {
-  const value = window.prompt(label);
-  if (!value || !value.trim()) return null;
-  return value.trim();
-}
 
 function PersonChip({
   person,
@@ -40,30 +35,28 @@ function PersonChip({
   onOpen: () => void;
   onRemove: () => void;
 }) {
+  const [menu, setMenu] = useState(false);
   const age = ageFromBirthDate(person.birthDate);
   const cls = ["focus-card", focused ? "is-focus" : "", flash ? "is-flash" : ""].filter(Boolean).join(" ");
+  const label = displayName(person);
   return (
     <article className={cls} data-person-id={person.id}>
-      <button type="button" className="focus-face" onClick={onFocus} aria-label={`Focus ${displayName(person)}`}>
+      <button type="button" className="icon-btn card-overflow" aria-label={`More for ${label}`} aria-expanded={menu} onClick={() => setMenu((v) => !v)}>
+        {"\u22ee"}
+      </button>
+      {menu ? (
+        <div className="card-overflow-menu" role="menu">
+          <button type="button" role="menuitem" onClick={() => { setMenu(false); onOpen(); }}>Edit</button>
+          <button type="button" role="menuitem" className="is-danger" onClick={() => { setMenu(false); onRemove(); }}>Remove</button>
+        </div>
+      ) : null}
+      <button type="button" className="focus-face" onClick={onFocus} aria-label={`Focus ${label}`}>
         <span className="avatar" aria-hidden>
           {person.photo ? <img src={person.photo} alt="" /> : initials(person)}
         </span>
-        <span className="focus-name">{displayName(person)}</span>
+        <span className="focus-name">{label}</span>
         {age ? <span className="hint">{age}</span> : null}
       </button>
-      <div className="card-actions">
-        <button type="button" className="btn ghost" onClick={onOpen} aria-label={`Edit ${displayName(person)}`}>
-          Edit
-        </button>
-        <button
-          type="button"
-          className="btn ghost card-remove"
-          onClick={onRemove}
-          aria-label={`Remove ${displayName(person)}`}
-        >
-          Remove
-        </button>
-      </div>
     </article>
   );
 }
@@ -199,6 +192,8 @@ export function FocusFamily({
 }: Props) {
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | undefined>();
+  const [adding, setAdding] = useState<"parent" | "partner" | "child" | "sibling" | null>(null);
+  const [removeId, setRemoveId] = useState<string | undefined>();
   const focus = tree.people.find((p) => p.id === tree.focusPersonId) ?? tree.people[0];
   const lanes = useMemo(() => buildGenerationLanes(tree, focus?.id), [tree, focus?.id]);
   const unions = useMemo(() => (focus ? unionsFor(tree, focus.id) : []), [tree, focus]);
@@ -218,12 +213,27 @@ export function FocusFamily({
     return () => window.clearTimeout(timer);
   }, [flashId, tree]);
 
-  async function confirmRemove(person: Person) {
-    if (!confirm(`Remove ${displayName(person)} from this tree?`)) return;
-    await onRemove(person.id);
-  }
+  const removePerson = removeId ? tree.people.find((p) => p.id === removeId) : undefined;
 
   if (!focus) return null;
+
+  const addLabel =
+    adding === "parent" ? "Parent's name"
+    : adding === "partner" ? "Partner's name"
+    : adding === "sibling" ? "Sibling's name"
+    : "Child's name";
+
+  async function submitAdd(name: string) {
+    if (!adding) return;
+    if (adding === "parent") await onAddParent(focus.id, name);
+    if (adding === "partner") await onAddPartner(focus.id, name, "partnered");
+    if (adding === "child") await onAddChild(childParents, name, primaryUnion?.id);
+    if (adding === "sibling") {
+      const addedId = await onAddSibling(focus.id, name);
+      if (addedId) setFlashId(addedId);
+    }
+    setAdding(null);
+  }
 
   return (
     <section className="focus-family" aria-label="Family around the focus person">
@@ -241,36 +251,32 @@ export function FocusFamily({
             focusIds={focusIds}
             onFocus={onFocus}
             onOpen={onOpen}
-            onRemove={(id) => {
-              const person = tree.people.find((p) => p.id === id);
-              if (person) void confirmRemove(person);
-            }}
+            onRemove={(id) => setRemoveId(id)}
             flashId={flashId}
           />
         ))}
       </div>
 
+      {removePerson ? (
+        <div className="remove-confirm" role="alertdialog">
+          <p className="error">Remove {displayName(removePerson)} from this tree?</p>
+          <div className="actions">
+            <button type="button" className="btn ghost" onClick={() => setRemoveId(undefined)}>Cancel</button>
+            <button type="button" className="btn danger" onClick={async () => { await onRemove(removePerson.id); setRemoveId(undefined); }}>Remove</button>
+          </div>
+        </div>
+      ) : null}
+
       <div className="actions focus-actions">
-        <button type="button" className="btn" onClick={async () => {
-          const name = promptName("Parent's name");
-          if (name) await onAddParent(focus.id, name);
-        }}>Add parent</button>
-        <button type="button" className="btn" onClick={async () => {
-          const name = promptName("Partner's name");
-          if (name) await onAddPartner(focus.id, name, "partnered");
-        }}>Add partner</button>
-        <button type="button" className="btn" onClick={async () => {
-          const name = promptName("Child's name");
-          if (name) await onAddChild(childParents, name, primaryUnion?.id);
-        }}>Add child</button>
-        <button type="button" className="btn" onClick={async () => {
-          if (!hasParents) { window.alert("Add a parent first"); return; }
-          const name = promptName("Sibling's name");
-          if (!name) return;
-          const addedId = await onAddSibling(focus.id, name);
-          if (addedId) setFlashId(addedId);
-        }}>Add sibling</button>
+        <button type="button" className="btn" onClick={() => setAdding("parent")}>Add parent</button>
+        <button type="button" className="btn" onClick={() => setAdding("partner")}>Add partner</button>
+        <button type="button" className="btn" onClick={() => setAdding("child")}>Add child</button>
+        <button type="button" className="btn" onClick={() => setAdding("sibling")}>Add sibling</button>
       </div>
+      {adding === "sibling" && !hasParents ? <p className="error">Add a parent first</p> : null}
+      {adding && !(adding === "sibling" && !hasParents) ? (
+        <AddNameRow label={addLabel} onAdd={submitAdd} onCancel={() => setAdding(null)} />
+      ) : null}
 
       {peopleOpen ? (
         <PeopleList tree={tree} onClose={() => setPeopleOpen(false)} onPick={(person) => { onFocus(person.id); setPeopleOpen(false); }} />
