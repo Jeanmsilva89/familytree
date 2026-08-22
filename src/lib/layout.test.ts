@@ -91,4 +91,11 @@ describe("graph layout", () => {
   it("reads a small age from a birth date", () => {
     assert.equal(ageLabel("2000-01-01", new Date("2026-08-22")), "26");
   });
+
+  it("returns a finite empty graph when there are no people", () => {
+    const layout = buildGraph({ people: [], unions: [], childLinks: [] });
+    assert.equal(layout.cards.length, 0);
+    assert.ok(Number.isFinite(layout.width));
+    assert.ok(Number.isFinite(layout.height));
+  });
 });

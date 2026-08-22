@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent, type TouchEvent, type WheelEvent } from "react";
+import { useEffect, useMemo, useRef, type PointerEvent } from "react";
 import type { Person, TreeData } from "@/lib/types";
 import { displayName } from "@/lib/types";
 import {
@@ -9,6 +9,7 @@ import {
   buildGraph,
   initialsOf,
   lineageIds,
+  swatchHue,
 } from "@/lib/layout";
 
 type Props = {
@@ -18,9 +19,22 @@ type Props = {
   onOpen: (person: Person) => void;
 };
 
+type View = { x: number; y: number; s: number };
+
 function curve(fromX: number, fromY: number, toX: number, toY: number): string {
   const midY = (fromY + toY) / 2;
   return `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
+}
+
+function clampScale(s: number) {
+  return Math.min(2.2, Math.max(0.55, s));
+}
+
+function isFiniteBox(x: number, y: number, w?: number, h?: number) {
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+  if (w !== undefined && !Number.isFinite(w)) return false;
+  if (h !== undefined && !Number.isFinite(h)) return false;
+  return true;
 }
 
 export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) {
@@ -30,9 +44,31 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     [tree, highlightedId],
   );
   const stageRef = useRef<HTMLDivElement>(null);
-  const [view, setView] = useState({ x: 40, y: 24, s: 1 });
+  const worldRef = useRef<HTMLDivElement>(null);
+  const viewRef = useRef<View>({ x: 40, y: 24, s: 1 });
+  const pointers = useRef(new Map<number, { x: number; y: number }>());
   const drag = useRef<{ id: number; x: number; y: number; vx: number; vy: number } | null>(null);
   const pinch = useRef<{ dist: number; s: number } | null>(null);
+  const raf = useRef<number | null>(null);
+
+  function applyWorld() {
+    const el = worldRef.current;
+    if (!el) return;
+    const { x, y, s } = viewRef.current;
+    el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+  }
+
+  function scheduleApply() {
+    if (raf.current != null) return;
+    raf.current = window.requestAnimationFrame(() => {
+      raf.current = null;
+      applyWorld();
+    });
+  }
+
+  useEffect(() => {
+    applyWorld();
+  }, []);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -42,82 +78,118 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     return () => window.removeEventListener("keydown", onKey);
   }, [onHighlight]);
 
+  useEffect(() => {
+    const stage = stageRef.current;
+    if (!stage) return;
+    const onWheel = (event: WheelEvent) => {
+      if (event.cancelable) event.preventDefault();
+      const next = clampScale(viewRef.current.s * (event.deltaY < 0 ? 1.08 : 0.92));
+      viewRef.current.s = next;
+      if (raf.current != null) return;
+      raf.current = window.requestAnimationFrame(() => {
+        raf.current = null;
+        applyWorld();
+      });
+    };
+    stage.addEventListener("wheel", onWheel, { passive: false });
+    return () => stage.removeEventListener("wheel", onWheel);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- applyWorld reads refs only
+  }, []);
+
   function tapCard(person: Person) {
     if (highlightedId === person.id) onOpen(person);
     else onHighlight(person);
   }
 
-  function onWheel(event: WheelEvent) {
-    event.preventDefault();
-    const next = Math.min(2.2, Math.max(0.55, view.s * (event.deltaY < 0 ? 1.08 : 0.92)));
-    setView((v) => ({ ...v, s: next }));
+  function activePoints() {
+    return [...pointers.current.values()];
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    if (pointers.current.size >= 2) {
+      drag.current = null;
+      const [a, b] = activePoints();
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (dist < 8) {
+        pinch.current = null;
+        return;
+      }
+      pinch.current = { dist, s: viewRef.current.s };
+      return;
+    }
     if ((event.target as HTMLElement).closest(".portrait-card")) return;
     stageRef.current?.setPointerCapture(event.pointerId);
-    drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, vx: view.x, vy: view.y };
+    drag.current = {
+      id: event.pointerId,
+      x: event.clientX,
+      y: event.clientY,
+      vx: viewRef.current.x,
+      vy: viewRef.current.y,
+    };
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
+    if (pointers.current.has(event.pointerId)) {
+      pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+    }
+    if (pinch.current && pointers.current.size >= 2) {
+      const [a, b] = activePoints();
+      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      if (dist < 8) return;
+      viewRef.current.s = clampScale((pinch.current.s * dist) / pinch.current.dist);
+      scheduleApply();
+      return;
+    }
+    if (pinch.current) return;
     if (!drag.current || drag.current.id !== event.pointerId) return;
-    setView((v) => ({
-      ...v,
-      x: drag.current!.vx + (event.clientX - drag.current!.x),
-      y: drag.current!.vy + (event.clientY - drag.current!.y),
-    }));
+    viewRef.current.x = drag.current.vx + (event.clientX - drag.current.x);
+    viewRef.current.y = drag.current.vy + (event.clientY - drag.current.y);
+    scheduleApply();
   }
 
-  function onPointerUp(event: PointerEvent<HTMLDivElement>) {
-    if (!drag.current) return;
-    const moved =
-      Math.abs(event.clientX - drag.current.x) + Math.abs(event.clientY - drag.current.y);
-    drag.current = null;
-    if (moved < 8 && !(event.target as HTMLElement).closest(".portrait-card")) {
-      onHighlight(undefined);
+  function endPointer(event: PointerEvent<HTMLDivElement>) {
+    const start = drag.current;
+    pointers.current.delete(event.pointerId);
+    if (pointers.current.size < 2) pinch.current = null;
+    if (start && start.id === event.pointerId) {
+      const moved = Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y);
+      drag.current = null;
+      if (moved < 8 && !(event.target as HTMLElement).closest(".portrait-card")) {
+        onHighlight(undefined);
+      }
     }
+    if (pointers.current.size === 0) drag.current = null;
   }
 
-  function onTouchStart(event: TouchEvent) {
-    if (event.touches.length === 2) {
-      const [a, b] = [event.touches[0], event.touches[1]];
-      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      pinch.current = { dist, s: view.s };
-    }
-  }
-
-  function onTouchMove(event: TouchEvent) {
-    if (event.touches.length === 2 && pinch.current) {
-      const [a, b] = [event.touches[0], event.touches[1]];
-      const dist = Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY);
-      const next = Math.min(2.2, Math.max(0.55, (pinch.current.s * dist) / pinch.current.dist));
-      setView((v) => ({ ...v, s: next }));
-    }
-  }
+  const stageW = Number.isFinite(layout.width) ? layout.width : 320;
+  const stageH = Number.isFinite(layout.height) ? layout.height : 240;
+  const cards = layout.cards.filter((card) => isFiniteBox(card.x, card.y));
+  const edges = layout.edges.filter((edge) =>
+    isFiniteBox(edge.fromX, edge.fromY) && isFiniteBox(edge.toX, edge.toY),
+  );
 
   return (
     <div
       ref={stageRef}
       className="graph-stage"
       aria-label="Family graph"
-      onWheel={onWheel}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
-      onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      onTouchStart={onTouchStart}
-      onTouchMove={onTouchMove}
+      onPointerUp={endPointer}
+      onPointerCancel={endPointer}
     >
       <div
+        ref={worldRef}
         className="graph-world"
         style={{
-          width: layout.width,
-          height: layout.height,
-          transform: `translate(${view.x}px, ${view.y}px) scale(${view.s})`,
+          width: stageW,
+          height: stageH,
+          transform: "translate(40px, 24px) scale(1)",
         }}
       >
-        <svg className="graph-lines" width={layout.width} height={layout.height} aria-hidden>
-          {layout.edges.map((edge, i) => (
+        <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
+          {edges.map((edge, i) => (
             <path
               key={i}
               d={curve(edge.fromX, edge.fromY, edge.toX, edge.toY)}
@@ -131,13 +203,15 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
             .filter((c) => c.bar)
             .map((couple) => {
               const [a, b] = couple.partnerIds
-                .map((id) => layout.cards.find((card) => card.id === id))
+                .map((id) => cards.find((card) => card.id === id))
                 .filter(Boolean);
               if (!a || !b) return null;
+              if (!Number.isFinite(couple.cy)) return null;
               const left = a.x < b.x ? a : b;
               const right = a.x < b.x ? b : a;
               const x1 = left.x + CARD.w / 2 + 2;
               const x2 = right.x - CARD.w / 2 - 2;
+              if (!isFiniteBox(x1, couple.cy, x2)) return null;
               return (
                 <line
                   key={couple.id}
@@ -156,42 +230,46 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
         {layout.couples
           .filter((c) => c.partnerIds.length >= 2)
           .map((couple) => {
-            const cards = couple.partnerIds
-              .map((id) => layout.cards.find((card) => card.id === id))
-              .filter(Boolean) as typeof layout.cards;
-            if (cards.length < 2) return null;
-            const minX = Math.min(...cards.map((c) => c.x)) - CARD.w / 2 - 8;
-            const maxX = Math.max(...cards.map((c) => c.x)) + CARD.w / 2 + 8;
-            const y = Math.min(...cards.map((c) => c.y)) - 8;
+            const pair = couple.partnerIds
+              .map((id) => cards.find((card) => card.id === id))
+              .filter(Boolean) as typeof cards;
+            if (pair.length < 2) return null;
+            const minX = Math.min(...pair.map((c) => c.x)) - CARD.w / 2 - 8;
+            const maxX = Math.max(...pair.map((c) => c.x)) + CARD.w / 2 + 8;
+            const y = Math.min(...pair.map((c) => c.y)) - 8;
+            const width = maxX - minX;
+            if (!isFiniteBox(minX, y, width, CARD.h + 16)) return null;
             return (
               <div
                 key={`${couple.id}-tint`}
                 className="couple-tint"
-                style={{ left: minX, top: y, width: maxX - minX, height: CARD.h + 16 }}
+                style={{ left: minX, top: y, width, height: CARD.h + 16 }}
               />
             );
           })}
 
-        {layout.cards.map((card) => {
+        {cards.map((card) => {
           const active = highlightedId === card.person.id;
           const dim = linked ? !linked.has(card.person.id) : false;
           const age = ageLabel(card.person.birthDate);
+          const left = card.x - CARD.w / 2;
+          if (!isFiniteBox(left, card.y, CARD.w, CARD.h)) return null;
           return (
             <button
               key={card.id}
               type="button"
               className={`portrait-card${active ? " is-active" : ""}${dim ? " is-dim" : ""}`}
-              style={{ left: card.x - CARD.w / 2, top: card.y, width: CARD.w, height: CARD.h }}
+              style={{ left, top: card.y, width: CARD.w, height: CARD.h }}
               onClick={(event) => {
                 event.stopPropagation();
                 tapCard(card.person);
               }}
               aria-pressed={active}
             >
-              <span className="swatch" aria-hidden>
+              <span className="swatch" style={{ ["--swatch-hue" as string]: String(swatchHue(card.person)) }} aria-hidden>
                 {initialsOf(card.person)}
               </span>
-              <span className="fade">
+              <span className="identity">
                 <strong>{displayName(card.person)}</strong>
                 {age ? <em>{age}</em> : null}
               </span>
