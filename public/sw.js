@@ -1,4 +1,4 @@
-const CACHE = "familytree-shell-v1";
+const CACHE = "familytree-shell-v2";
 const SHELL = [
   "/",
   "/print",

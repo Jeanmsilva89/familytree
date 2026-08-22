@@ -9,7 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts src/lib/generations.test.ts src/lib/graphView.test.ts"
+    "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts src/lib/generations.test.ts src/lib/graphView.test.ts src/lib/persist.test.ts"
   },
   "dependencies": {
     "idb": "^8.0.3",
