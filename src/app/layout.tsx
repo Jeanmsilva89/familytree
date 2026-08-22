@@ -1,11 +1,17 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./focus.css";
+import "./brand.css";
 import { ThemeProvider } from "@/lib/theme";
 
+const title = "Family Tree";
+const description =
+  "A free local-first family tree. One name is enough. Stays on this device. No account.";
+
 export const metadata: Metadata = {
-  title: "Family Tree",
-  description: "A free local-first family tree. One name is enough. Stays on this device. No account.",
+  metadataBase: new URL("https://familytree-rose.vercel.app"),
+  title,
+  description,
   applicationName: "Family Tree",
   manifest: "/manifest.webmanifest",
   appleWebApp: {
@@ -15,11 +21,25 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.png", type: "image/png", sizes: "32x32" },
-      { url: "/icon.png", type: "image/png" },
-      { url: "/icon.svg", type: "image/svg+xml" },
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/favicon-32.png", type: "image/png", sizes: "32x32" },
+      { url: "/icon-192.png", type: "image/png", sizes: "192x192" },
+      { url: "/icon-512.png", type: "image/png", sizes: "512x512" },
     ],
     apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+  },
+  openGraph: {
+    title,
+    description,
+    siteName: "Family Tree",
+    type: "website",
+    images: [{ url: "/icon-512.png", width: 512, height: 512, alt: "Family Tree" }],
+  },
+  twitter: {
+    card: "summary",
+    title,
+    description,
+    images: ["/icon-512.png"],
   },
 };
 
