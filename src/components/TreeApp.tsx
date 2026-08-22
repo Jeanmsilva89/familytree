@@ -191,6 +191,7 @@ export function TreeApp() {
               onAddPartner={treeState.partner}
               onAddChild={treeState.child}
               onAddSibling={treeState.sibling}
+              onRemove={treeState.remove}
             />
           ) : (
             <>

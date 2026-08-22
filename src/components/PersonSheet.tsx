@@ -17,7 +17,7 @@ type Props = {
   onAddParent: (childId: string, name: string) => Promise<void>;
   onAddPartner: (personId: string, name: string, kind: UnionKind) => Promise<void>;
   onAddChild: (parentIds: string[], name: string, unionId?: string) => Promise<void>;
-  onAddSibling: (personId: string, name: string) => Promise<void>;
+  onAddSibling: (personId: string, name: string) => Promise<string | void>;
   onLinkExisting: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind) => Promise<void>;
   onSetUnionKind: (unionId: string, kind: UnionKind) => Promise<void>;
   onEdit: (id: string, patch: Partial<Person>) => Promise<void>;
@@ -72,6 +72,7 @@ export function PersonSheet({
   const [otherLabel, setOtherLabel] = useState("");
   const [otherDate, setOtherDate] = useState("");
   const [hint, setHint] = useState<string | null>(null);
+  const [removeAsk, setRemoveAsk] = useState(false);
   const swipeStart = useRef<number | null>(null);
 
   useEffect(() => {
@@ -87,6 +88,7 @@ export function PersonSheet({
       setOtherDate(person.otherDates?.[0]?.date ?? "");
       setName("");
       setHint(null);
+      setRemoveAsk(false);
     } else {
       setMode("closed");
     }
@@ -213,6 +215,30 @@ export function PersonSheet({
                 </select>
               </div>
             ))}
+            {removeAsk ? (
+              <div className="remove-confirm">
+                <p className="error">Remove {displayName(person)} from this tree?</p>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn danger"
+                    onClick={async () => {
+                      await onRemove(person.id);
+                      onClose();
+                    }}
+                  >
+                    Remove
+                  </button>
+                  <button type="button" className="btn ghost" onClick={() => setRemoveAsk(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button type="button" className="btn danger" onClick={() => setRemoveAsk(true)}>
+                Remove
+              </button>
+            )}
             <button type="button" className="btn ghost" onClick={onClose}>Close</button>
           </>
         ) : null}
@@ -289,7 +315,7 @@ export function PersonSheet({
               <button className="btn" type="button" onClick={() => downloadVCard(person)}>Download vCard</button>
               <button className="btn ghost" type="button" onClick={() => setMode("actions")}>Back</button>
               <button className="btn danger" type="button" onClick={async () => {
-                if (confirm(`Remove ${displayName(person)} from this device?`)) {
+                if (confirm(`Remove ${displayName(person)} from this tree?`)) {
                   await onRemove(person.id);
                   onClose();
                 }

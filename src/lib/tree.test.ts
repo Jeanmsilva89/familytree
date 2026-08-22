@@ -86,6 +86,47 @@ describe("tree mutations", () => {
     assert.equal(tree.unions.length, 1);
     assert.equal(tree.unions[0].partnerIds.length, 1);
   });
+
+  it("reassigns focus to a remaining partner, then a parent", () => {
+    let tree = startWithName("Alex");
+    const alex = tree.people[0].id;
+    tree = addPartner(tree, alex, "Jordan");
+    const jordan = tree.people.find((p) => p.givenName === "Jordan")!.id;
+    tree = setFocus(tree, alex);
+    tree = removePerson(tree, alex);
+    assert.equal(tree.focusPersonId, jordan);
+    assert.equal(tree.people.some((p) => p.id === alex), false);
+
+    tree = startWithName("Sam");
+    const sam = tree.people[0].id;
+    tree = addParent(tree, sam, "Alex");
+    const parent = tree.people.find((p) => p.givenName === "Alex")!.id;
+    tree = setFocus(tree, sam);
+    tree = removePerson(tree, sam);
+    assert.equal(tree.focusPersonId, parent);
+    assert.equal(tree.childLinks.some((l) => l.childId === sam), false);
+  });
+
+  it("leaves a child when the last parent is removed", () => {
+    let tree = startWithName("Alex");
+    const alex = tree.people[0].id;
+    tree = addChild(tree, [alex], "Riley");
+    const riley = tree.people.find((p) => p.givenName === "Riley")!;
+    tree = removePerson(tree, alex);
+    assert.ok(tree.people.some((p) => p.id === riley.id));
+    const link = tree.childLinks.find((l) => l.childId === riley.id);
+    assert.ok(link);
+    assert.equal(link!.parentIds.includes(alex), false);
+  });
+
+  it("empty tree after the last person is removed", () => {
+    let tree = startWithName("Alex");
+    tree = removePerson(tree, tree.people[0].id);
+    assert.equal(tree.people.length, 0);
+    assert.equal(tree.focusPersonId, undefined);
+    assert.equal(tree.unions.length, 0);
+    assert.equal(tree.childLinks.length, 0);
+  });
 });
 
 describe("self-serve mutations", () => {

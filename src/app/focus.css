@@ -190,3 +190,27 @@
 .graph-lines { z-index: 0; }
 .couple-tint { z-index: 1; }
 .portrait-card { z-index: 2; }
+
+.card-actions {
+  display: flex;
+  gap: 4px;
+  justify-content: space-between;
+}
+.card-remove {
+  font-size: 0.75rem;
+  min-height: 36px;
+  padding-inline: 8px;
+}
+.focus-card.is-flash {
+  animation: flash-card 1.2s ease;
+}
+@keyframes flash-card {
+  0%, 100% { box-shadow: var(--shadow); }
+  35% { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
+}
+.remove-confirm { display: grid; gap: 8px; margin: 8px 0; }
+.btn.danger {
+  background: color-mix(in srgb, #b42318 12%, var(--card));
+  color: #8a1c14;
+  border-color: color-mix(in srgb, #b42318 35%, var(--line));
+}
