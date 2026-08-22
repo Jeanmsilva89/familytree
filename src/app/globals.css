@@ -88,6 +88,7 @@ html, body {
   margin: 0;
   padding: 0;
   min-height: 100%;
+  overflow-x: hidden;
   background:
     radial-gradient(1200px 500px at 10% -10%, var(--wash) 0%, transparent 55%),
     radial-gradient(900px 400px at 110% 0%, var(--wash-2) 0%, transparent 50%),
@@ -129,6 +130,8 @@ button { cursor: pointer; }
   padding: calc(12px + var(--safe-top)) 12px calc(28px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .topbar {
@@ -143,6 +146,7 @@ button { cursor: pointer; }
   padding: 10px 12px calc(10px + 2px);
   background: color-mix(in srgb, var(--paper) 88%, transparent);
   backdrop-filter: blur(10px);
+  min-width: 0;
 }
 
 .brand {
@@ -151,7 +155,9 @@ button { cursor: pointer; }
   gap: 10px;
   text-decoration: none;
   color: inherit;
+  min-width: 0;
 }
+.brand > div { min-width: 0; }
 
 .brand-mark {
   width: 36px;
@@ -164,6 +170,7 @@ button { cursor: pointer; }
   font-size: 1.35rem;
   letter-spacing: -0.02em;
   font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  overflow-wrap: anywhere;
 }
 
 .privacy {
@@ -183,6 +190,12 @@ button { cursor: pointer; }
   background: var(--card);
   padding: 0 16px;
   box-shadow: var(--shadow);
+  overflow: hidden;
+}
+.btn {
+  max-width: 100%;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .icon-btn {
@@ -222,9 +235,10 @@ button { cursor: pointer; }
 }
 .hero h2 {
   margin: 0 0 8px;
-  font-size: clamp(1.9rem, 7vw, 2.4rem);
+  font-size: clamp(1.6rem, 7vw, 2.4rem);
   line-height: 1.15;
   font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  overflow-wrap: anywhere;
 }
 .start-stack { display: grid; gap: 12px; }
 .start-stack input {
@@ -253,8 +267,8 @@ button { cursor: pointer; }
 
 .field textarea { min-height: 110px; resize: vertical; }
 
-.start-row { display: flex; gap: 10px; }
-.start-row input { flex: 1; min-height: var(--tap); border-radius: 16px; border: 1px solid var(--line); background: var(--cream); padding: 12px 14px; }
+.start-row { display: flex; flex-wrap: wrap; gap: 10px; min-width: 0; }
+.start-row input { flex: 1 1 160px; min-width: 0; min-height: var(--tap); border-radius: 16px; border: 1px solid var(--line); background: var(--cream); padding: 12px 14px; }
 
 .example-art {
   margin-top: 28px;
@@ -270,7 +284,9 @@ button { cursor: pointer; }
   align-items: center;
   gap: 8px;
   margin-bottom: 12px;
+  min-width: 0;
 }
+.example-art header > * { min-width: 0; }
 
 .badge {
   display: inline-block;
@@ -293,11 +309,15 @@ button { cursor: pointer; }
 .couple {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
   padding: 8px 10px;
   border-radius: 18px;
   background: var(--couple-fill);
   border: 1px solid var(--line);
+  min-width: 0;
+  max-width: 100%;
 }
 
 .kids { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
@@ -418,8 +438,11 @@ html[data-theme="dark"] .portrait-card .swatch {
 .sheet {
   position: relative;
   width: 100%;
+  max-width: 100%;
   max-height: min(90dvh, 860px);
-  overflow: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
   background: var(--card);
   border-radius: 22px 22px 0 0;
   border: 1px solid var(--line);
@@ -440,20 +463,41 @@ html[data-theme="dark"] .portrait-card .swatch {
   top: calc(8px + var(--safe-top));
   min-height: var(--tap);
   min-width: var(--tap);
+  max-width: 72px;
+  padding: 0 8px;
   border: 0;
   background: transparent;
   color: var(--accent);
+  overflow: hidden;
 }
 
-.sheet h2 { margin: 0 0 6px; font-family: Palatino, "Iowan Old Style", serif; }
+.sheet h2 {
+  margin: 0 48px 6px 0;
+  font-family: Palatino, "Iowan Old Style", serif;
+  overflow-wrap: anywhere;
+}
 
-.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 14px 0;
+  min-width: 0;
+}
+.actions .btn {
+  flex: 1 1 calc(50% - 8px);
+  min-width: 0;
+  padding-inline: 10px;
+}
 
 .menu {
   position: absolute;
-  right: 16px;
+  right: 12px;
   top: 68px;
-  width: min(280px, calc(100% - 32px));
+  width: min(280px, calc(100% - 24px));
+  max-width: calc(100vw - 24px);
+  min-width: 0;
+  overflow-x: hidden;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -465,7 +509,8 @@ html[data-theme="dark"] .portrait-card .swatch {
 .menu button, .menu a {
   display: flex;
   width: 100%;
-  min-height: 44px;
+  min-height: var(--tap);
+  overflow-wrap: anywhere;
   align-items: center;
   text-align: left;
   padding: 8px 10px;
@@ -560,13 +605,15 @@ html[data-theme="dark"] .portrait-card .swatch {
   gap: 6px;
 }
 .theme-picks button {
-  min-height: 40px;
+  min-height: var(--tap);
+  min-width: 0;
   border: 1px solid var(--line);
   border-radius: 10px;
   background: var(--cream);
   padding: 6px 4px;
   justify-content: center;
   text-align: center;
+  overflow: hidden;
 }
 .theme-picks button.is-on {
   border-color: var(--accent);
