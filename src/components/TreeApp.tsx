@@ -6,6 +6,7 @@ import { useNarrow } from "@/hooks/useNarrow";
 import { useTree } from "@/hooks/useTree";
 import { parseGedcom, serializeGedcom } from "@/lib/gedcom";
 import type { Person } from "@/lib/types";
+import { displayName } from "@/lib/types";
 import { BrandMark } from "./BrandMark";
 import { AppMenu } from "./AppMenu";
 import { FocusFamily } from "./FocusFamily";
@@ -91,6 +92,10 @@ export function TreeApp() {
     );
   }
 
+  const lookingId = highlighted?.id ?? treeState.tree.focusPersonId;
+  const looking = treeState.tree.people.find((p) => p.id === lookingId);
+  const lookingName = looking?.givenName?.trim() || (looking ? displayName(looking) : "");
+
   return (
     <div className={narrow ? "app-shell tree-shell is-narrow" : "app-shell tree-shell is-wide"}>
       <header className="topbar">
@@ -137,6 +142,7 @@ export function TreeApp() {
             <button type="button" role="tab" aria-selected={mobileView === "family"} className={mobileView === "family" ? "btn primary" : "btn ghost"} onClick={() => chooseView("family")}>Family</button>
             <button type="button" role="tab" aria-selected={mobileView === "graph"} className={mobileView === "graph" ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Graph</button>
           </div>
+          {lookingName ? <p className="looking-at" aria-live="polite">Looking at {lookingName}</p> : null}
           {mobileView === "family" ? (
             <FocusFamily
               tree={treeState.tree}
@@ -170,7 +176,7 @@ export function TreeApp() {
         <PeopleList
           tree={treeState.tree}
           onClose={() => setPeopleOpen(false)}
-          onPick={(person) => { void treeState.focus(person.id); setSheetPerson(person); setPeopleOpen(false); }}
+          onPick={(person) => { void treeState.focus(person.id); setHighlighted(person); setSheetPerson(person); setPeopleOpen(false); }}
         />
       ) : null}
 
