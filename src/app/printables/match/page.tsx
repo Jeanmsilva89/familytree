@@ -19,7 +19,8 @@ export default function MatchPage() {
 
   return (
     <div className="print-page">
-      <PrintToolbar title="Match the lines" />
+      <PrintToolbar />
+      <h1>Match the lines</h1>
       <p>Draw a line from each name to how they fit in this family.</p>
       <div className="match-row">
         <div>
@@ -39,7 +40,7 @@ export default function MatchPage() {
           ))}
         </div>
       </div>
-      {tree.people.length === 0 ? <p>Add people on the tree first, then come back.</p> : null}
+      {tree.people.length === 0 ? <p>No names on this device yet.</p> : null}
     </div>
   );
 }

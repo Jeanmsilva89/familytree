@@ -16,7 +16,8 @@ export default function CardsPage() {
 
   return (
     <div className="print-page">
-      <PrintToolbar title="Relationship cards" />
+      <PrintToolbar />
+      <h1>Relationship cards</h1>
       <div className="cards-grid">
         {tree.people.map((person) => {
           const card = cardLines(tree, person);
@@ -24,11 +25,11 @@ export default function CardsPage() {
             <article key={person.id} className="rel-card">
               <p className="unit-label">{card.rel}</p>
               <h2>{card.name}</h2>
-              {person.birthDate ? <p>{person.birthDate}</p> : <p> </p>}
+              {person.birthDate ? <p className="birth-label">Born {person.birthDate}</p> : null}
             </article>
           );
         })}
-        {tree.people.length === 0 ? <p>Add people on the tree first, then come back.</p> : null}
+        {tree.people.length === 0 ? <p>No names on this device yet.</p> : null}
       </div>
     </div>
   );

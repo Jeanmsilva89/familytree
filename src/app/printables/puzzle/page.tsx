@@ -21,19 +21,22 @@ export default function PuzzlePage() {
     ...(unit?.children ?? []).map((p) => displayName(p)),
   ].slice(0, 4);
 
-  while (pieces.length < 4) pieces.push("family");
-
   return (
     <div className="print-page">
-      <PrintToolbar title="Who belongs together?" />
+      <PrintToolbar />
+      <h1>Who belongs together?</h1>
       <p>Cut on the dashed lines. Mix the pieces, then put the couple and kids back together.</p>
-      <div className="puzzle">
-        {pieces.map((label, idx) => (
-          <div key={`${label}-${idx}`} className="slot">
-            <strong>{label}</strong>
-          </div>
-        ))}
-      </div>
+      {pieces.length === 0 ? (
+        <p>No names on this device yet.</p>
+      ) : (
+        <div className="puzzle">
+          {pieces.map((label, idx) => (
+            <div key={`${label}-${idx}`} className="slot">
+              <strong>{label}</strong>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
