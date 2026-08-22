@@ -28,11 +28,10 @@ const LANE_WORDS: Record<string, string> = {
   grandchildren: "Kids",
 };
 
-function PersonChip({ person, focused, flash, onFocus, onOpen, onRemove }: {
+function PersonChip({ person, focused, flash, onFocus, onOpen }: {
   person: Person; focused?: boolean; flash?: boolean;
-  onFocus: () => void; onOpen: () => void; onRemove: () => void;
+  onFocus: () => void; onOpen: () => void;
 }) {
-  const [menu, setMenu] = useState(false);
   const age = ageFromBirthDate(person.birthDate);
   const cls = ["focus-card", focused ? "is-focus" : "", flash ? "is-flash" : ""].filter(Boolean).join(" ");
   const label = displayName(person);
@@ -44,27 +43,26 @@ function PersonChip({ person, focused, flash, onFocus, onOpen, onRemove }: {
         {age ? <span className="hint">{age}</span> : null}
       </button>
       <div className="card-actions">
-        <button type="button" className="icon-btn" aria-label={`Edit / Remove ${label}`} aria-expanded={menu} onClick={() => setMenu((open) => !open)}>{"⋮"}</button>
-        {menu ? (
-          <div className="card-menu" role="menu">
-            <button type="button" className="btn ghost" role="menuitem" onClick={() => { setMenu(false); onOpen(); }}>Edit</button>
-            <button type="button" className="btn ghost" role="menuitem" onClick={() => { setMenu(false); onRemove(); }}>Remove</button>
-          </div>
-        ) : null}
+        <button type="button" className="icon-btn" aria-label={`Edit ${label}`} onClick={onOpen}>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M12 20h9" />
+            <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+          </svg>
+        </button>
       </div>
     </article>
   );
 }
 
-function CoupleUnit({ people, coupleBar, lit, focusIds, onFocus, onOpen, onRemove, flashId }: {
+function CoupleUnit({ people, coupleBar, lit, focusIds, onFocus, onOpen, flashId }: {
   people: Person[]; coupleBar?: boolean; lit?: boolean; focusIds: Set<string>;
-  onFocus: (id: string) => void; onOpen: (person: Person) => void; onRemove: (id: string) => void; flashId?: string;
+  onFocus: (id: string) => void; onOpen: (person: Person) => void; onRemove?: (id: string) => void; flashId?: string;
 }) {
   const unit = Boolean(coupleBar && people.length >= 2);
   return (
     <div className={`couple-unit${unit ? " is-unit" : ""}${lit && unit ? " is-lit" : ""}`}>
       {people.map((p) => (
-        <PersonChip key={p.id} person={p} focused={focusIds.has(p.id)} flash={flashId === p.id} onFocus={() => onFocus(p.id)} onOpen={() => onOpen(p)} onRemove={() => onRemove(p.id)} />
+        <PersonChip key={p.id} person={p} focused={focusIds.has(p.id)} flash={flashId === p.id} onFocus={() => onFocus(p.id)} onOpen={() => onOpen(p)} />
       ))}
     </div>
   );
