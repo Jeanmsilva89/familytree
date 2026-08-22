@@ -72,7 +72,7 @@ export function PersonSheet({
   const [otherLabel, setOtherLabel] = useState("");
   const [otherDate, setOtherDate] = useState("");
   const [hint, setHint] = useState<string | null>(null);
-  const [removeAsk, setRemoveAsk] = useState(false);
+  const [linkOther, setLinkOther] = useState<Person | null>(null);
   const swipeStart = useRef<number | null>(null);
 
   useEffect(() => {
@@ -88,7 +88,7 @@ export function PersonSheet({
       setOtherDate(person.otherDates?.[0]?.date ?? "");
       setName("");
       setHint(null);
-      setRemoveAsk(false);
+      setLinkOther(null);
     } else {
       setMode("closed");
     }
@@ -180,29 +180,33 @@ export function PersonSheet({
         onTouchEnd={onSheetTouchEnd}
       >
         <div className="sheet-handle" aria-hidden />
-        <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">Close</button>
-        <h2 id={titleId}>{displayName(person)}</h2>
+        <div className="sheet-head">
+          <h2 id={titleId}>{displayName(person)}</h2>
+          <button type="button" className="sheet-close" onClick={onClose}>
+            Close
+          </button>
+        </div>
         {hint ? <p className="error">{hint}</p> : null}
-        <form className="name-front" onSubmit={async (e) => { e.preventDefault(); await saveNames(); }}>
-          <div className="field">
-            <label htmlFor="front-given">Given name</label>
-            <input id="front-given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required />
-          </div>
-          <div className="field">
-            <label htmlFor="front-family">Family name</label>
-            <input id="front-family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
-          </div>
-          <button className="btn" type="submit">Save names</button>
-        </form>
         {mode === "actions" ? (
           <>
+            <form className="name-front" onSubmit={async (e) => { e.preventDefault(); await saveNames(); }}>
+              <div className="field">
+                <label htmlFor="front-given">Given name</label>
+                <input id="front-given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required />
+              </div>
+              <div className="field">
+                <label htmlFor="front-family">Family name</label>
+                <input id="front-family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
+              </div>
+              <button className="btn" type="submit">Save</button>
+            </form>
             <div className="actions">
               <button type="button" className="btn" onClick={() => startAdd("parent")}>Add parent</button>
               <button type="button" className="btn" onClick={() => startAdd("partner")}>Add partner</button>
               <button type="button" className="btn" onClick={() => startAdd("child")}>Add child</button>
               <button type="button" className="btn" onClick={() => startAdd("sibling")}>Add sibling</button>
-              <button type="button" className="btn" onClick={() => setMode("link")}>Link someone on the tree</button>
-              <button type="button" className="btn primary" onClick={() => setMode("more")}>Bio, dates, photo, vCard</button>
+              <button type="button" className="btn" onClick={() => { setLinkOther(null); setMode("link"); }}>Link someone on the tree</button>
+              <button type="button" className="btn primary" onClick={() => setMode("more")}>More</button>
             </div>
             {unions.map((u) => (
               <div className="field" key={u.id}>
@@ -215,31 +219,6 @@ export function PersonSheet({
                 </select>
               </div>
             ))}
-            {removeAsk ? (
-              <div className="remove-confirm">
-                <p className="error">Remove {displayName(person)} from this tree?</p>
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="btn danger"
-                    onClick={async () => {
-                      await onRemove(person.id);
-                      onClose();
-                    }}
-                  >
-                    Remove
-                  </button>
-                  <button type="button" className="btn ghost" onClick={() => setRemoveAsk(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button type="button" className="btn danger" onClick={() => setRemoveAsk(true)}>
-                Remove
-              </button>
-            )}
-            <button type="button" className="btn ghost" onClick={onClose}>Close</button>
           </>
         ) : null}
         {mode === "add" ? (
@@ -269,19 +248,24 @@ export function PersonSheet({
           </form>
         ) : null}
         {mode === "link" ? (
-          <PeopleList
-            tree={tree}
-            title="Link someone already on the tree"
-            excludeId={person.id}
-            onClose={() => setMode("actions")}
-            onPick={async (other) => {
-              const role = window.prompt("Link as parent, partner, or child?", "partner");
-              const next = (role ?? "").trim().toLowerCase();
-              if (next !== "parent" && next !== "partner" && next !== "child") return;
-              await onLinkExisting(person.id, other.id, next);
-              onClose();
-            }}
-          />
+          linkOther ? (
+            <div className="link-roles">
+              <p>How is {displayName(linkOther)} linked to {displayName(person)}?</p>
+              <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "parent"); onClose(); }}>Parent</button>
+              <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "partner"); onClose(); }}>Partner</button>
+              <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "child"); onClose(); }}>Child</button>
+              <button type="button" className="btn ghost" onClick={() => setLinkOther(null)}>Back</button>
+            </div>
+          ) : (
+            <PeopleList
+              tree={tree}
+              title="Link someone already on the tree"
+              excludeId={person.id}
+              embedded
+              onClose={() => setMode("actions")}
+              onPick={(other) => setLinkOther(other)}
+            />
+          )
         ) : null}
         {mode === "more" ? (
           <form className="more" onSubmit={submitMore}>
