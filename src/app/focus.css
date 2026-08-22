@@ -66,7 +66,6 @@
   flex: 0 0 auto;
   padding: 0 16px 0 0;
   margin-right: 8px;
-  border-right: 0;
   scroll-snap-align: start;
 }
 
@@ -78,8 +77,6 @@
 .gen-group-label {
   margin: 0;
   font-size: 0.72rem;
-  letter-spacing: 0.03em;
-  text-transform: none;
   color: var(--muted);
   font-weight: 600;
 }
@@ -116,9 +113,7 @@
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-.couple-unit.is-unit .focus-card {
-  z-index: 1;
-}
+.couple-unit.is-unit .focus-card { z-index: 1; }
 
 .focus-card {
   position: relative;
@@ -190,5 +185,8 @@
 
 .name-front { display: grid; gap: 8px; margin: 10px 0 4px; }
 .focus-actions .btn, .actions .btn, .btn { min-height: var(--tap); }
-
 .graph-hint { margin-top: 16px; }
+
+.graph-lines { z-index: 0; }
+.couple-tint { z-index: 1; }
+.portrait-card { z-index: 2; }
