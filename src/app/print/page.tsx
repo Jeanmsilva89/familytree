@@ -1,14 +1,21 @@
 "use client";
 
-import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { PrintToolbar } from "@/components/PrintToolbar";
 import { loadTree } from "@/lib/db";
-import { buildView } from "@/lib/layout";
-import type { TreeData } from "@/lib/types";
+import { buildGenerationLanes } from "@/lib/generations";
 import { displayName, emptyTree } from "@/lib/types";
 
+const LANE_TITLE: Record<string, string> = {
+  grandparents: "Grandparents",
+  parents: "Parents",
+  focus: "This generation",
+  children: "Children",
+  grandchildren: "Grandchildren",
+};
+
 export default function PrintTreePage() {
-  const [tree, setTree] = useState<TreeData>(emptyTree());
+  const [tree, setTree] = useState(emptyTree());
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -18,56 +25,31 @@ export default function PrintTreePage() {
     });
   }, []);
 
-  const view = buildView(tree);
+  const lanes = useMemo(() => buildGenerationLanes(tree, tree.focusPersonId), [tree]);
 
   return (
     <div className="print-page">
-      <div className="no-print app-shell" style={{ paddingBottom: 12 }}>
-        <p>
-          <Link href="/">← Back to Family Tree</Link>
-        </p>
-        <button className="btn primary" type="button" onClick={() => window.print()}>
-          Print or save PDF
-        </button>
-        <p className="hint">Use your browser’s print dialog to save a PDF. Nothing is uploaded.</p>
-      </div>
+      <PrintToolbar title="Family Tree" backHref="/" backLabel={"\u2190 Back to Family Tree"} />
       <article className="print-tree">
-        <h1>Family Tree</h1>
-        {!ready ? <p>Loading…</p> : null}
+        {!ready ? <p>Loading\u2026</p> : null}
         {ready && tree.people.length === 0 ? <p>No tree on this device yet.</p> : null}
-        {view.parentUnits.map((unit) => (
-          <section key={unit.id} className="print-unit">
-            <p>Parents</p>
-            <div className="print-couple">
-              {unit.partners.map((p) => (
-                <div key={p.id} className="print-person">
-                  <strong>{displayName(p)}</strong>
-                </div>
-              ))}
-            </div>
-          </section>
-        ))}
-        {view.selfUnits.map((unit) => (
-          <section key={unit.id} className="print-unit">
-            <div className="print-couple">
-              {unit.partners.map((p) => (
-                <div key={p.id} className="print-person">
-                  <strong>{displayName(p)}</strong>
-                  {p.birthDate ? <div>{p.birthDate}</div> : null}
-                </div>
-              ))}
-            </div>
-            {unit.children.length ? (
-              <div className="print-kids">
-                {unit.children.map((p) => (
+        {lanes.map((lane) => {
+          const people = lane.groups ? lane.groups.flatMap((g) => g.people) : lane.people;
+          if (!people.length) return null;
+          return (
+            <section key={lane.id} className="print-unit print-gen">
+              <h2>{LANE_TITLE[lane.id] ?? lane.id}</h2>
+              <div className="print-couple">
+                {people.map((p) => (
                   <div key={p.id} className="print-person">
-                    {displayName(p)}
+                    <strong>{displayName(p)}</strong>
+                    {p.birthDate ? <span className="birth-label">Born {p.birthDate}</span> : null}
                   </div>
                 ))}
               </div>
-            ) : null}
-          </section>
-        ))}
+            </section>
+          );
+        })}
       </article>
     </div>
   );

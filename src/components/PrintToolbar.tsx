@@ -2,15 +2,25 @@
 
 import Link from "next/link";
 
-export function PrintToolbar({ title }: { title: string }) {
+type Props = {
+  title?: string;
+  backHref?: string;
+  backLabel?: string;
+};
+
+export function PrintToolbar({
+  title,
+  backHref = "/printables",
+  backLabel = "\u2190 Kid printables",
+}: Props) {
   return (
-    <div className="no-print app-shell" style={{ paddingBottom: 8 }}>
+    <div className="no-print print-toolbar">
       <p>
-        <Link href="/printables">← Kid printables</Link>
+        <Link href={backHref}>{backLabel}</Link>
         {" \u00b7 "}
         <Link href="/">Tree</Link>
       </p>
-      <h1 style={{ fontFamily: "Palatino, serif" }}>{title}</h1>
+      {title ? <h1 className="print-toolbar-title">{title}</h1> : null}
       <button className="btn primary" type="button" onClick={() => window.print()}>
         Print or save PDF
       </button>
