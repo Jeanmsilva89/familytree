@@ -80,18 +80,24 @@ export function AppMenu({
       <Link href="/printables" role="menuitem" onClick={onClose}>
         Printables
       </Link>
-      <button type="button" role="menuitem" onClick={onExport}>
-        Export GEDCOM
-      </button>
-      <button type="button" role="menuitem" onClick={onImport}>
-        Import GEDCOM
-      </button>
-      <button type="button" role="menuitem" onClick={onExportJson}>
-        Export backup JSON
-      </button>
-      <button type="button" role="menuitem" onClick={onImportJson}>
-        Import backup JSON
-      </button>
+      <details>
+        <summary>File and backup</summary>
+        <button type="button" role="menuitem" onClick={onExport}>
+          Export GEDCOM
+        </button>
+        <button type="button" role="menuitem" onClick={onImport}>
+          Import GEDCOM
+        </button>
+        <button type="button" role="menuitem" onClick={onExportJson}>
+          Export backup JSON
+        </button>
+        <button type="button" role="menuitem" onClick={onImportJson}>
+          Import backup JSON
+        </button>
+        <button type="button" role="menuitem" onClick={onReset}>
+          Start over
+        </button>
+      </details>
       {canInstall ? (
         <button type="button" role="menuitem" onClick={onInstall}>
           Install
@@ -101,9 +107,6 @@ export function AppMenu({
           Install from your browser menu to use Family Tree like an app.
         </p>
       )}
-      <button type="button" role="menuitem" onClick={onReset}>
-        Start over
-      </button>
     </div>
   );
 }
