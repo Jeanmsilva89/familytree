@@ -101,13 +101,7 @@ export function TreeApp() {
             <p className="privacy">On this device</p>
           </div>
         </Link>
-        <button
-          type="button"
-          className="icon-btn"
-          aria-label={menuOpen ? "Close menu" : "Open menu"}
-          aria-expanded={menuOpen}
-          onClick={() => setMenuOpen((v) => !v)}
-        >
+        <button type="button" className="icon-btn" aria-label={menuOpen ? "Close menu" : "Open menu"} aria-expanded={menuOpen} onClick={() => setMenuOpen((v) => !v)}>
           ☰
         </button>
       </header>
@@ -115,27 +109,12 @@ export function TreeApp() {
       <AppMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        onPeople={() => {
-          setPeopleOpen(true);
-          setMenuOpen(false);
-        }}
-        onAddSomeone={async () => {
-          const name = window.prompt("Name of the person to add");
-          if (name?.trim()) {
-            await treeState.unlinked(name);
-          }
-          setMenuOpen(false);
-        }}
+        onPeople={() => { setPeopleOpen(true); setMenuOpen(false); }}
+        onAddSomeone={async (name) => { await treeState.unlinked(name); setMenuOpen(false); }}
         onExport={exportGedcom}
-        onImport={() => {
-          fileRef.current?.click();
-          setMenuOpen(false);
-        }}
+        onImport={() => { fileRef.current?.click(); setMenuOpen(false); }}
         onExportJson={exportJson}
-        onImportJson={() => {
-          jsonRef.current?.click();
-          setMenuOpen(false);
-        }}
+        onImportJson={() => { jsonRef.current?.click(); setMenuOpen(false); }}
         onReset={async () => {
           if (confirm("Clear the tree saved on this device?")) {
             await treeState.reset();
@@ -145,11 +124,7 @@ export function TreeApp() {
           }
         }}
         canInstall={Boolean(installEvent)}
-        onInstall={async () => {
-          await installEvent?.prompt();
-          setInstallEvent(null);
-          setMenuOpen(false);
-        }}
+        onInstall={async () => { await installEvent?.prompt(); setInstallEvent(null); setMenuOpen(false); }}
       />
 
       {treeState.error ? <p className="error">{treeState.error}</p> : null}
@@ -159,24 +134,8 @@ export function TreeApp() {
       ) : (
         <>
           <div className="view-toggle" role="tablist" aria-label="Tree view">
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobileView === "family"}
-              className={mobileView === "family" ? "btn primary" : "btn ghost"}
-              onClick={() => chooseView("family")}
-            >
-              Family
-            </button>
-            <button
-              type="button"
-              role="tab"
-              aria-selected={mobileView === "graph"}
-              className={mobileView === "graph" ? "btn primary" : "btn ghost"}
-              onClick={() => chooseView("graph")}
-            >
-              Graph
-            </button>
+            <button type="button" role="tab" aria-selected={mobileView === "family"} className={mobileView === "family" ? "btn primary" : "btn ghost"} onClick={() => chooseView("family")}>Family</button>
+            <button type="button" role="tab" aria-selected={mobileView === "graph"} className={mobileView === "graph" ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Graph</button>
           </div>
           {mobileView === "family" ? (
             <FocusFamily
@@ -198,10 +157,7 @@ export function TreeApp() {
               <TreeCanvas
                 tree={treeState.tree}
                 highlightedId={highlighted?.id ?? treeState.tree.focusPersonId}
-                onHighlight={(person) => {
-                  setHighlighted(person);
-                  if (person) void treeState.focus(person.id);
-                }}
+                onHighlight={(person) => { setHighlighted(person); if (person) void treeState.focus(person.id); }}
                 onOpen={setSheetPerson}
               />
               <p className="hint graph-hint">Tap once to see a line. Tap again to open. Drag the graph.</p>
@@ -214,11 +170,7 @@ export function TreeApp() {
         <PeopleList
           tree={treeState.tree}
           onClose={() => setPeopleOpen(false)}
-          onPick={(person) => {
-            void treeState.focus(person.id);
-            setSheetPerson(person);
-            setPeopleOpen(false);
-          }}
+          onPick={(person) => { void treeState.focus(person.id); setSheetPerson(person); setPeopleOpen(false); }}
         />
       ) : null}
 
