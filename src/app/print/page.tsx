@@ -37,7 +37,7 @@ export default function PrintTreePage() {
           const people = lane.groups ? lane.groups.flatMap((g) => g.people) : lane.people;
           if (!people.length) return null;
           return (
-            <section key={lane.id} className="print-unit print-gen">
+            <section key={lane.id} className="print-unit">
               <h2>{LANE_TITLE[lane.id] ?? lane.id}</h2>
               <div className="print-couple">
                 {people.map((p) => (

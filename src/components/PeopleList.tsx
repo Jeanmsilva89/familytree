@@ -21,31 +21,18 @@ export function PeopleList({ tree, title = "Everyone", excludeId, embedded, onPi
       .filter((p) => p.id !== excludeId)
       .filter((p) => !needle || displayName(p).toLowerCase().includes(needle));
   }, [tree.people, q, excludeId]);
+  const noneOnTree = tree.people.filter((p) => p.id !== excludeId).length === 0;
 
   const inner = (
-    <div
-      className={embedded ? "people-embed" : "sheet"}
-      role="dialog"
-      aria-modal={!embedded}
-      aria-label={title}
-      onClick={(e) => e.stopPropagation()}
-    >
+    <div className={embedded ? "people-embed" : "sheet"} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label={title} onClick={(e) => e.stopPropagation()}>
       {embedded ? null : <div className="sheet-handle" aria-hidden />}
       <div className="sheet-head">
         <h2>{title}</h2>
-        <button type="button" className="sheet-close" onClick={onClose}>
-          {embedded ? "Back" : "Close"}
-        </button>
+        <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">{embedded ? "Back" : "Close"}</button>
       </div>
       <div className="field">
         <label htmlFor="people-search">Search people</label>
-        <input
-          id="people-search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Name"
-          autoFocus
-        />
+        <input id="people-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name" autoFocus />
       </div>
       <ul className="people-list">
         {people.map((person) => (
@@ -60,11 +47,7 @@ export function PeopleList({ tree, title = "Everyone", excludeId, embedded, onPi
         ))}
       </ul>
       {people.length === 0 ? (
-        <p className="hint">
-          {q.trim()
-            ? "No names match that search. Clear it, then tap someone."
-            : "No one to show yet. Add a name on the tree, then tap them here."}
-        </p>
+        <p className="hint">{noneOnTree ? "No one on this tree yet. Add a name, then come back." : "No names match that search."}</p>
       ) : null}
     </div>
   );
