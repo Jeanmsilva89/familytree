@@ -1,14 +1,15 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { AddNameRow } from "./AddNameRow";
 import { useTheme, type ThemePreference } from "@/lib/theme";
 
 type Props = {
   open: boolean;
   onClose: () => void;
   onPeople: () => void;
-  onAddSomeone: () => void;
+  onAddSomeone: (name: string) => void | Promise<void>;
   onExport: () => void;
   onImport: () => void;
   onExportJson: () => void;
@@ -38,6 +39,7 @@ export function AppMenu({
   onInstall,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const [adding, setAdding] = useState(false);
   const { preference, setPreference } = useTheme();
 
   useEffect(() => {
@@ -55,18 +57,20 @@ export function AppMenu({
       <button type="button" role="menuitem" onClick={onPeople}>
         People
       </button>
-      <Link href="/print" role="menuitem" onClick={onClose}>
-        Print
-      </Link>
-      <Link href="/printables" role="menuitem" onClick={onClose}>
-        Printables
-      </Link>
-      <button type="button" role="menuitem" onClick={onReset}>
-        Start over
-      </button>
-      <button type="button" role="menuitem" onClick={onAddSomeone}>
-        Add someone
-      </button>
+      {adding ? (
+        <AddNameRow
+          label="Name of the person to add"
+          onAdd={async (name) => {
+            await onAddSomeone(name);
+            setAdding(false);
+          }}
+          onCancel={() => setAdding(false)}
+        />
+      ) : (
+        <button type="button" role="menuitem" onClick={() => setAdding(true)}>
+          Add someone
+        </button>
+      )}
       <div className="theme-control">
         <span>Theme</span>
         <div className="theme-picks" role="group" aria-label="Theme">
@@ -83,21 +87,24 @@ export function AppMenu({
           ))}
         </div>
       </div>
-      <details>
-        <summary>Move data</summary>
-        <button type="button" role="menuitem" onClick={onExport}>
-          Export GEDCOM
-        </button>
-        <button type="button" role="menuitem" onClick={onImport}>
-          Import GEDCOM
-        </button>
-        <button type="button" role="menuitem" onClick={onExportJson}>
-          Export backup JSON
-        </button>
-        <button type="button" role="menuitem" onClick={onImportJson}>
-          Import backup JSON
-        </button>
-      </details>
+      <Link href="/print" role="menuitem" onClick={onClose}>
+        Print
+      </Link>
+      <Link href="/printables" role="menuitem" onClick={onClose}>
+        Printables
+      </Link>
+      <button type="button" role="menuitem" onClick={onExport}>
+        Export GEDCOM
+      </button>
+      <button type="button" role="menuitem" onClick={onImport}>
+        Import GEDCOM
+      </button>
+      <button type="button" role="menuitem" onClick={onExportJson}>
+        Export backup JSON
+      </button>
+      <button type="button" role="menuitem" onClick={onImportJson}>
+        Import backup JSON
+      </button>
       {canInstall ? (
         <button type="button" role="menuitem" onClick={onInstall}>
           Install
@@ -107,6 +114,9 @@ export function AppMenu({
           Install from your browser menu to use Family Tree like an app.
         </p>
       )}
+      <button type="button" role="menuitem" onClick={onReset}>
+        Start over
+      </button>
     </div>
   );
 }
