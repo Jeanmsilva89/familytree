@@ -239,7 +239,7 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
                 {initialsOf(card.person)}
               </span>
               <span className="identity">
-                <strong>{displayName(card.person)}</strong>
+                <strong title={displayName(card.person)}>{displayName(card.person)}</strong>
                 {age ? <em>{age}</em> : null}
               </span>
             </button>
