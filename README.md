@@ -1,9 +1,9 @@
-# Kinstart
+# Family Tree
 
 A free local-first PWA for starting a living family tree on a phone.
 One name is enough. Stays on this device. No account.
 
-Kinstart is a couple-centered living graph for modern families, not a pedigree from a dead ancestor.
+Family Tree is a couple-centered living graph for modern families, not a pedigree from a dead ancestor.
 
 ## What it does
 
@@ -19,16 +19,26 @@ Empty-state art is a fictional example (Alex and Jordan, kids Sam and Riley). It
 
 ## Privacy
 
-Names never leave the device. Kinstart stores the tree in the browser IndexedDB only. There is no signup, no server database, no analytics, and no third-party trackers.
+Names never leave the device. Family Tree stores the tree in the browser IndexedDB only. There is no signup, no server database, no analytics, and no third-party trackers. A GEDCOM or vCard file is created locally and only leaves the device if you choose to share that file.
 
 ## Local development
 
-Install dependencies, start the Next.js dev server, and open http://localhost:3000
-Run unit tests, then a production build before deploy.
+    npm install
+    npm run dev
+
+Open http://localhost:3000
+
+    npm test
+    npm run build
+
+npm start serves the production build.
 
 ## Deploy to Vercel
 
-Import this GitHub repo in Vercel. Framework preset: Next.js. No custom domain needed.
+1. In Vercel, Import the GitHub repo Jeanmsilva89/familytree.
+2. Framework preset: Next.js. Build command npm run build.
+3. No environment variables and no custom domain are required.
+4. Deploy. The app is a client-side PWA; Vercel only hosts the app assets.
 
 ## License
 
