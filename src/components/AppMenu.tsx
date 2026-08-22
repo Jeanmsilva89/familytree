@@ -83,7 +83,7 @@ export function AppMenu({
           ))}
         </div>
       </div>
-      <details className="menu-data">
+      <details>
         <summary>Move data</summary>
         <button type="button" role="menuitem" onClick={onExport}>
           Export GEDCOM
