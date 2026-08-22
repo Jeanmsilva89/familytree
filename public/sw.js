@@ -1,4 +1,4 @@
-const CACHE = "kinstart-shell-v1";
+const CACHE = "familytree-shell-v1";
 const SHELL = [
   "/",
   "/print",

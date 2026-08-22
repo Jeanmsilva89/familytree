@@ -1,6 +1,6 @@
 {
-  "name": "Kinstart",
-  "short_name": "Kinstart",
+  "name": "Family Tree",
+  "short_name": "Family Tree",
   "description": "A free local-first living family tree. One name is enough. Stays on this device.",
   "start_url": "/",
   "scope": "/",
@@ -13,6 +13,18 @@
       "src": "/icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
       "purpose": "any"
     }
   ]
