@@ -1,3 +1,6 @@
+.tree-shell { overflow: hidden; }
+.print-page, .printables { overflow-y: auto; }
+
 .app-shell.is-wide { max-width: 1100px; }
 .app-shell.is-narrow { overflow-x: hidden; }
 
