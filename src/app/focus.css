@@ -47,8 +47,8 @@
 .gen-scroll {
   display: flex;
   flex-wrap: nowrap;
-  gap: 10px;
-  align-items: stretch;
+  gap: 28px;
+  align-items: flex-end;
   justify-content: flex-start;
   width: 100%;
   overflow-x: auto;
@@ -58,16 +58,53 @@
   scroll-snap-type: x proximity;
 }
 
-.gen-scroll.has-bar {
-  position: relative;
+.gen-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex: 0 0 auto;
+  padding: 0 16px 0 0;
+  margin-right: 8px;
+  border-right: 0;
+  scroll-snap-align: start;
 }
 
-.gen-scroll.has-bar::before {
+.gen-group + .gen-group {
+  padding-left: 16px;
+  border-left: 1px solid color-mix(in srgb, var(--line) 70%, transparent);
+}
+
+.gen-group-label {
+  margin: 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.03em;
+  text-transform: none;
+  color: var(--muted);
+  font-weight: 600;
+}
+
+.couple-unit {
+  position: relative;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 10px;
+  align-items: stretch;
+  padding: 8px 6px;
+}
+
+.couple-unit.is-unit {
+  background: color-mix(in srgb, #d9c4a8 22%, transparent);
+  border-radius: 26px;
+  padding: 10px 10px 12px;
+}
+
+.couple-unit.is-unit::before {
   content: "";
   position: absolute;
-  left: 18%;
-  right: 18%;
-  top: 28px;
+  left: 22%;
+  right: 22%;
+  top: 36px;
   height: 4px;
   border-radius: 99px;
   background: var(--line-ink);
@@ -75,17 +112,12 @@
   pointer-events: none;
 }
 
-.gen-group {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 8px;
-  padding-right: 10px;
-  border-right: 1px dashed var(--line);
+.couple-unit.is-lit {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 55%, transparent);
 }
 
-.gen-group:last-child {
-  border-right: 0;
-  padding-right: 0;
+.couple-unit.is-unit .focus-card {
+  z-index: 1;
 }
 
 .focus-card {
