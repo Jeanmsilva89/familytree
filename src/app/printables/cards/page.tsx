@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { loadTree } from "@/lib/db";
@@ -24,11 +25,16 @@ export default function CardsPage() {
             <article key={person.id} className="rel-card">
               <p className="unit-label">{card.rel}</p>
               <h2>{card.name}</h2>
-              {person.birthDate ? <p>{person.birthDate}</p> : <p> </p>}
+              {person.birthDate ? <p><span className="birth-label">Birth date</span> {person.birthDate}</p> : <p> </p>}
             </article>
           );
         })}
-        {tree.people.length === 0 ? <p>Add people on the tree first, then come back.</p> : null}
+        {tree.people.length === 0 ? (
+          <div className="empty-state no-print">
+            <p>No people to print yet.</p>
+            <Link className="btn" href="/">Open Family Tree</Link>
+          </div>
+        ) : null}
       </div>
     </div>
   );

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { loadTree } from "@/lib/db";
@@ -21,19 +22,26 @@ export default function PuzzlePage() {
     ...(unit?.children ?? []).map((p) => displayName(p)),
   ].slice(0, 4);
 
-  while (pieces.length < 4) pieces.push("family");
-
   return (
     <div className="print-page">
       <PrintToolbar title="Who belongs together?" />
-      <p>Cut on the dashed lines. Mix the pieces, then put the couple and kids back together.</p>
-      <div className="puzzle">
-        {pieces.map((label, idx) => (
-          <div key={`${label}-${idx}`} className="slot">
-            <strong>{label}</strong>
+      {pieces.length === 0 ? (
+        <div className="empty-state no-print">
+          <p>No couple to cut out yet.</p>
+          <Link className="btn" href="/">Open Family Tree</Link>
+        </div>
+      ) : (
+        <>
+          <p>Cut on the dashed lines. Mix the pieces, then put the couple and kids back together.</p>
+          <div className="puzzle">
+            {pieces.map((label, idx) => (
+              <div key={`${label}-${idx}`} className="slot">
+                <strong>{label}</strong>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </>
+      )}
     </div>
   );
 }

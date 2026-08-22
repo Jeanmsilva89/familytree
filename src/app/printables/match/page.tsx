@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PrintToolbar } from "@/components/PrintToolbar";
 import { loadTree } from "@/lib/db";
@@ -39,7 +40,12 @@ export default function MatchPage() {
           ))}
         </div>
       </div>
-      {tree.people.length === 0 ? <p>Add people on the tree first, then come back.</p> : null}
+      {tree.people.length === 0 ? (
+        <div className="empty-state no-print">
+          <p>No people to match yet.</p>
+          <Link className="btn" href="/">Open Family Tree</Link>
+        </div>
+      ) : null}
     </div>
   );
 }
