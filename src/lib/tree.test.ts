@@ -9,6 +9,13 @@ import {
   removePerson,
   startWithName,
   updatePerson,
+  addSibling,
+  addUnlinkedPerson,
+  linkExisting,
+  parseTreeJson,
+  serializeTreeJson,
+  setFocus,
+  setUnionKind,
 } from "./tree";
 
 describe("tree mutations", () => {
@@ -78,5 +85,72 @@ describe("tree mutations", () => {
     assert.equal(tree.people.length, 1);
     assert.equal(tree.unions.length, 1);
     assert.equal(tree.unions[0].partnerIds.length, 1);
+  });
+});
+
+describe("self-serve mutations", () => {
+  it("adds a sibling under existing parents", () => {
+    let tree = startWithName("Sam");
+    const sam = tree.people[0].id;
+    tree = addParent(tree, sam, "Alex");
+    tree = addSibling(tree, sam, "Riley");
+    const riley = tree.people.find((p) => p.givenName === "Riley")!;
+    assert.equal(parentsOf(tree, riley.id)[0].givenName, "Alex");
+    assert.equal(tree.childLinks.length, 2);
+  });
+
+  it("refuses a sibling when there are no parents", () => {
+    const tree = startWithName("Sam");
+    assert.throws(() => addSibling(tree, tree.people[0].id, "Riley"), /Add a parent first/);
+  });
+
+  it("adds an unlinked person", () => {
+    let tree = startWithName("Alex");
+    tree = addUnlinkedPerson(tree, "Casey");
+    assert.equal(tree.people.length, 2);
+    assert.equal(tree.unions.length, 0);
+    assert.equal(tree.childLinks.length, 0);
+  });
+
+  it("links an existing person as partner, parent, and child", () => {
+    let tree = startWithName("Alex");
+    const alex = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Jordan");
+    const jordan = tree.people.find((p) => p.givenName === "Jordan")!.id;
+    tree = linkExisting(tree, alex, jordan, "partner", "married");
+    assert.equal(tree.unions.length, 1);
+    assert.equal(tree.unions[0].kind, "married");
+
+    tree = addUnlinkedPerson(tree, "Pat");
+    const pat = tree.people.find((p) => p.givenName === "Pat")!.id;
+    tree = linkExisting(tree, alex, pat, "parent");
+    assert.equal(parentsOf(tree, alex)[0].givenName, "Pat");
+
+    tree = addUnlinkedPerson(tree, "Sam");
+    const sam = tree.people.find((p) => p.givenName === "Sam")!.id;
+    tree = linkExisting(tree, alex, sam, "child");
+    assert.equal(tree.childLinks.some((l) => l.childId === sam), true);
+  });
+
+  it("round-trips JSON backup", () => {
+    let tree = startWithName("Alex");
+    tree = addPartner(tree, tree.people[0].id, "Jordan");
+    const text = serializeTreeJson(tree);
+    const restored = parseTreeJson(text);
+    assert.equal(restored.people.length, 2);
+    assert.equal(restored.unions.length, 1);
+    assert.equal(restored.focusPersonId, tree.focusPersonId);
+    assert.throws(() => parseTreeJson("{not json"), /backup/);
+    assert.throws(() => parseTreeJson("{}"), /backup/);
+  });
+
+  it("sets union kind and persists focus", () => {
+    let tree = startWithName("Alex");
+    tree = addPartner(tree, tree.people[0].id, "Jordan");
+    tree = setUnionKind(tree, tree.unions[0].id, "married");
+    assert.equal(tree.unions[0].kind, "married");
+    const jordan = tree.people.find((p) => p.givenName === "Jordan")!.id;
+    tree = setFocus(tree, jordan);
+    assert.equal(tree.focusPersonId, jordan);
   });
 });
