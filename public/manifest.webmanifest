@@ -1,0 +1,19 @@
+{
+  "name": "Kinstart",
+  "short_name": "Kinstart",
+  "description": "A free local-first living family tree. One name is enough. Stays on this device.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f4eadc",
+  "theme_color": "#f4eadc",
+  "lang": "en",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
