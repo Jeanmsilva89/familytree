@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { buildGraph, CARD } from "./layout";
 import { buildGenerationLanes } from "./generations";
 import type { TreeData } from "./types";
+import { addChild, addParent, addSibling, setFocus, startWithName } from "./tree";
 
 function person(id: string, givenName: string) {
   return {
@@ -114,6 +115,35 @@ describe("generation lanes", () => {
     assert.equal(momGp.coupleBar, true);
     assert.equal(dadGp.coupleBar, false);
     assert.equal(momGp.label, "Mom's parents");
+  });
+
+  it("shows siblings of the focus on the focus generation, not among kids", () => {
+    let tree = startWithName("Sam");
+    const sam = tree.people[0].id;
+    tree = addParent(tree, sam, "Alex");
+    tree = addSibling(tree, sam, "Riley");
+    const riley = tree.people.find((p) => p.givenName === "Riley")!;
+    const lanes = buildGenerationLanes(tree, sam);
+    const focusLane = lanes.find((l) => l.id === "focus")!;
+    assert.ok(focusLane.people.some((p) => p.id === riley.id));
+    assert.ok(focusLane.groups?.some((g) => g.people.some((p) => p.id === riley.id)));
+    const kids = lanes.find((l) => l.id === "children");
+    assert.ok(!kids?.people.some((p) => p.id === riley.id));
+  });
+
+  it("puts a sibling of a focused child in the children row when viewing a parent", () => {
+    let tree = startWithName("Alex");
+    const alex = tree.people[0].id;
+    tree = addChild(tree, [alex], "Sam");
+    const sam = tree.people.find((p) => p.givenName === "Sam")!.id;
+    tree = setFocus(tree, sam);
+    tree = addSibling(tree, sam, "Riley");
+    const riley = tree.people.find((p) => p.givenName === "Riley")!;
+    const asChild = buildGenerationLanes(tree, sam);
+    assert.ok(asChild.find((l) => l.id === "focus")?.people.some((p) => p.id === riley.id));
+    const asParent = buildGenerationLanes(tree, alex);
+    assert.ok(asParent.find((l) => l.id === "children")?.people.some((p) => p.id === sam));
+    assert.ok(asParent.find((l) => l.id === "children")?.people.some((p) => p.id === riley.id));
   });
 });
 
