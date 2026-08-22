@@ -116,3 +116,59 @@ export function lineageIds(tree: TreeData, id: string): Set<string> {
   }
   return ids;
 }
+
+function personById(tree: TreeData, id: string): Person | undefined {
+  return tree.people.find((p) => p.id === id);
+}
+
+function parentIdsOf(tree: TreeData, childId: string): string[] {
+  const ids = new Set<string>();
+  for (const link of tree.childLinks) {
+    if (link.childId === childId) link.parentIds.forEach((id) => ids.add(id));
+  }
+  return [...ids];
+}
+
+function childrenOfAny(tree: TreeData, parentId: string): Person[] {
+  const ids = new Set(
+    tree.childLinks.filter((l) => l.parentIds.includes(parentId)).map((l) => l.childId),
+  );
+  return tree.people.filter((p) => ids.has(p.id));
+}
+
+function siblingSets(tree: TreeData, focusId: string) {
+  const focusParents = parentIdsOf(tree, focusId);
+  const parentSet = new Set(focusParents);
+  const full: Person[] = [];
+  const half: Person[] = [];
+  const step: Person[] = [];
+
+  if (focusParents.length) {
+    for (const person of tree.people) {
+      if (person.id === focusId) continue;
+      const theirs = parentIdsOf(tree, person.id);
+      const shared = theirs.filter((id) => parentSet.has(id));
+      if (shared.length === 0) continue;
+      if (focusParents.length > 1 && shared.length === focusParents.length) full.push(person);
+      else half.push(person);
+    }
+  }
+
+  const stepParentIds = new Set<string>();
+  for (const parentId of focusParents) {
+    for (const union of unionsFor(tree, parentId)) {
+      for (const pid of union.partnerIds) {
+        if (!parentSet.has(pid)) stepParentIds.add(pid);
+      }
+    }
+  }
+  const blood = new Set([focusId, ...full.map((p) => p.id), ...half.map((p) => p.id)]);
+  for (const stepParentId of stepParentIds) {
+    for (const kid of childrenOfAny(tree, stepParentId)) {
+      if (blood.has(kid.id) || kid.id === focusId) continue;
+      if (parentIdsOf(tree, kid.id).some((id) => parentSet.has(id))) continue;
+      step.push(kid);
+    }
+  }
+  return { full, half, step };
+}
