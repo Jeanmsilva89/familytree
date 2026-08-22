@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, type PointerEvent } from "react";
 import type { Person, TreeData } from "@/lib/types";
 import { displayName } from "@/lib/types";
 import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
-import { centerTransform, fitContentScale, highlightedCoupleIds } from "@/lib/graphView";
+import { fitTreeView, highlightedCoupleIds } from "@/lib/graphView";
 
 type Props = {
   tree: TreeData;
@@ -63,30 +63,18 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     applyWorld();
   }, []);
 
-  useEffect(() => {
+  function fitAll() {
     const stage = stageRef.current;
-    const card = layout.cards.find((c) => c.id === focusId);
-    if (!stage || !card) return;
+    if (!stage) return;
     const vw = stage.clientWidth || 360;
     const vh = stage.clientHeight || 480;
-    const couple = layout.couples.find((c) => c.bar && c.partnerIds.includes(focusId ?? ""));
-    const unitIds = new Set(couple?.partnerIds ?? [focusId]);
-    const kids = layout.cards.filter((c) => c.gen === -1);
-    const unit = layout.cards.filter((c) => unitIds.has(c.id));
-    const pack = [...unit, ...kids];
-    const xs = pack.map((c) => c.x);
-    const ys = pack.map((c) => c.y);
-    const minX = Math.min(...xs) - CARD.w / 2;
-    const maxX = Math.max(...xs) + CARD.w / 2;
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys) + CARD.h;
-    const narrow = vw < 720;
-    const scale = narrow
-      ? fitContentScale(vw, vh, Math.max(maxX - minX, CARD.w * 2), Math.max(maxY - minY, CARD.h * 2))
-      : viewRef.current.s || 1;
-    viewRef.current = centerTransform(vw, vh, card.x, card.y + CARD.h / 2, scale);
+    viewRef.current = fitTreeView(vw, vh, layout.cards, CARD.w, CARD.h);
     applyWorld();
-  }, [focusId, layout]);
+  }
+
+  useEffect(() => {
+    fitAll();
+  }, [layout, tree.people.length]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -189,6 +177,9 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
       onPointerUp={endPointer}
       onPointerCancel={endPointer}
     >
+      <button type="button" className="btn ghost graph-fit" onClick={fitAll}>
+        Fit
+      </button>
       <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH, transform: "translate(40px, 24px) scale(1)" }}>
         <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
           {edges.map((edge, i) => (
