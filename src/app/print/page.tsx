@@ -29,11 +29,10 @@ export default function PrintTreePage() {
 
   return (
     <div className="print-page">
-      <PrintToolbar backHref="/" backLabel="Family Tree" />
+      <PrintToolbar title="Family Tree" backHref="/" backLabel={"\u2190 Back to Family Tree"} />
       <article className="print-tree">
-        <h1>Family Tree</h1>
-        {!ready ? <p>Loading…</p> : null}
-        {ready && tree.people.length === 0 ? <p>No names on this device yet.</p> : null}
+        {!ready ? <p>Loading\u2026</p> : null}
+        {ready && tree.people.length === 0 ? <p>No tree on this device yet.</p> : null}
         {lanes.map((lane) => {
           const people = lane.groups ? lane.groups.flatMap((g) => g.people) : lane.people;
           if (!people.length) return null;

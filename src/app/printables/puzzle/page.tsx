@@ -25,17 +25,19 @@ export default function PuzzlePage() {
     <div className="print-page">
       <PrintToolbar />
       <h1>Who belongs together?</h1>
-      <p>Cut on the dashed lines. Mix the pieces, then put the couple and kids back together.</p>
       {pieces.length === 0 ? (
         <p>No names on this device yet.</p>
       ) : (
-        <div className="puzzle">
-          {pieces.map((label, idx) => (
-            <div key={`${label}-${idx}`} className="slot">
-              <strong>{label}</strong>
-            </div>
-          ))}
-        </div>
+        <>
+          <p>Cut on the dashed lines. Mix the pieces, then put the couple and kids back together.</p>
+          <div className="puzzle">
+            {pieces.map((label, idx) => (
+              <div key={`${label}-${idx}`} className="slot">
+                <strong>{label}</strong>
+              </div>
+            ))}
+          </div>
+        </>
       )}
     </div>
   );
