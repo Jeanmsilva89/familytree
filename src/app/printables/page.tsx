@@ -2,7 +2,7 @@ import Link from "next/link";
 
 export default function PrintablesIndex() {
   return (
-    <div className="app-shell">
+    <div className="app-shell printables-index">
       <p>
         <Link href="/">← Back to Family Tree</Link>
       </p>

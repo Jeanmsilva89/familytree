@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { clearTree, loadTree, saveTree } from "@/lib/db";
 import { cloneExample } from "@/lib/example";
 import {
@@ -25,21 +25,22 @@ export function useTree() {
   const [tree, setTree] = useState<TreeData>(emptyTree());
   const [ready, setReady] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const treeRef = useRef(tree);
+  treeRef.current = tree;
 
   useEffect(() => {
     let cancelled = false;
     loadTree()
       .then((loaded) => {
-        if (!cancelled) {
-          setTree(loaded);
-          setReady(true);
-        }
+        if (cancelled) return;
+        treeRef.current = loaded;
+        setTree(loaded);
+        setReady(true);
       })
       .catch((err: unknown) => {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not open local storage.");
-          setReady(true);
-        }
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : "Could not open local storage.");
+        setReady(true);
       });
     return () => {
       cancelled = true;
@@ -47,6 +48,7 @@ export function useTree() {
   }, []);
 
   const persist = useCallback(async (next: TreeData) => {
+    treeRef.current = next;
     setTree(next);
     setError(null);
     try {
@@ -56,15 +58,17 @@ export function useTree() {
     }
   }, []);
 
-  const start = useCallback(
-    async (name: string) => persist(startWithName(name)),
+  const mutate = useCallback(
+    async (fn: (current: TreeData) => TreeData) => persist(fn(treeRef.current)),
     [persist],
   );
 
+  const start = useCallback(async (name: string) => persist(startWithName(name)), [persist]);
   const loadExample = useCallback(async () => persist(cloneExample()), [persist]);
 
   const reset = useCallback(async () => {
     await clearTree();
+    treeRef.current = emptyTree();
     setTree(emptyTree());
   }, []);
 
@@ -72,77 +76,74 @@ export function useTree() {
 
   const partner = useCallback(
     async (personId: string, name: string, kind: UnionKind = "partnered") =>
-      persist(addPartner(tree, personId, name, kind)),
-    [persist, tree],
+      mutate((current) => addPartner(current, personId, name, kind)),
+    [mutate],
   );
 
   const child = useCallback(
     async (parentIds: string[], name: string, unionId?: string) =>
-      persist(addChild(tree, parentIds, name, unionId)),
-    [persist, tree],
+      mutate((current) => addChild(current, parentIds, name, unionId)),
+    [mutate],
   );
 
   const parent = useCallback(
-    async (childId: string, name: string) => persist(addParent(tree, childId, name)),
-    [persist, tree],
+    async (childId: string, name: string) => mutate((current) => addParent(current, childId, name)),
+    [mutate],
   );
 
   const sibling = useCallback(
     async (personId: string, name: string) => {
-      const before = new Set(tree.people.map((p) => p.id));
-      const next = addSibling(tree, personId, name);
+      const before = new Set(treeRef.current.people.map((p) => p.id));
+      const next = addSibling(treeRef.current, personId, name);
       await persist(next);
       return next.people.find((p) => !before.has(p.id))?.id;
     },
-    [persist, tree],
+    [persist],
   );
 
   const unlinked = useCallback(
-    async (name: string) => persist(addUnlinkedPerson(tree, name)),
-    [persist, tree],
+    async (name: string) => mutate((current) => addUnlinkedPerson(current, name)),
+    [mutate],
   );
 
   const link = useCallback(
     async (personId: string, otherId: string, role: LinkRole, kind?: UnionKind) =>
-      persist(linkExisting(tree, personId, otherId, role, kind)),
-    [persist, tree],
+      mutate((current) => linkExisting(current, personId, otherId, role, kind)),
+    [mutate],
   );
 
   const unionKind = useCallback(
-    async (unionId: string, kind: UnionKind) => persist(setUnionKind(tree, unionId, kind)),
-    [persist, tree],
+    async (unionId: string, kind: UnionKind) => mutate((current) => setUnionKind(current, unionId, kind)),
+    [mutate],
   );
 
   const focus = useCallback(
-    async (personId: string) => persist(setFocus(tree, personId)),
-    [persist, tree],
+    async (personId: string) => mutate((current) => setFocus(current, personId)),
+    [mutate],
   );
 
   const edit = useCallback(
-    async (id: string, patch: Partial<Person>) => persist(updatePerson(tree, id, patch)),
-    [persist, tree],
+    async (id: string, patch: Partial<Person>) => mutate((current) => updatePerson(current, id, patch)),
+    [mutate],
   );
 
   const remove = useCallback(
     async (id: string) => {
-      const next = removePerson(tree, id);
+      const next = removePerson(treeRef.current, id);
       if (next.people.length === 0) {
         await clearTree();
+        treeRef.current = emptyTree();
         setTree(emptyTree());
         setError(null);
         return;
       }
       await persist(next);
     },
-    [persist, tree],
+    [persist],
   );
 
   const exportJson = useCallback(() => serializeTreeJson(tree), [tree]);
-
-  const importJson = useCallback(
-    async (text: string) => persist(parseTreeJson(text)),
-    [persist],
-  );
+  const importJson = useCallback(async (text: string) => persist(parseTreeJson(text)), [persist]);
 
   return {
     tree,
