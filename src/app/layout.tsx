@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import "./focus.css";
 import "./brand.css";
+import "./extras.css";
 import { ThemeProvider } from "@/lib/theme";
 
 const title = "Family Tree";
