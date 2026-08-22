@@ -16,8 +16,17 @@ export type GenerationGroup = {
   coupleBar?: boolean;
 };
 
+export const LANE_TITLE: Record<GenerationLaneId, string> = {
+  grandparents: "Grandparents",
+  parents: "Parents",
+  focus: "Family",
+  children: "Kids",
+  grandchildren: "Grandkids",
+};
+
 export type GenerationLane = {
   id: GenerationLaneId;
+  title: string;
   people: Person[];
   groups?: GenerationGroup[];
   coupleBar?: boolean;
@@ -128,10 +137,10 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
 
   const lanes: GenerationLane[] = [];
   if (grandparents.length) {
-    lanes.push({ id: "grandparents", people: grandparents, groups: grandGroups });
+    lanes.push({ id: "grandparents", title: LANE_TITLE.grandparents, people: grandparents, groups: grandGroups });
   }
   if (parentLanePeople.length) {
-    lanes.push({ id: "parents", people: parentLanePeople, groups: parentGroups });
+    lanes.push({ id: "parents", title: LANE_TITLE.parents, people: parentLanePeople, groups: parentGroups });
   }
   const siblings = uniquePeople(siblingsOf(tree, focus.id));
   const focusPeople = uniquePeople([...couple, ...siblings]);
@@ -145,8 +154,8 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
         },
       ]
     : undefined;
-  lanes.push({ id: "focus", people: focusPeople, coupleBar, groups: focusGroups });
-  if (children.length) lanes.push({ id: "children", people: children });
-  if (grandchildren.length) lanes.push({ id: "grandchildren", people: grandchildren, groups });
+  lanes.push({ id: "focus", title: LANE_TITLE.focus, people: focusPeople, coupleBar, groups: focusGroups });
+  if (children.length) lanes.push({ id: "children", title: LANE_TITLE.children, people: children });
+  if (grandchildren.length) lanes.push({ id: "grandchildren", title: LANE_TITLE.grandchildren, people: grandchildren, groups });
   return lanes;
 }
