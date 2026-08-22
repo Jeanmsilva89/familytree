@@ -32,7 +32,7 @@ export function PeopleList({ tree, title = "Everyone", excludeId, onPick, onClos
       >
         <div className="sheet-handle" aria-hidden />
         <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
-          Close
+          ×
         </button>
         <h2>{title}</h2>
         <div className="field">
@@ -57,7 +57,16 @@ export function PeopleList({ tree, title = "Everyone", excludeId, onPick, onClos
             </li>
           ))}
         </ul>
-        {people.length === 0 ? <p className="hint">No one matches.</p> : null}
+        {people.length === 0 ? (
+          <div className="empty-state">
+            <p className="hint">{q.trim() ? "That search is empty." : "This tree has no people yet."}</p>
+            {q.trim() ? (
+              <button type="button" className="btn" onClick={() => setQ("")}>Clear search</button>
+            ) : (
+              <button type="button" className="btn" onClick={onClose}>Back to the tree</button>
+            )}
+          </div>
+        ) : null}
       </div>
     </div>
   );

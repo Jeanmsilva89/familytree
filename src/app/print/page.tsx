@@ -2,10 +2,21 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PrintToolbar } from "@/components/PrintToolbar";
 import { loadTree } from "@/lib/db";
 import { buildView } from "@/lib/layout";
 import type { TreeData } from "@/lib/types";
 import { displayName, emptyTree } from "@/lib/types";
+
+function Birth({ value }: { value?: string }) {
+  if (!value) return null;
+  return (
+    <div>
+      <span className="birth-label">Birth date</span>
+      <span>{value}</span>
+    </div>
+  );
+}
 
 export default function PrintTreePage() {
   const [tree, setTree] = useState<TreeData>(emptyTree());
@@ -22,19 +33,15 @@ export default function PrintTreePage() {
 
   return (
     <div className="print-page">
-      <div className="no-print app-shell" style={{ paddingBottom: 12 }}>
-        <p>
-          <Link href="/">← Back to Family Tree</Link>
-        </p>
-        <button className="btn primary" type="button" onClick={() => window.print()}>
-          Print or save PDF
-        </button>
-        <p className="hint">Use your browser’s print dialog to save a PDF. Nothing is uploaded.</p>
-      </div>
+      <PrintToolbar title="Family Tree" />
       <article className="print-tree">
-        <h1>Family Tree</h1>
         {!ready ? <p>Loading…</p> : null}
-        {ready && tree.people.length === 0 ? <p>No tree on this device yet.</p> : null}
+        {ready && tree.people.length === 0 ? (
+          <div className="empty-state no-print">
+            <p>No tree on this device yet.</p>
+            <Link className="btn" href="/">Open Family Tree</Link>
+          </div>
+        ) : null}
         {view.parentUnits.map((unit) => (
           <section key={unit.id} className="print-unit">
             <p>Parents</p>
@@ -42,6 +49,7 @@ export default function PrintTreePage() {
               {unit.partners.map((p) => (
                 <div key={p.id} className="print-person">
                   <strong>{displayName(p)}</strong>
+                  <Birth value={p.birthDate} />
                 </div>
               ))}
             </div>
@@ -49,11 +57,12 @@ export default function PrintTreePage() {
         ))}
         {view.selfUnits.map((unit) => (
           <section key={unit.id} className="print-unit">
+            <p>Family</p>
             <div className="print-couple">
               {unit.partners.map((p) => (
                 <div key={p.id} className="print-person">
                   <strong>{displayName(p)}</strong>
-                  {p.birthDate ? <div>{p.birthDate}</div> : null}
+                  <Birth value={p.birthDate} />
                 </div>
               ))}
             </div>
@@ -62,6 +71,7 @@ export default function PrintTreePage() {
                 {unit.children.map((p) => (
                   <div key={p.id} className="print-person">
                     {displayName(p)}
+                    <Birth value={p.birthDate} />
                   </div>
                 ))}
               </div>
