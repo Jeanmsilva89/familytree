@@ -1,0 +1,103 @@
+.gen-stack {
+  height: min(72dvh, 720px);
+  max-height: min(72dvh, 720px);
+  scroll-snap-type: none;
+}
+.gen-lane {
+  min-height: 100%;
+  flex: 0 0 auto;
+}
+.gen-lane-title {
+  margin: 0 0 8px;
+  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.15rem;
+  font-weight: 700;
+  text-align: center;
+}
+.gen-scroll { scroll-snap-type: x mandatory; }
+.gen-scroll > *,
+.gen-group { scroll-snap-stop: always; }
+
+.field input, .field textarea, .field select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.field input[type="file"] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 8px;
+}
+.sheet { padding-left: 12px; padding-right: 12px; }
+.sheet-handle { display: none; }
+
+.print-page { padding: 12px; min-height: 0; }
+.print-toolbar.app-shell { min-height: 0; padding-bottom: 12px; }
+.print-toolbar { display: grid; gap: 10px; }
+.print-toolbar-title {
+  margin: 0;
+  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.35rem;
+}
+.print-unit { page-break-inside: avoid; }
+.canvas { display: grid; gap: 12px; }
+.unit {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--card);
+  box-shadow: var(--shadow);
+  text-decoration: none;
+  color: inherit;
+  min-height: var(--tap);
+}
+.unit-label { margin: 0; font-size: 0.92rem; color: var(--muted); font-weight: 600; }
+.link-roles { display: grid; gap: 8px; }
+.link-roles .btn { width: 100%; }
+.menu-data { padding: 4px 6px 8px; }
+.menu-data summary {
+  display: flex;
+  align-items: center;
+  min-height: var(--tap);
+  cursor: pointer;
+  font-weight: 600;
+}
+.theme-picks button { min-height: var(--tap); }
+.graph-fit {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 3;
+}
+.card-more { position: relative; align-self: flex-end; }
+.card-more > summary {
+  list-style: none;
+  width: var(--tap);
+  height: var(--tap);
+  min-width: var(--tap);
+}
+.card-more > summary::-webkit-details-marker { display: none; }
+.card-more-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 4px);
+  z-index: 4;
+  display: grid;
+  gap: 6px;
+  min-width: 140px;
+  padding: 8px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow: var(--shadow);
+}
+.card-more-menu .btn { width: 100%; }
+
+@media print {
+  .print-page { min-height: 0; }
+  .print-unit { page-break-after: always; break-after: page; }
+  .print-unit:last-child { page-break-after: auto; break-after: auto; }
+}
