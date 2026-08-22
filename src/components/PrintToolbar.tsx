@@ -1,27 +1,29 @@
 "use client";
 
 import Link from "next/link";
-import { BrandMark } from "./BrandMark";
 
-export function PrintToolbar({ title }: { title: string }) {
+type Props = {
+  title?: string;
+  backHref?: string;
+  backLabel?: string;
+};
+
+export function PrintToolbar({
+  title,
+  backHref = "/printables",
+  backLabel = "\u2190 Kid printables",
+}: Props) {
   return (
-    <div className="no-print app-shell print-toolbar">
-      <Link className="brand" href="/">
-        <BrandMark className="brand-mark" />
-        <div>
-          <h1>Family Tree</h1>
-          <p className="privacy">Printable</p>
-        </div>
-      </Link>
-      <p className="print-toolbar-title">{title}</p>
-      <button className="btn primary" type="button" onClick={() => window.print()}>
-        Print or save PDF
-      </button>
+    <div className="no-print print-toolbar">
       <p>
-        <Link href="/printables">← Kid printables</Link>
+        <Link href={backHref}>{backLabel}</Link>
         {" \u00b7 "}
         <Link href="/">Tree</Link>
       </p>
+      {title ? <h1 className="print-toolbar-title">{title}</h1> : null}
+      <button className="btn primary" type="button" onClick={() => window.print()}>
+        Print or save PDF
+      </button>
     </div>
   );
 }
