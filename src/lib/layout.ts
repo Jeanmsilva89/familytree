@@ -62,6 +62,13 @@ export function initialsOf(person: Person): string {
   return (a + b).toUpperCase() || "?";
 }
 
+export function swatchHue(person: Person): number {
+  const key = `${person.givenName}|${person.familyName ?? ""}|${person.id}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i++) hash = (hash * 31 + key.charCodeAt(i)) >>> 0;
+  return hash % 360;
+}
+
 export function ageLabel(birthDate?: string, now = new Date()): string | undefined {
   if (!birthDate) return undefined;
   const d = new Date(birthDate);
@@ -83,6 +90,7 @@ export function lineageIds(tree: TreeData, id: string): Set<string> {
   for (const union of unionsFor(tree, id)) {
     for (const pid of union.partnerIds) ids.add(pid);
   }
+
   const walkUp = (personId: string, depth: number) => {
     if (depth <= 0) return;
     for (const parent of parentsOf(tree, personId)) {
@@ -129,6 +137,7 @@ function siblingSets(tree: TreeData, focusId: string) {
   const full: Person[] = [];
   const half: Person[] = [];
   const step: Person[] = [];
+
   if (focusParents.length) {
     for (const person of tree.people) {
       if (person.id === focusId) continue;
@@ -139,6 +148,7 @@ function siblingSets(tree: TreeData, focusId: string) {
       else half.push(person);
     }
   }
+
   const stepParentIds = new Set<string>();
   for (const parentId of focusParents) {
     for (const union of unionsFor(tree, parentId)) {
@@ -161,9 +171,11 @@ function siblingSets(tree: TreeData, focusId: string) {
 export function buildView(tree: TreeData, selectedId?: string): TreeView {
   const focusId = selectedId ?? tree.focusPersonId ?? tree.people[0]?.id;
   const focus = tree.people.find((p) => p.id === focusId);
+
   if (!focus) {
     return { parentUnits: [], selfUnits: [], loneChildren: [], others: tree.people };
   }
+
   const parentPeople = parentsOf(tree, focus.id);
   const parentUnits: CoupleUnit[] = [];
   if (parentPeople.length) {
@@ -177,6 +189,7 @@ export function buildView(tree: TreeData, selectedId?: string): TreeView {
       children: [focus],
     });
   }
+
   const ownUnions = unionsFor(tree, focus.id);
   const selfUnits: CoupleUnit[] = ownUnions.map((union) => ({
     id: union.id,
@@ -186,18 +199,21 @@ export function buildView(tree: TreeData, selectedId?: string): TreeView {
       .filter((p): p is Person => Boolean(p)),
     children: kidsUnderUnion(tree, union),
   }));
+
   const coveredKids = new Set(selfUnits.flatMap((u) => u.children.map((c) => c.id)));
   const loneChildren = tree.people.filter((p) =>
     tree.childLinks.some(
       (l) => l.childId === p.id && l.parentIds.includes(focus.id) && !coveredKids.has(p.id),
     ),
   );
+
   if (selfUnits.length === 0 && loneChildren.length === 0) {
     selfUnits.push({ id: `solo-${focus.id}`, partners: [focus], children: [] });
   } else if (selfUnits.length === 0) {
     selfUnits.push({ id: `solo-${focus.id}`, partners: [focus], children: loneChildren });
     loneChildren.length = 0;
   }
+
   const seen = new Set<string>([
     focus.id,
     ...parentPeople.map((p) => p.id),
@@ -205,12 +221,18 @@ export function buildView(tree: TreeData, selectedId?: string): TreeView {
     ...loneChildren.map((p) => p.id),
   ]);
   const others = tree.people.filter((p) => !seen.has(p.id));
+
   return { focus, parentUnits, selfUnits, loneChildren, others };
 }
 
 type Place = { x: number; gen: number };
 
-function placeCouple(places: Map<string, Place>, ids: string[], gen: number, centerX: number) {
+function placeCouple(
+  places: Map<string, Place>,
+  ids: string[],
+  gen: number,
+  centerX: number,
+) {
   if (ids.length === 0) return centerX;
   if (ids.length === 1) {
     places.set(ids[0], { x: centerX, gen });
@@ -228,15 +250,25 @@ function placeCouple(places: Map<string, Place>, ids: string[], gen: number, cen
 }
 
 function rowY(gen: number, minGen: number, maxGen: number): number {
-  return CARD.pad + (maxGen - gen) * (CARD.h + CARD.laneGap);
+  const topGen = maxGen;
+  return CARD.pad + (topGen - gen) * (CARD.h + CARD.laneGap);
+}
+
+function emptyGraph(): GraphLayout {
+  return { width: 320, height: 240, cards: [], couples: [], edges: [] };
+}
+
+function finiteNumber(n: number | undefined): n is number {
+  return typeof n === "number" && Number.isFinite(n);
 }
 
 export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   const focusId = focusHint ?? tree.focusPersonId ?? tree.people[0]?.id;
   const focus = focusId ? personById(tree, focusId) : undefined;
-  if (!focus) {
-    return { width: 320, height: 240, cards: [], couples: [], edges: [] };
+  if (!focus || tree.people.length === 0) {
+    return emptyGraph();
   }
+
   const places = new Map<string, Place>();
   const unions = unionsFor(tree, focus.id);
   const primary = unions[0];
@@ -246,13 +278,16 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   const orderedPrimary = primaryIds.includes(focus.id)
     ? [focus.id, ...primaryIds.filter((id) => id !== focus.id)]
     : primaryIds;
+
   placeCouple(places, orderedPrimary, 0, 0);
+
   unions.slice(1).forEach((union, i) => {
     const extras = union.partnerIds.filter((id) => id !== focus.id && !places.has(id));
     extras.forEach((id, j) => {
       places.set(id, { x: (i + 1) * 220 + j * (CARD.w + CARD.gap), gen: 0 });
     });
   });
+
   const kidClusters: { parentIds: string[]; kids: Person[]; center: number }[] = [];
   for (const union of unions) {
     const kids = kidsUnderUnion(tree, union);
@@ -266,6 +301,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   if (lone.length) {
     kidClusters.push({ parentIds: [focus.id], kids: lone, center: places.get(focus.id)?.x ?? 0 });
   }
+
   for (const cluster of kidClusters) {
     cluster.kids.forEach((kid, i) => {
       const n = cluster.kids.length;
@@ -273,6 +309,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       places.set(kid.id, { x: start + i * (CARD.w + CARD.gap), gen: -1 });
     });
   }
+
   const focusParents = parentIdsOf(tree, focus.id);
   const parentUnion = tree.unions.find((u) =>
     focusParents.length > 0 && focusParents.every((id) => u.partnerIds.includes(id)),
@@ -288,8 +325,9 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       if (gps.length) placeCouple(places, gps, 2, places.get(pid)?.x ?? parentCenter);
     }
   }
+
   const partnerIds = orderedPrimary.filter((id) => id !== focus.id);
-  partnerIds.forEach((pid) => {
+  partnerIds.forEach((pid, side) => {
     const inLaws = parentIdsOf(tree, pid);
     if (!inLaws.length) return;
     const dir = places.get(pid)!.x >= (places.get(focus.id)?.x ?? 0) ? 1 : -1;
@@ -299,7 +337,9 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       const gps = parentIdsOf(tree, inLaw);
       if (gps.length) placeCouple(places, gps, 2, places.get(inLaw)?.x ?? cx);
     }
+    void side;
   });
+
   const { full, half, step } = siblingSets(tree, focus.id);
   const focusX = places.get(focus.id)?.x ?? 0;
   const bloodDir = -1;
@@ -315,6 +355,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     places.set(sib.id, { x: cursor, gen: 0 });
     cursor += bloodDir * (CARD.w + CARD.gap);
   }
+
   for (const cluster of kidClusters) {
     for (const kid of cluster.kids) {
       const unionsOfKid = unionsFor(tree, kid.id);
@@ -338,12 +379,21 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       }
     }
   }
+
   for (const person of tree.people) {
     if (!places.has(person.id)) places.set(person.id, { x: 420 + places.size * 20, gen: 0 });
   }
-  const gens = [...places.values()].map((p) => p.gen);
+
+  for (const [id, place] of [...places.entries()]) {
+    if (!finiteNumber(place.x) || !finiteNumber(place.gen)) places.delete(id);
+  }
+  if (!places.size) return emptyGraph();
+
+  const gens = [...places.values()].map((p) => p.gen).filter(finiteNumber);
+  if (!gens.length) return emptyGraph();
   const minGen = Math.min(...gens);
   const maxGen = Math.max(...gens);
+
   const byGen = new Map<number, string[]>();
   for (const [id, place] of places) {
     const list = byGen.get(place.gen) ?? [];
@@ -359,15 +409,30 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       if (cur.x < minX) cur.x = minX;
     }
   }
-  const xs = [...places.values()].map((p) => p.x);
+
+  const xs = [...places.values()].map((p) => p.x).filter(finiteNumber);
+  if (!xs.length) return emptyGraph();
   const minX = Math.min(...xs);
+  if (!finiteNumber(minX)) return emptyGraph();
   const shift = CARD.pad + CARD.w / 2 - minX;
   for (const place of places.values()) place.x += shift;
-  const cards: LaidCard[] = tree.people.map((person) => {
-    const place = places.get(person.id)!;
-    return { id: person.id, person, x: place.x, y: rowY(place.gen, minGen, maxGen), gen: place.gen };
+
+  const cards: LaidCard[] = tree.people.flatMap((person) => {
+    const place = places.get(person.id);
+    if (!place) return [];
+    const y = rowY(place.gen, minGen, maxGen);
+    if (!finiteNumber(place.x) || !finiteNumber(y)) return [];
+    return [{
+      id: person.id,
+      person,
+      x: place.x,
+      y,
+      gen: place.gen,
+    }];
   });
+  if (!cards.length) return emptyGraph();
   const byCard = new Map(cards.map((c) => [c.id, c]));
+
   const couples: LaidCouple[] = [];
   for (const union of tree.unions) {
     const partners = union.partnerIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
@@ -383,6 +448,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       cy: left.y + CARD.h * 0.48,
     });
   }
+
   const edges: LaidEdge[] = [];
   for (const link of tree.childLinks) {
     const child = byCard.get(link.childId);
@@ -391,13 +457,17 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     if (!parents.length) continue;
     const fromX = parents.reduce((s, p) => s + p.x, 0) / parents.length;
     const fromY = Math.max(...parents.map((p) => p.y)) + CARD.h;
+    if (!finiteNumber(fromX) || !finiteNumber(fromY) || !finiteNumber(child.x) || !finiteNumber(child.y)) continue;
     edges.push({ fromX, fromY, toX: child.x, toY: child.y });
   }
+
   const maxCardX = Math.max(...cards.map((c) => c.x)) + CARD.w / 2 + CARD.pad;
   const maxCardY = Math.max(...cards.map((c) => c.y)) + CARD.h + CARD.pad;
+  const width = finiteNumber(maxCardX) ? Math.max(320, maxCardX) : 320;
+  const height = finiteNumber(maxCardY) ? Math.max(280, maxCardY) : 280;
   return {
-    width: Math.max(320, maxCardX),
-    height: Math.max(280, maxCardY),
+    width,
+    height,
     cards,
     couples,
     edges,
