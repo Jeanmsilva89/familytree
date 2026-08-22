@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import type { Person, TreeData, UnionKind } from "@/lib/types";
 import { ageFromBirthDate, displayName, initials } from "@/lib/types";
 import { buildGenerationLanes, type GenerationGroup, type GenerationLane } from "@/lib/generations";
-import { highlightedCoupleIds } from "@/lib/layout";
+import { highlightedCoupleIds } from "@/lib/graphView";
 import { unionsFor } from "@/lib/tree";
 import { PeopleList } from "./PeopleList";
 
@@ -195,61 +195,27 @@ export function FocusFamily({
       </div>
 
       <div className="actions focus-actions">
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            const name = promptName("Parent's name");
-            if (name) await onAddParent(focus.id, name);
-          }}
-        >
-          Add parent
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            const name = promptName("Partner's name");
-            if (name) await onAddPartner(focus.id, name, "partnered");
-          }}
-        >
-          Add partner
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            const name = promptName("Child's name");
-            if (name) await onAddChild(childParents, name, primaryUnion?.id);
-          }}
-        >
-          Add child
-        </button>
-        <button
-          type="button"
-          className="btn"
-          onClick={async () => {
-            if (!hasParents) {
-              window.alert("Add a parent first");
-              return;
-            }
-            const name = promptName("Sibling's name");
-            if (name) await onAddSibling(focus.id, name);
-          }}
-        >
-          Add sibling
-        </button>
+        <button type="button" className="btn" onClick={async () => {
+          const name = promptName("Parent's name");
+          if (name) await onAddParent(focus.id, name);
+        }}>Add parent</button>
+        <button type="button" className="btn" onClick={async () => {
+          const name = promptName("Partner's name");
+          if (name) await onAddPartner(focus.id, name, "partnered");
+        }}>Add partner</button>
+        <button type="button" className="btn" onClick={async () => {
+          const name = promptName("Child's name");
+          if (name) await onAddChild(childParents, name, primaryUnion?.id);
+        }}>Add child</button>
+        <button type="button" className="btn" onClick={async () => {
+          if (!hasParents) { window.alert("Add a parent first"); return; }
+          const name = promptName("Sibling's name");
+          if (name) await onAddSibling(focus.id, name);
+        }}>Add sibling</button>
       </div>
 
       {peopleOpen ? (
-        <PeopleList
-          tree={tree}
-          onClose={() => setPeopleOpen(false)}
-          onPick={(person) => {
-            onFocus(person.id);
-            setPeopleOpen(false);
-          }}
-        />
+        <PeopleList tree={tree} onClose={() => setPeopleOpen(false)} onPick={(person) => { onFocus(person.id); setPeopleOpen(false); }} />
       ) : null}
     </section>
   );
