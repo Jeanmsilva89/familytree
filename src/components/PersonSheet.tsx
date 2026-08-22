@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useId, useState } from "react";
+import { FormEvent, useEffect, useId, useRef, useState, type TouchEvent } from "react";
 import type { Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName } from "@/lib/types";
 import { unionsFor } from "@/lib/tree";
@@ -31,7 +31,14 @@ function downloadVCard(person: Person) {
 }
 
 export function PersonSheet({
-  tree, person, onClose, onAddParent, onAddPartner, onAddChild, onEdit, onRemove,
+  tree,
+  person,
+  onClose,
+  onAddParent,
+  onAddPartner,
+  onAddChild,
+  onEdit,
+  onRemove,
 }: Props) {
   const titleId = useId();
   const [mode, setMode] = useState<Mode>("closed");
@@ -46,6 +53,7 @@ export function PersonSheet({
   const [phone, setPhone] = useState("");
   const [otherLabel, setOtherLabel] = useState("");
   const [otherDate, setOtherDate] = useState("");
+  const swipeStart = useRef<number | null>(null);
 
   useEffect(() => {
     if (person) {
@@ -64,11 +72,28 @@ export function PersonSheet({
     }
   }, [person]);
 
+  function onSheetTouchStart(event: TouchEvent) {
+    swipeStart.current = event.touches[0]?.clientY ?? null;
+  }
+
+  function onSheetTouchEnd(event: TouchEvent) {
+    const start = swipeStart.current;
+    swipeStart.current = null;
+    if (start == null) return;
+    const dy = (event.changedTouches[0]?.clientY ?? start) - start;
+    if (dy > 72) onClose();
+  }
+
   if (!person || mode === "closed") return null;
 
   const unions = unionsFor(tree, person.id);
   const defaultParents =
     unions[0]?.partnerIds.filter((id) => tree.people.some((p) => p.id === id)) ?? [person.id];
+
+  function startAdd(next: Rel) {
+    setRel(next);
+    setMode("add");
+  }
 
   async function submitAdd(event: FormEvent) {
     event.preventDefault();
@@ -90,32 +115,67 @@ export function PersonSheet({
       birthDate: birthDate || undefined,
       emails: email ? [email] : undefined,
       phones: phone ? [phone] : undefined,
-      otherDates: otherLabel && otherDate ? [{ id: person.otherDates?.[0]?.id ?? "d1", label: otherLabel, date: otherDate }] : undefined,
+      otherDates:
+        otherLabel && otherDate
+          ? [{ id: person.otherDates?.[0]?.id ?? "d1", label: otherLabel, date: otherDate }]
+          : undefined,
     });
     onClose();
   }
 
   return (
     <div className="sheet-backdrop" role="presentation" onClick={onClose}>
-      <div className="sheet" role="dialog" aria-modal="true" aria-labelledby={titleId} onClick={(e) => e.stopPropagation()}>
+      <div
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        onClick={(e) => e.stopPropagation()}
+        onTouchStart={onSheetTouchStart}
+        onTouchEnd={onSheetTouchEnd}
+      >
+        <div className="sheet-handle" aria-hidden />
+        <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">
+          Close
+        </button>
         <h2 id={titleId}>{displayName(person)}</h2>
         <p className="hint">Tap an action, or open more about them.</p>
+
         {mode === "actions" ? (
           <>
             <div className="actions">
-              <button type="button" className="btn" onClick={() => { setRel("parent"); setMode("add"); }}>Add parent</button>
-              <button type="button" className="btn" onClick={() => { setRel("partner"); setMode("add"); }}>Add partner</button>
-              <button type="button" className="btn" onClick={() => { setRel("child"); setMode("add"); }}>Add child</button>
-              <button type="button" className="btn primary" onClick={() => setMode("more")}>More about them</button>
+              <button type="button" className="btn" onClick={() => startAdd("parent")}>
+                Add parent
+              </button>
+              <button type="button" className="btn" onClick={() => startAdd("partner")}>
+                Add partner
+              </button>
+              <button type="button" className="btn" onClick={() => startAdd("child")}>
+                Add child
+              </button>
+              <button type="button" className="btn primary" onClick={() => setMode("more")}>
+                More about them
+              </button>
             </div>
-            <button type="button" className="btn ghost" onClick={onClose}>Close</button>
+            <button type="button" className="btn ghost" onClick={onClose}>
+              Close
+            </button>
           </>
         ) : null}
+
         {mode === "add" ? (
           <form onSubmit={submitAdd}>
             <div className="field">
-              <label htmlFor="rel-name">{rel === "parent" ? "Parent's name" : rel === "partner" ? "Partner's name" : "Child's name"}</label>
-              <input id="rel-name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+              <label htmlFor="rel-name">
+                {rel === "parent" ? "Parent's name" : rel === "partner" ? "Partner's name" : "Child's name"}
+              </label>
+              <input
+                id="rel-name"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+                autoFocus
+              />
             </div>
             {rel === "partner" ? (
               <div className="field">
@@ -128,36 +188,83 @@ export function PersonSheet({
                 </select>
               </div>
             ) : null}
-            {rel === "child" && defaultParents.length > 1 ? <p className="hint">This child will sit under the couple.</p> : null}
+            {rel === "child" && defaultParents.length > 1 ? (
+              <p className="hint">This child will sit under the couple.</p>
+            ) : null}
             <div className="actions">
-              <button className="btn primary" type="submit">Add</button>
-              <button className="btn ghost" type="button" onClick={() => setMode("actions")}>Back</button>
+              <button className="btn primary" type="submit">
+                Add
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setMode("actions")}>
+                Back
+              </button>
             </div>
           </form>
         ) : null}
+
         {mode === "more" ? (
           <form className="more" onSubmit={submitMore}>
-            <div className="field"><label htmlFor="given">Given name</label><input id="given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required /></div>
-            <div className="field"><label htmlFor="family">Family name (optional)</label><input id="family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} /></div>
-            <div className="field"><label htmlFor="birth">Birth date (optional)</label><input id="birth" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} /></div>
+            <div className="field">
+              <label htmlFor="given">Given name</label>
+              <input id="given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="family">Family name (optional)</label>
+              <input id="family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="birth">Birth date (optional)</label>
+              <input id="birth" type="date" value={birthDate} onChange={(e) => setBirthDate(e.target.value)} />
+            </div>
             <div className="field">
               <label htmlFor="other-label">Another important date (optional)</label>
-              <input id="other-label" placeholder="Label, e.g. moved in" value={otherLabel} onChange={(e) => setOtherLabel(e.target.value)} />
-              <input aria-label="Important date" type="date" value={otherDate} onChange={(e) => setOtherDate(e.target.value)} />
+              <input
+                id="other-label"
+                placeholder="Label, e.g. moved in"
+                value={otherLabel}
+                onChange={(e) => setOtherLabel(e.target.value)}
+              />
+              <input
+                aria-label="Important date"
+                type="date"
+                value={otherDate}
+                onChange={(e) => setOtherDate(e.target.value)}
+              />
             </div>
-            <div className="field"><label htmlFor="bio">A little bio (optional)</label><textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} /></div>
-            <div className="field"><label htmlFor="email">Email (optional)</label><input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></div>
-            <div className="field"><label htmlFor="phone">Phone (optional)</label><input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+            <div className="field">
+              <label htmlFor="bio">A little bio (optional)</label>
+              <textarea id="bio" value={bio} onChange={(e) => setBio(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="email">Email (optional)</label>
+              <input id="email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+            </div>
+            <div className="field">
+              <label htmlFor="phone">Phone (optional)</label>
+              <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </div>
             <div className="actions">
-              <button className="btn primary" type="submit">Save</button>
-              <button className="btn" type="button" onClick={() => downloadVCard(person)}>Download vCard</button>
-              <button className="btn ghost" type="button" onClick={() => setMode("actions")}>Back</button>
-              <button className="btn danger" type="button" onClick={async () => {
-                if (confirm(`Remove ${displayName(person)} from this device?`)) {
-                  await onRemove(person.id);
-                  onClose();
-                }
-              }}>Remove</button>
+              <button className="btn primary" type="submit">
+                Save
+              </button>
+              <button className="btn" type="button" onClick={() => downloadVCard(person)}>
+                Download vCard
+              </button>
+              <button className="btn ghost" type="button" onClick={() => setMode("actions")}>
+                Back
+              </button>
+              <button
+                className="btn danger"
+                type="button"
+                onClick={async () => {
+                  if (confirm(`Remove ${displayName(person)} from this device?`)) {
+                    await onRemove(person.id);
+                    onClose();
+                  }
+                }}
+              >
+                Remove
+              </button>
             </div>
           </form>
         ) : null}
