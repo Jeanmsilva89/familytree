@@ -67,14 +67,6 @@
   scroll-snap-stop: always;
 }
 
-.gen-lane-title {
-  margin: 0 0 8px;
-  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
-  font-size: 1.15rem;
-  font-weight: 700;
-  text-align: center;
-}
-
 .gen-stem {
   width: 2px;
   height: 14px;
@@ -98,7 +90,6 @@
   -webkit-overflow-scrolling: touch;
   padding: 4px 2px 10px;
   scroll-snap-type: x mandatory;
-  scroll-snap-stop: always;
   overscroll-behavior-x: contain;
 }
 
@@ -283,10 +274,7 @@
   border-radius: 12px;
   box-shadow: var(--shadow);
 }
-.card-menu .btn {
-  width: 100%;
-  min-height: var(--tap);
-}
+.card-menu .btn { width: 100%; min-height: var(--tap); }
 .focus-card.is-flash {
   animation: flash-card 1.2s ease;
 }
@@ -328,5 +316,3 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
-
-.people-embed { min-width: 0; }
