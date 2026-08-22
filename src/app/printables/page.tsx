@@ -4,7 +4,7 @@ export default function PrintablesIndex() {
   return (
     <div className="app-shell">
       <p>
-        <Link href="/">← Back to Family Tree</Link>
+        <Link href="/">\u2190 Back to Kinstart</Link>
       </p>
       <h1>Kid printables</h1>
       <p className="lede">Print-friendly pages you can save as PDF. Names come from the tree on this device.</p>
