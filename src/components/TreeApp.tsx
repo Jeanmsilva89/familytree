@@ -196,13 +196,14 @@ export function TreeApp() {
             <>
               <TreeCanvas
                 tree={treeState.tree}
-                highlightedId={highlighted?.id}
-                onHighlight={setHighlighted}
+                highlightedId={highlighted?.id ?? treeState.tree.focusPersonId}
+                onHighlight={(person) => {
+                  setHighlighted(person);
+                  if (person) void treeState.focus(person.id);
+                }}
                 onOpen={setSheetPerson}
               />
-              <p className="hint graph-hint">
-                Tap once to see a line. Tap again to open. Drag the graph.
-              </p>
+              <p className="hint graph-hint">Tap once to see a line. Tap again to open. Drag the graph.</p>
             </>
           )}
         </>
@@ -234,34 +235,18 @@ export function TreeApp() {
         onRemove={treeState.remove}
       />
 
-      <input
-        ref={fileRef}
-        className="sr-only"
-        type="file"
-        accept=".ged,.gedcom,text/plain"
-        aria-label="Import GEDCOM file"
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          const text = await file.text();
-          await treeState.replace(parseGedcom(text));
-        }}
-      />
-      <input
-        ref={jsonRef}
-        className="sr-only"
-        type="file"
-        accept="application/json,.json"
-        aria-label="Import backup JSON"
-        onChange={async (event) => {
-          const file = event.target.files?.[0];
-          event.target.value = "";
-          if (!file) return;
-          const text = await file.text();
-          await treeState.importJson(text);
-        }}
-      />
+      <input ref={fileRef} className="sr-only" type="file" accept=".ged,.gedcom,text/plain" aria-label="Import GEDCOM file" onChange={async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        await treeState.replace(parseGedcom(await file.text()));
+      }} />
+      <input ref={jsonRef} className="sr-only" type="file" accept="application/json,.json" aria-label="Import backup JSON" onChange={async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        await treeState.importJson(await file.text());
+      }} />
     </div>
   );
 }
