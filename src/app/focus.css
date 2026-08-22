@@ -1,14 +1,31 @@
 .app-shell.is-wide { max-width: 1100px; }
 .app-shell.is-narrow { overflow-x: hidden; }
 
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 .view-toggle {
   display: flex;
   gap: 8px;
   margin: 0 0 12px;
   padding-bottom: 2px;
+  min-width: 0;
 }
 
-.view-toggle .btn { flex: 1; min-height: var(--tap); }
+.view-toggle .btn {
+  flex: 1;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 8px 10px;
+  white-space: normal;
+}
 
 .focus-family {
   display: flex;
@@ -16,15 +33,24 @@
   gap: 16px;
   padding-bottom: calc(8px + var(--safe-bottom));
   overflow-x: hidden;
+  min-width: 0;
 }
 
-.focus-toolbar { display: flex; gap: 8px; }
+.focus-toolbar { display: flex; gap: 8px; min-width: 0; }
+.focus-toolbar .btn { min-width: 0; }
 
 .gen-stack {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 4px;
+  min-width: 0;
+  max-height: min(72dvh, 720px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  scroll-snap-type: y mandatory;
+  overscroll-behavior: contain;
 }
 
 .gen-lane {
@@ -32,6 +58,8 @@
   flex-direction: column;
   align-items: center;
   min-width: 0;
+  scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .gen-stem {
@@ -51,11 +79,13 @@
   align-items: flex-end;
   justify-content: flex-start;
   width: 100%;
+  min-width: 0;
   overflow-x: auto;
   overflow-y: hidden;
   -webkit-overflow-scrolling: touch;
   padding: 4px 2px 10px;
-  scroll-snap-type: x proximity;
+  scroll-snap-type: x mandatory;
+  overscroll-behavior-x: contain;
 }
 
 .gen-group {
@@ -64,9 +94,11 @@
   align-items: center;
   gap: 6px;
   flex: 0 0 auto;
+  min-width: 0;
   padding: 0 16px 0 0;
   margin-right: 8px;
   scroll-snap-align: start;
+  scroll-snap-stop: always;
 }
 
 .gen-group + .gen-group {
@@ -88,6 +120,8 @@
   gap: 10px;
   align-items: stretch;
   padding: 8px 6px;
+  min-width: 0;
+  scroll-snap-align: start;
 }
 
 .couple-unit.is-unit {
@@ -120,7 +154,7 @@
   z-index: 1;
   flex: 0 0 132px;
   width: 132px;
-  min-width: 132px;
+  min-width: 0;
   max-width: 132px;
   background: var(--card);
   border: 1px solid var(--line);
@@ -143,6 +177,8 @@
   align-items: center;
   gap: 6px;
   min-height: var(--tap);
+  min-width: 0;
+  width: 100%;
   border: 0;
   background: transparent;
   padding: 4px;
@@ -154,6 +190,7 @@
   font-size: 0.92rem;
   line-height: 1.2;
   overflow-wrap: anywhere;
+  min-width: 0;
 }
 
 .avatar {
@@ -174,6 +211,7 @@
 .people-row {
   width: 100%;
   min-height: var(--tap);
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -184,7 +222,12 @@
 }
 
 .name-front { display: grid; gap: 8px; margin: 10px 0 4px; }
-.focus-actions .btn, .actions .btn, .btn { min-height: var(--tap); }
+.focus-actions .btn, .actions .btn, .btn {
+  min-height: var(--tap);
+  min-width: 0;
+  max-width: 100%;
+  white-space: normal;
+}
 .graph-hint { margin-top: 16px; }
 
 .graph-lines { z-index: 0; }
@@ -193,13 +236,23 @@
 
 .card-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 4px;
   justify-content: space-between;
+  min-width: 0;
+  width: 100%;
+}
+.card-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: var(--tap);
+  padding: 6px 4px;
+  font-size: 0.78rem;
+  line-height: 1.15;
+  white-space: normal;
 }
 .card-remove {
   font-size: 0.75rem;
-  min-height: 36px;
-  padding-inline: 8px;
 }
 .focus-card.is-flash {
   animation: flash-card 1.2s ease;
@@ -208,9 +261,22 @@
   0%, 100% { box-shadow: var(--shadow); }
   35% { box-shadow: 0 0 0 3px var(--accent), var(--shadow); }
 }
-.remove-confirm { display: grid; gap: 8px; margin: 8px 0; }
+.remove-confirm { display: grid; gap: 8px; margin: 8px 0; min-width: 0; }
+.remove-confirm .actions,
+.actions {
+  min-width: 0;
+}
 .btn.danger {
   background: color-mix(in srgb, #b42318 12%, var(--card));
   color: #8a1c14;
   border-color: color-mix(in srgb, #b42318 35%, var(--line));
+}
+
+.sheet {
+  min-width: 0;
+}
+.sheet .btn {
+  min-width: 0;
+  min-height: var(--tap);
+  padding-inline: 12px;
 }

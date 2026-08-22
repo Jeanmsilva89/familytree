@@ -95,6 +95,15 @@ html, body {
   color: var(--ink);
   font-family: "Segoe UI", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
   line-height: 1.45;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+html::-webkit-scrollbar,
+body::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 body {
@@ -126,6 +135,7 @@ button { cursor: pointer; }
   max-width: 720px;
   margin: 0 auto;
   min-height: 100dvh;
+  min-width: 0;
   padding: calc(12px + var(--safe-top)) 12px calc(28px + var(--safe-bottom));
   display: flex;
   flex-direction: column;
@@ -139,6 +149,7 @@ button { cursor: pointer; }
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  min-width: 0;
   margin: -12px -12px 12px;
   padding: 10px 12px calc(10px + 2px);
   background: color-mix(in srgb, var(--paper) 88%, transparent);
@@ -151,6 +162,7 @@ button { cursor: pointer; }
   gap: 10px;
   text-decoration: none;
   color: inherit;
+  min-width: 0;
 }
 
 .brand-mark {
@@ -177,18 +189,20 @@ button { cursor: pointer; }
 
 .icon-btn, .btn {
   min-height: var(--tap);
-  min-width: var(--tap);
+  min-width: 0;
   border-radius: 16px;
   border: 1px solid var(--line);
   background: var(--card);
-  padding: 0 16px;
+  padding: 8px 12px;
   box-shadow: var(--shadow);
+  white-space: normal;
 }
 
 .icon-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  min-width: var(--tap);
   padding: 0;
 }
 
@@ -260,8 +274,8 @@ button { cursor: pointer; }
   margin-top: 28px;
   padding: 16px;
   border-radius: 22px;
-  border: 1px dashed var(--example-dash);
   background: var(--example-fill);
+  border: 1px dashed var(--example-dash);
 }
 
 .example-art header {
@@ -424,6 +438,13 @@ html[data-theme="dark"] .portrait-card .swatch {
   border-radius: 22px 22px 0 0;
   border: 1px solid var(--line);
   padding: 10px 16px calc(22px + var(--safe-bottom));
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+.sheet::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
 }
 
 .sheet-handle {
@@ -447,7 +468,7 @@ html[data-theme="dark"] .portrait-card .swatch {
 
 .sheet h2 { margin: 0 0 6px; font-family: Palatino, "Iowan Old Style", serif; }
 
-.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; }
+.actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0; min-width: 0; }
 
 .menu {
   position: absolute;

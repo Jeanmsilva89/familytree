@@ -61,7 +61,7 @@ function PersonChip({
           onClick={onRemove}
           aria-label={`Remove ${displayName(person)}`}
         >
-          Remove
+          Drop
         </button>
       </div>
     </article>

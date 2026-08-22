@@ -201,8 +201,8 @@ export function PersonSheet({
               <button type="button" className="btn" onClick={() => startAdd("partner")}>Add partner</button>
               <button type="button" className="btn" onClick={() => startAdd("child")}>Add child</button>
               <button type="button" className="btn" onClick={() => startAdd("sibling")}>Add sibling</button>
-              <button type="button" className="btn" onClick={() => setMode("link")}>Link someone on the tree</button>
-              <button type="button" className="btn primary" onClick={() => setMode("more")}>Bio, dates, photo, vCard</button>
+              <button type="button" className="btn" onClick={() => setMode("link")}>Link someone</button>
+              <button type="button" className="btn primary" onClick={() => setMode("more")}>More info</button>
             </div>
             {unions.map((u) => (
               <div className="field" key={u.id}>
@@ -227,7 +227,7 @@ export function PersonSheet({
                       onClose();
                     }}
                   >
-                    Remove
+                    Drop
                   </button>
                   <button type="button" className="btn ghost" onClick={() => setRemoveAsk(false)}>
                     Cancel
@@ -236,7 +236,7 @@ export function PersonSheet({
               </div>
             ) : (
               <button type="button" className="btn danger" onClick={() => setRemoveAsk(true)}>
-                Remove
+                Drop
               </button>
             )}
             <button type="button" className="btn ghost" onClick={onClose}>Close</button>
@@ -312,14 +312,14 @@ export function PersonSheet({
             </div>
             <div className="actions">
               <button className="btn primary" type="submit">Save</button>
-              <button className="btn" type="button" onClick={() => downloadVCard(person)}>Download vCard</button>
+              <button className="btn" type="button" onClick={() => downloadVCard(person)}>vCard</button>
               <button className="btn ghost" type="button" onClick={() => setMode("actions")}>Back</button>
               <button className="btn danger" type="button" onClick={async () => {
                 if (confirm(`Remove ${displayName(person)} from this tree?`)) {
                   await onRemove(person.id);
                   onClose();
                 }
-              }}>Remove</button>
+              }}>Drop</button>
             </div>
           </form>
         ) : null}
