@@ -72,7 +72,7 @@ export function PersonSheet({
   const [otherLabel, setOtherLabel] = useState("");
   const [otherDate, setOtherDate] = useState("");
   const [hint, setHint] = useState<string | null>(null);
-  const [removeAsk, setRemoveAsk] = useState(false);
+  const [linkOther, setLinkOther] = useState<Person | null>(null);
   const swipeStart = useRef<number | null>(null);
 
   useEffect(() => {
@@ -88,7 +88,7 @@ export function PersonSheet({
       setOtherDate(person.otherDates?.[0]?.date ?? "");
       setName("");
       setHint(null);
-      setRemoveAsk(false);
+      setLinkOther(null);
     } else {
       setMode("closed");
     }
@@ -120,11 +120,6 @@ export function PersonSheet({
     }
     setRel(next);
     setMode("add");
-  }
-
-  async function saveNames() {
-    if (!person) return;
-    await onEdit(person.id, { givenName, familyName: familyName || undefined });
   }
 
   async function submitAdd(event: FormEvent) {
@@ -183,63 +178,22 @@ export function PersonSheet({
         <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">Close</button>
         <h2 id={titleId}>{displayName(person)}</h2>
         {hint ? <p className="error">{hint}</p> : null}
-        <form className="name-front" onSubmit={async (e) => { e.preventDefault(); await saveNames(); }}>
-          <div className="field">
-            <label htmlFor="front-given">Given name</label>
-            <input id="front-given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required />
-          </div>
-          <div className="field">
-            <label htmlFor="front-family">Family name</label>
-            <input id="front-family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
-          </div>
-          <button className="btn" type="submit">Save names</button>
-        </form>
         {mode === "actions" ? (
           <>
+            <p className="hint">Add family, or open details when you need them.</p>
             <div className="actions">
-              <button type="button" className="btn" onClick={() => startAdd("parent")}>Add parent</button>
-              <button type="button" className="btn" onClick={() => startAdd("partner")}>Add partner</button>
-              <button type="button" className="btn" onClick={() => startAdd("child")}>Add child</button>
-              <button type="button" className="btn" onClick={() => startAdd("sibling")}>Add sibling</button>
-              <button type="button" className="btn" onClick={() => setMode("link")}>Link someone on the tree</button>
-              <button type="button" className="btn primary" onClick={() => setMode("more")}>Bio, dates, photo, vCard</button>
+              <button type="button" className="btn primary" onClick={() => startAdd("child")}>Add family</button>
+              <button type="button" className="btn" onClick={() => setMode("more")}>Details</button>
+              <button type="button" className="btn ghost" onClick={() => { setLinkOther(null); setMode("link"); }}>Link someone already here</button>
             </div>
-            {unions.map((u) => (
-              <div className="field" key={u.id}>
-                <label htmlFor={`union-${u.id}`}>Couple type</label>
-                <select id={`union-${u.id}`} value={u.kind} onChange={(e) => onSetUnionKind(u.id, e.target.value as UnionKind)}>
-                  <option value="partnered">Partnered</option>
-                  <option value="married">Married</option>
-                  <option value="separated">Two households / separated</option>
-                  <option value="unspecified">Unspecified</option>
-                </select>
+            <details>
+              <summary>More ways to add</summary>
+              <div className="actions">
+                <button type="button" className="btn" onClick={() => startAdd("parent")}>Add parent</button>
+                <button type="button" className="btn" onClick={() => startAdd("partner")}>Add partner</button>
+                <button type="button" className="btn" onClick={() => startAdd("sibling")}>Add sibling</button>
               </div>
-            ))}
-            {removeAsk ? (
-              <div className="remove-confirm">
-                <p className="error">Remove {displayName(person)} from this tree?</p>
-                <div className="actions">
-                  <button
-                    type="button"
-                    className="btn danger"
-                    onClick={async () => {
-                      await onRemove(person.id);
-                      onClose();
-                    }}
-                  >
-                    Remove
-                  </button>
-                  <button type="button" className="btn ghost" onClick={() => setRemoveAsk(false)}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button type="button" className="btn danger" onClick={() => setRemoveAsk(true)}>
-                Remove
-              </button>
-            )}
-            <button type="button" className="btn ghost" onClick={onClose}>Close</button>
+            </details>
           </>
         ) : null}
         {mode === "add" ? (
@@ -269,22 +223,46 @@ export function PersonSheet({
           </form>
         ) : null}
         {mode === "link" ? (
-          <PeopleList
-            tree={tree}
-            title="Link someone already on the tree"
-            excludeId={person.id}
-            onClose={() => setMode("actions")}
-            onPick={async (other) => {
-              const role = window.prompt("Link as parent, partner, or child?", "partner");
-              const next = (role ?? "").trim().toLowerCase();
-              if (next !== "parent" && next !== "partner" && next !== "child") return;
-              await onLinkExisting(person.id, other.id, next);
-              onClose();
-            }}
-          />
+          linkOther ? (
+            <div className="link-roles">
+              <p>Link {displayName(linkOther)} as</p>
+              <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "parent"); onClose(); }}>Parent</button>
+              <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "partner"); onClose(); }}>Partner</button>
+              <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "child"); onClose(); }}>Child</button>
+              <button type="button" className="btn ghost" onClick={() => setLinkOther(null)}>Back</button>
+            </div>
+          ) : (
+            <PeopleList
+              tree={tree}
+              title="Link someone already on the tree"
+              excludeId={person.id}
+              embedded
+              onClose={() => setMode("actions")}
+              onPick={(other) => setLinkOther(other)}
+            />
+          )
         ) : null}
         {mode === "more" ? (
           <form className="more" onSubmit={submitMore}>
+            <div className="field">
+              <label htmlFor="front-given">Given name</label>
+              <input id="front-given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required />
+            </div>
+            <div className="field">
+              <label htmlFor="front-family">Family name</label>
+              <input id="front-family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
+            </div>
+            {unions.map((u) => (
+              <div className="field" key={u.id}>
+                <label htmlFor={`union-${u.id}`}>Couple type</label>
+                <select id={`union-${u.id}`} value={u.kind} onChange={(e) => onSetUnionKind(u.id, e.target.value as UnionKind)}>
+                  <option value="partnered">Partnered</option>
+                  <option value="married">Married</option>
+                  <option value="separated">Two households / separated</option>
+                  <option value="unspecified">Unspecified</option>
+                </select>
+              </div>
+            ))}
             <div className="field">
               <label htmlFor="photo">Photo (optional, stays on this device)</label>
               <input id="photo" type="file" accept="image/*" onChange={onPhoto} />
