@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { useTheme, type ThemePreference } from "@/lib/theme";
 
 type Props = {
   open: boolean;
@@ -13,8 +14,15 @@ type Props = {
   onInstall: () => void;
 };
 
+const THEMES: { id: ThemePreference; label: string }[] = [
+  { id: "light", label: "Light" },
+  { id: "dark", label: "Dark" },
+  { id: "system", label: "System" },
+];
+
 export function AppMenu({ open, onClose, onExport, onImport, onReset, canInstall, onInstall }: Props) {
   const ref = useRef<HTMLDivElement>(null);
+  const { preference, setPreference } = useTheme();
 
   useEffect(() => {
     function onKey(event: KeyboardEvent) {
@@ -49,6 +57,22 @@ export function AppMenu({ open, onClose, onExport, onImport, onReset, canInstall
           Install from your browser menu to use Family Tree like an app.
         </p>
       )}
+      <div className="theme-control">
+        <span>Theme</span>
+        <div className="theme-picks" role="group" aria-label="Theme">
+          {THEMES.map((item) => (
+            <button
+              key={item.id}
+              type="button"
+              className={preference === item.id ? "is-on" : undefined}
+              aria-pressed={preference === item.id}
+              onClick={() => setPreference(item.id)}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </div>
       <button type="button" role="menuitem" onClick={onReset}>
         Start over
       </button>
