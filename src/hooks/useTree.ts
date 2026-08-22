@@ -7,11 +7,18 @@ import {
   addChild,
   addParent,
   addPartner,
+  addSibling,
+  addUnlinkedPerson,
+  linkExisting,
+  parseTreeJson,
   removePerson,
+  serializeTreeJson,
+  setFocus,
+  setUnionKind,
   startWithName,
   updatePerson,
 } from "@/lib/tree";
-import type { Person, TreeData, UnionKind } from "@/lib/types";
+import type { LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { emptyTree } from "@/lib/types";
 
 export function useTree() {
@@ -80,6 +87,32 @@ export function useTree() {
     [persist, tree],
   );
 
+  const sibling = useCallback(
+    async (personId: string, name: string) => persist(addSibling(tree, personId, name)),
+    [persist, tree],
+  );
+
+  const unlinked = useCallback(
+    async (name: string) => persist(addUnlinkedPerson(tree, name)),
+    [persist, tree],
+  );
+
+  const link = useCallback(
+    async (personId: string, otherId: string, role: LinkRole, kind?: UnionKind) =>
+      persist(linkExisting(tree, personId, otherId, role, kind)),
+    [persist, tree],
+  );
+
+  const unionKind = useCallback(
+    async (unionId: string, kind: UnionKind) => persist(setUnionKind(tree, unionId, kind)),
+    [persist, tree],
+  );
+
+  const focus = useCallback(
+    async (personId: string) => persist(setFocus(tree, personId)),
+    [persist, tree],
+  );
+
   const edit = useCallback(
     async (id: string, patch: Partial<Person>) => persist(updatePerson(tree, id, patch)),
     [persist, tree],
@@ -88,6 +121,13 @@ export function useTree() {
   const remove = useCallback(
     async (id: string) => persist(removePerson(tree, id)),
     [persist, tree],
+  );
+
+  const exportJson = useCallback(() => serializeTreeJson(tree), [tree]);
+
+  const importJson = useCallback(
+    async (text: string) => persist(parseTreeJson(text)),
+    [persist],
   );
 
   return {
@@ -102,7 +142,14 @@ export function useTree() {
     partner,
     child,
     parent,
+    sibling,
+    unlinked,
+    link,
+    unionKind,
+    focus,
     edit,
     remove,
+    exportJson,
+    importJson,
   };
 }
