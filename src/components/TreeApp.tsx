@@ -2,11 +2,14 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useNarrow } from "@/hooks/useNarrow";
 import { useTree } from "@/hooks/useTree";
 import { parseGedcom, serializeGedcom } from "@/lib/gedcom";
 import type { Person } from "@/lib/types";
 import { BrandMark } from "./BrandMark";
 import { AppMenu } from "./AppMenu";
+import { FocusFamily } from "./FocusFamily";
+import { PeopleList } from "./PeopleList";
 import { PersonSheet } from "./PersonSheet";
 import { StartScreen } from "./StartScreen";
 import { TreeCanvas } from "./TreeCanvas";
@@ -15,11 +18,14 @@ type BeforeInstallPrompt = Event & { prompt: () => Promise<void> };
 
 export function TreeApp() {
   const treeState = useTree();
+  const narrow = useNarrow();
   const [highlighted, setHighlighted] = useState<Person | undefined>();
   const [sheetPerson, setSheetPerson] = useState<Person | undefined>();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [peopleOpen, setPeopleOpen] = useState(false);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPrompt | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const jsonRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const onPrompt = (event: Event) => {
@@ -48,10 +54,17 @@ export function TreeApp() {
     setMenuOpen(false);
   }, [treeState.tree]);
 
-  const importGedcom = useCallback(() => {
-    fileRef.current?.click();
+  const exportJson = useCallback(() => {
+    const text = treeState.exportJson();
+    const blob = new Blob([text], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "family-tree.json";
+    a.click();
+    URL.revokeObjectURL(url);
     setMenuOpen(false);
-  }, []);
+  }, [treeState]);
 
   if (!treeState.ready) {
     return (
@@ -62,7 +75,7 @@ export function TreeApp() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={narrow ? "app-shell is-narrow" : "app-shell is-wide"}>
       <header className="topbar">
         <Link className="brand" href="/">
           <BrandMark className="brand-mark" />
@@ -85,8 +98,27 @@ export function TreeApp() {
       <AppMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
+        onPeople={() => {
+          setPeopleOpen(true);
+          setMenuOpen(false);
+        }}
+        onAddSomeone={async () => {
+          const name = window.prompt("Name of the person to add");
+          if (name?.trim()) {
+            await treeState.unlinked(name);
+          }
+          setMenuOpen(false);
+        }}
         onExport={exportGedcom}
-        onImport={importGedcom}
+        onImport={() => {
+          fileRef.current?.click();
+          setMenuOpen(false);
+        }}
+        onExportJson={exportJson}
+        onImportJson={() => {
+          jsonRef.current?.click();
+          setMenuOpen(false);
+        }}
         onReset={async () => {
           if (confirm("Clear the tree saved on this device?")) {
             await treeState.reset();
@@ -107,6 +139,20 @@ export function TreeApp() {
 
       {!treeState.started ? (
         <StartScreen onStart={treeState.start} onTryExample={treeState.loadExample} />
+      ) : narrow ? (
+        <FocusFamily
+          tree={treeState.tree}
+          onFocus={(id) => {
+            void treeState.focus(id);
+            const person = treeState.tree.people.find((p) => p.id === id);
+            if (person) setHighlighted(person);
+          }}
+          onOpen={setSheetPerson}
+          onAddParent={treeState.parent}
+          onAddPartner={treeState.partner}
+          onAddChild={treeState.child}
+          onAddSibling={treeState.sibling}
+        />
       ) : (
         <>
           <TreeCanvas
@@ -121,6 +167,18 @@ export function TreeApp() {
         </>
       )}
 
+      {peopleOpen ? (
+        <PeopleList
+          tree={treeState.tree}
+          onClose={() => setPeopleOpen(false)}
+          onPick={(person) => {
+            void treeState.focus(person.id);
+            setSheetPerson(person);
+            setPeopleOpen(false);
+          }}
+        />
+      ) : null}
+
       <PersonSheet
         tree={treeState.tree}
         person={sheetPerson}
@@ -128,6 +186,9 @@ export function TreeApp() {
         onAddParent={treeState.parent}
         onAddPartner={treeState.partner}
         onAddChild={treeState.child}
+        onAddSibling={treeState.sibling}
+        onLinkExisting={treeState.link}
+        onSetUnionKind={treeState.unionKind}
         onEdit={treeState.edit}
         onRemove={treeState.remove}
       />
@@ -144,6 +205,20 @@ export function TreeApp() {
           if (!file) return;
           const text = await file.text();
           await treeState.replace(parseGedcom(text));
+        }}
+      />
+      <input
+        ref={jsonRef}
+        className="sr-only"
+        type="file"
+        accept="application/json,.json"
+        aria-label="Import backup JSON"
+        onChange={async (event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (!file) return;
+          const text = await file.text();
+          await treeState.importJson(text);
         }}
       />
     </div>

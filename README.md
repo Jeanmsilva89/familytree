@@ -5,17 +5,19 @@ One name is enough. Stays on this device. No account.
 
 Family Tree is a couple-centered living graph for modern families, not a pedigree from a dead ancestor.
 
-On a phone the living tree is a pan-and-zoom generation graph: the household couple sits in the middle, older relatives above, children clustered under the couple that produced them.
+On a phone (max-width 719px) Family Tree uses FocusFamily: one person at a time, parents above, partners beside them, children below, with large tap targets and no pinch-zoom canvas. On a wider screen the generation graph (TreeCanvas) stays the primary view.
 
 ## What it does
 
 - Start with a single given name
-- Add parent, partner, or child. Data persists in IndexedDB
+- Add parent, partner, child, sibling, or someone unlinked, then connect them
+- Link people already on the tree; edit couple type
+- Optional local photo stored with the tree in IndexedDB
 - Installable PWA that works offline after first load
 - Print the tree as a PDF from the browser
 - Kid printables: relationship cards, match-the-lines, one puzzle
 - Optional bio, important dates, and vCard download
-- GEDCOM import and export
+- GEDCOM import and export, plus a full JSON backup of the local tree
 
 Empty-state art is a fictional example (Alex and Jordan, kids Sam and Riley). It is labeled and not loaded unless you tap Try example.
 

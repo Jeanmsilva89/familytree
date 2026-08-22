@@ -1,0 +1,94 @@
+.app-shell.is-wide { max-width: 1100px; }
+
+.focus-family {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-bottom: 8px;
+}
+
+.focus-toolbar { display: flex; gap: 8px; }
+
+.focus-row, .focus-couple {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: stretch;
+  justify-content: center;
+}
+
+.focus-couple.has-bar { position: relative; }
+
+.focus-couple.has-bar::before {
+  content: "";
+  position: absolute;
+  left: 18%;
+  right: 18%;
+  top: 28px;
+  height: 4px;
+  border-radius: 99px;
+  background: var(--line-ink);
+  z-index: 0;
+}
+
+.focus-card {
+  position: relative;
+  z-index: 1;
+  min-width: 140px;
+  flex: 1 1 140px;
+  max-width: 220px;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.focus-card.is-focus { flex: 1 1 220px; max-width: 320px; }
+
+.focus-face {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--tap);
+  border: 0;
+  background: transparent;
+  padding: 4px;
+}
+
+.focus-name { font-weight: 700; text-align: center; }
+
+.avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--leaf-soft);
+  color: var(--leaf);
+  font-weight: 800;
+  overflow: hidden;
+}
+
+.avatar.lg { width: 72px; height: 72px; font-size: 1.3rem; }
+.avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.people-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.people-row {
+  width: 100%;
+  min-height: var(--tap);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid var(--line);
+  background: var(--cream);
+  border-radius: 14px;
+  padding: 8px 10px;
+}
+
+.name-front { display: grid; gap: 8px; margin: 10px 0 4px; }
+.focus-actions .btn, .actions .btn, .btn { min-height: var(--tap); }

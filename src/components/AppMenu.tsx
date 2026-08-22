@@ -7,8 +7,12 @@ import { useTheme, type ThemePreference } from "@/lib/theme";
 type Props = {
   open: boolean;
   onClose: () => void;
+  onPeople: () => void;
+  onAddSomeone: () => void;
   onExport: () => void;
   onImport: () => void;
+  onExportJson: () => void;
+  onImportJson: () => void;
   onReset: () => void;
   canInstall: boolean;
   onInstall: () => void;
@@ -20,7 +24,19 @@ const THEMES: { id: ThemePreference; label: string }[] = [
   { id: "system", label: "System" },
 ];
 
-export function AppMenu({ open, onClose, onExport, onImport, onReset, canInstall, onInstall }: Props) {
+export function AppMenu({
+  open,
+  onClose,
+  onPeople,
+  onAddSomeone,
+  onExport,
+  onImport,
+  onExportJson,
+  onImportJson,
+  onReset,
+  canInstall,
+  onInstall,
+}: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const { preference, setPreference } = useTheme();
 
@@ -36,27 +52,12 @@ export function AppMenu({ open, onClose, onExport, onImport, onReset, canInstall
 
   return (
     <div className="menu" ref={ref} role="menu" aria-label="Family Tree menu">
-      <Link href="/print" role="menuitem" onClick={onClose}>
-        Print tree
-      </Link>
-      <Link href="/printables" role="menuitem" onClick={onClose}>
-        Kid printables
-      </Link>
-      <button type="button" role="menuitem" onClick={onExport}>
-        Export GEDCOM
+      <button type="button" role="menuitem" onClick={onPeople}>
+        People
       </button>
-      <button type="button" role="menuitem" onClick={onImport}>
-        Import GEDCOM
+      <button type="button" role="menuitem" onClick={onAddSomeone}>
+        Add someone
       </button>
-      {canInstall ? (
-        <button type="button" role="menuitem" onClick={onInstall}>
-          Install app
-        </button>
-      ) : (
-        <p className="hint" style={{ padding: "8px 10px" }}>
-          Install from your browser menu to use Family Tree like an app.
-        </p>
-      )}
       <div className="theme-control">
         <span>Theme</span>
         <div className="theme-picks" role="group" aria-label="Theme">
@@ -73,6 +74,33 @@ export function AppMenu({ open, onClose, onExport, onImport, onReset, canInstall
           ))}
         </div>
       </div>
+      <Link href="/print" role="menuitem" onClick={onClose}>
+        Print
+      </Link>
+      <Link href="/printables" role="menuitem" onClick={onClose}>
+        Printables
+      </Link>
+      <button type="button" role="menuitem" onClick={onExport}>
+        Export GEDCOM
+      </button>
+      <button type="button" role="menuitem" onClick={onImport}>
+        Import GEDCOM
+      </button>
+      <button type="button" role="menuitem" onClick={onExportJson}>
+        Export backup JSON
+      </button>
+      <button type="button" role="menuitem" onClick={onImportJson}>
+        Import backup JSON
+      </button>
+      {canInstall ? (
+        <button type="button" role="menuitem" onClick={onInstall}>
+          Install
+        </button>
+      ) : (
+        <p className="hint" style={{ padding: "8px 10px" }}>
+          Install from your browser menu to use Family Tree like an app.
+        </p>
+      )}
       <button type="button" role="menuitem" onClick={onReset}>
         Start over
       </button>
