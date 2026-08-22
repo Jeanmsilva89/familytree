@@ -1,0 +1,23 @@
+/* Folded from extras.css — only rules with matching markup. */
+.print-toolbar { display: grid; gap: 10px; padding: 16px 16px 8px; }
+.print-toolbar-title {
+  margin: 0;
+  font-family: Palatino, "Iowan Old Style", "Times New Roman", serif;
+  font-size: 1.35rem;
+}
+.print-unit { page-break-after: always; break-after: page; }
+.print-unit:last-child { page-break-after: auto; break-after: auto; }
+.birth-label { display: block; font-size: 0.92rem; color: var(--muted); }
+.canvas { display: grid; gap: 12px; }
+.unit {
+  display: grid; gap: 6px; padding: 16px;
+  border: 1px solid var(--line); border-radius: var(--radius);
+  background: var(--card); box-shadow: var(--shadow);
+  text-decoration: none; color: inherit; min-height: var(--tap);
+}
+.unit-label { margin: 0; font-size: 0.92rem; color: var(--muted); font-weight: 600; }
+.link-roles { display: grid; gap: 8px; }
+.link-roles .btn { width: 100%; }
+.portrait-card strong { overflow-wrap: anywhere; white-space: normal; }
+.sheet-close { max-width: var(--tap); padding: 0; font-size: 1.5rem; line-height: 1; }
+.sheet h2 { margin-right: 56px; }
