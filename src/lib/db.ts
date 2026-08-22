@@ -11,7 +11,15 @@ const TREE_KEY = "living";
 
 type FamilyTreeDB = IDBPDatabase<{ tree: { key: string; value: TreeData } }>;
 
+export type TreeBackend = {
+  get(): Promise<TreeData | undefined>;
+  put(tree: TreeData): Promise<void>;
+  del(): Promise<void>;
+};
+
 let dbPromise: Promise<FamilyTreeDB> | null = null;
+let memory: TreeData | null = null;
+let writeTail: Promise<void> = Promise.resolve();
 
 function getDb(): Promise<FamilyTreeDB> {
   if (!dbPromise) {
@@ -26,11 +34,11 @@ function getDb(): Promise<FamilyTreeDB> {
   return dbPromise;
 }
 
-export async function loadTree(): Promise<TreeData> {
-  if (typeof indexedDB === "undefined") return emptyTree();
-  const db = await getDb();
-  const stored = await db.get(TREE_STORE, TREE_KEY);
-  if (!stored) return emptyTree();
+function cloneTree(tree: TreeData): TreeData {
+  return structuredClone(tree);
+}
+
+function normalize(stored: TreeData): TreeData {
   return {
     people: stored.people ?? [],
     unions: stored.unions ?? [],
@@ -39,14 +47,53 @@ export async function loadTree(): Promise<TreeData> {
   };
 }
 
-export async function saveTree(tree: TreeData): Promise<void> {
-  if (typeof indexedDB === "undefined") return;
-  const db = await getDb();
-  await db.put(TREE_STORE, tree, TREE_KEY);
+function enqueueWrite(job: () => Promise<void>): Promise<void> {
+  writeTail = writeTail.then(job, job);
+  return writeTail;
 }
 
-export async function clearTree(): Promise<void> {
-  if (typeof indexedDB === "undefined") return;
-  const db = await getDb();
-  await db.delete(TREE_STORE, TREE_KEY);
+const idbBackend: TreeBackend = {
+  async get() {
+    if (typeof indexedDB === "undefined") return undefined;
+    const db = await getDb();
+    return db.get(TREE_STORE, TREE_KEY);
+  },
+  async put(tree) {
+    if (typeof indexedDB === "undefined") return;
+    const db = await getDb();
+    await db.put(TREE_STORE, tree, TREE_KEY);
+  },
+  async del() {
+    if (typeof indexedDB === "undefined") return;
+    const db = await getDb();
+    await db.delete(TREE_STORE, TREE_KEY);
+  },
+};
+
+export function resetTreeStoreForTests() {
+  memory = null;
+  writeTail = Promise.resolve();
+}
+
+export function peekTreeMemory(): TreeData | null {
+  return memory ? cloneTree(memory) : null;
+}
+
+export async function loadTree(backend: TreeBackend = idbBackend): Promise<TreeData> {
+  await writeTail;
+  if (memory) return cloneTree(memory);
+  const stored = await backend.get();
+  memory = stored ? normalize(stored) : emptyTree();
+  return cloneTree(memory);
+}
+
+export async function saveTree(tree: TreeData, backend: TreeBackend = idbBackend): Promise<void> {
+  memory = cloneTree(tree);
+  const snapshot = memory;
+  await enqueueWrite(() => backend.put(snapshot));
+}
+
+export async function clearTree(backend: TreeBackend = idbBackend): Promise<void> {
+  memory = emptyTree();
+  await enqueueWrite(() => backend.del());
 }
