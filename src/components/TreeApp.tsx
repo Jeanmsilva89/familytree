@@ -240,6 +240,19 @@ export function TreeApp() {
             <button type="button" className="btn" onClick={exportGedcom}>
               Export
             </button>
+            {treeState.tree.people.some((person) => typeof person.graphX === "number") ? (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => {
+                  for (const person of treeState.tree.people) {
+                    if (typeof person.graphX === "number") void treeState.edit(person.id, { graphX: undefined });
+                  }
+                }}
+              >
+                Reset layout
+              </button>
+            ) : null}
           </div>
           <TreeCanvas
             tree={treeState.tree}
@@ -250,6 +263,7 @@ export function TreeApp() {
             editMode={graphEdit}
             onLink={treeState.link}
             onUnlink={treeState.unlink}
+            onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
           />
         </div>
       ) : null}

@@ -576,6 +576,9 @@ button { cursor: pointer; }
 .portrait-card.is-home {
   border-color: var(--accent);
 }
+.portrait-card.is-movable {
+  cursor: grab;
+}
 
 .portrait-card .swatch {
   flex: none;

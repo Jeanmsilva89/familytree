@@ -605,6 +605,93 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     placeCouple(places, ordered, unit.gen, mid);
   };
 
+  const parentsAbove = (id: string): string[] => {
+    const child = places.get(id);
+    if (!child) return [];
+    return parentIdsOf(tree, id)
+      .filter((pid) => {
+        const par = places.get(pid);
+        return par && par.gen === child.gen + 1;
+      })
+      .sort();
+  };
+
+  const clusterKey = (ids: string[]): string => {
+    let best: string[] = [];
+    for (const id of ids) {
+      const parents = parentsAbove(id);
+      if (parents.length > best.length) best = parents;
+    }
+    return best.length ? best.join("|") : `solo:${[...ids].sort().join("|")}`;
+  };
+
+  const clusterWidth = (units: Unit[]) => {
+    if (!units.length) return 0;
+    return units.reduce((sum, unit) => sum + unitWidth(unit.ids.length), 0) + CARD.gap * Math.max(0, units.length - 1);
+  };
+
+  const unitStamp = (unit: Unit) =>
+    unit.ids
+      .map((id) => personById(tree, id))
+      .filter(Boolean)
+      .map((person) => `${person!.birthDate ?? "9999"}|${person!.givenName}|${person!.id}`)
+      .sort()[0] ?? "";
+
+  const setClusterMid = (units: Unit[], mid: number) => {
+    const width = clusterWidth(units);
+    let x = mid - width / 2;
+    for (const unit of units) {
+      const w = unitWidth(unit.ids.length);
+      setUnitMid(unit, x + w / 2);
+      x += w + CARD.gap;
+    }
+  };
+
+  const packClusters = (gen: number) => {
+    const units = unitsForGen(gen);
+    if (!units.length) return;
+    const buckets = new Map<string, Unit[]>();
+    const order: string[] = [];
+    for (const unit of units) {
+      const key = clusterKey(unit.ids);
+      if (!buckets.has(key)) {
+        buckets.set(key, []);
+        order.push(key);
+      }
+      buckets.get(key)!.push(unit);
+    }
+    const clusters = order.map((key) => {
+      const members = buckets.get(key)!;
+      members.sort((a, b) => unitStamp(a).localeCompare(unitStamp(b)) || avgX(a.ids) - avgX(b.ids));
+      const parentIds = key.startsWith("solo:") ? [] : key.split("|");
+      const parentXs = parentIds.map((id) => places.get(id)?.x).filter(finiteNumber);
+      const mid = parentXs.length ? avg(parentXs) : avgX(members.flatMap((unit) => unit.ids));
+      const sideVals = members.map((unit) => unit.side);
+      const side = sideVals.every((value) => value === sideVals[0]) ? sideVals[0] : 0;
+      return { members, mid, side };
+    });
+    clusters.sort((a, b) => (a.side !== b.side ? a.side - b.side : a.mid - b.mid));
+    for (const cluster of clusters) setClusterMid(cluster.members, cluster.mid);
+    for (let i = 1; i < clusters.length; i++) {
+      const prev = clusters[i - 1];
+      const cur = clusters[i];
+      const prevIds = prev.members.flatMap((unit) => unit.ids);
+      const curIds = cur.members.flatMap((unit) => unit.ids);
+      const prevRight = avgX(prevIds) + clusterWidth(prev.members) / 2;
+      const curLeft = avgX(curIds) - clusterWidth(cur.members) / 2;
+      const overlap = prevRight + CARD.gap - curLeft;
+      if (overlap <= 0) continue;
+      if (prev.side < 0 && cur.side > 0) {
+        setClusterMid(prev.members, avgX(prevIds) - overlap / 2);
+        setClusterMid(cur.members, avgX(curIds) + overlap / 2);
+      } else if (cur.side >= 0 && prev.side >= 0) {
+        setClusterMid(cur.members, avgX(curIds) + overlap);
+      } else {
+        setClusterMid(prev.members, avgX(prevIds) - overlap);
+      }
+    }
+  };
+
   const cohereCouples = () => {
     const rank = (union: (typeof tree.unions)[number]) => {
       const kids = kidsUnderUnion(tree, union).length;
@@ -731,29 +818,42 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
           setUnitMid(unit, divide + CARD.gap / 2 + half);
         }
       }
+      packClusters(gen);
       separateUnits(gen);
     }
   };
 
+  const tidyGen = (gen: number) => {
+    packClusters(gen);
+    separateUnits(gen);
+  };
+
   cohereCouples();
+  for (const gen of gens) tidyGen(gen);
   alignParentsToKids();
   cohereCouples();
-  for (const gen of gens) separateUnits(gen);
+  for (const gen of gens) tidyGen(gen);
   alignParentsToKids();
   cohereCouples();
-  for (const gen of gens) separateUnits(gen);
+  for (const gen of gens) tidyGen(gen);
   pushFamilySides();
   faceInlawsOutward();
   cohereCouples();
-  for (const gen of gens) separateUnits(gen);
+  for (const gen of gens) tidyGen(gen);
   pushFamilySides();
   cohereCouples();
+  for (const gen of gens) tidyGen(gen);
 
   const xs = [...places.values()].map((p) => p.x).filter(finiteNumber);
   if (!xs.length) return emptyGraph();
   const minX = Math.min(...xs);
   const shift = CARD.pad + CARD.w / 2 - minX;
   for (const place of places.values()) place.x += shift;
+  for (const person of tree.people) {
+    if (typeof person.graphX === "number" && Number.isFinite(person.graphX) && places.has(person.id)) {
+      places.get(person.id)!.x = person.graphX;
+    }
+  }
 
   const maxGen = Math.max(...[...places.values()].map((p) => p.gen).filter(finiteNumber));
   const cards: LaidCard[] = tree.people.flatMap((person) => {
