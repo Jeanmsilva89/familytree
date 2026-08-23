@@ -166,7 +166,10 @@ describe("five-generation graph", () => {
     for (const [, cards] of gens) {
       const sorted = [...cards].sort((a, b) => a.x - b.x);
       for (let i = 1; i < sorted.length; i++) {
-        assert.ok(sorted[i].x - sorted[i - 1].x >= CARD.w + CARD.gap - 0.01);
+        assert.ok(
+          sorted[i].x - sorted[i - 1].x >= CARD.w + CARD.coupleGap - 0.01,
+          `${sorted[i - 1].id} overlaps ${sorted[i].id} (dx=${sorted[i].x - sorted[i - 1].x})`,
+        );
       }
     }
     assert.equal(layout.cards.find((c) => c.id === "gm")?.gen, 2);

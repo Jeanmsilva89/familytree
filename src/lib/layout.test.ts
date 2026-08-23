@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
+  CARD,
   ageLabel,
   buildGraph,
   kidClusterCenters,
@@ -97,5 +98,34 @@ describe("graph layout", () => {
     assert.equal(layout.cards.length, 0);
     assert.ok(Number.isFinite(layout.width));
     assert.ok(Number.isFinite(layout.height));
+  });
+
+  it("does not overlap cards in the same generation", () => {
+    const layout = buildGraph(tree, "focus");
+    const byGen = new Map<number, typeof layout.cards>();
+    for (const card of layout.cards) {
+      const list = byGen.get(card.gen) ?? [];
+      list.push(card);
+      byGen.set(card.gen, list);
+    }
+    for (const [gen, row] of byGen) {
+      row.sort((a, b) => a.x - b.x);
+      for (let i = 1; i < row.length; i++) {
+        const dx = row[i].x - row[i - 1].x;
+        assert.ok(
+          dx + 0.01 >= CARD.w + CARD.coupleGap,
+          `${row[i - 1].id} overlaps ${row[i].id} at gen ${gen} (dx=${dx})`,
+        );
+      }
+    }
+  });
+
+  it("hangs a sibling's child under that sibling, not on the focus couple", () => {
+    const layout = buildGraph(tree, "focus");
+    const aunt = layout.cards.find((c) => c.id === "aunt")!;
+    const uncleKid = layout.cards.find((c) => c.id === "uncleKid")!;
+    const focus = layout.cards.find((c) => c.id === "focus")!;
+    assert.equal(uncleKid.gen, aunt.gen - 1);
+    assert.ok(Math.abs(uncleKid.x - aunt.x) < Math.abs(uncleKid.x - focus.x));
   });
 });

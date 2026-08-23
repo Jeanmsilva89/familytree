@@ -2,7 +2,7 @@ import type { Person, TreeData, Union, UnionKind } from "./types";
 import { displayName } from "./types";
 import { kidsUnderUnion, parentsOf, unionsFor } from "./tree";
 
-export const CARD = { w: 108, h: 140, gap: 16, coupleGap: 12, laneGap: 96, pad: 48 };
+export const CARD = { w: 120, h: 140, gap: 28, coupleGap: 6, laneGap: 92, pad: 56 };
 
 export type CoupleUnit = {
   id: string;
