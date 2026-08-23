@@ -410,6 +410,76 @@ button { cursor: pointer; }
   min-height: var(--tap);
   padding-inline: 18px;
 }
+.graph-toolbar {
+  position: absolute;
+  top: calc(10px + var(--safe-top));
+  left: 12px;
+  right: 12px;
+  z-index: 6;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  pointer-events: none;
+}
+.graph-toolbar .btn { pointer-events: auto; }
+.graph-edit-hint {
+  position: absolute;
+  left: 12px;
+  right: 72px;
+  bottom: calc(12px + var(--safe-bottom));
+  z-index: 5;
+  margin: 0;
+  padding: 8px 12px;
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+  color: var(--ink-soft);
+  font-size: 0.9rem;
+}
+.graph-pick {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: calc(64px + var(--safe-bottom));
+  z-index: 7;
+  display: grid;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 18px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+  border: 1px solid var(--line);
+}
+.graph-pick p { margin: 0; font-weight: 700; }
+.graph-port {
+  position: absolute;
+  z-index: 4;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 999px;
+  border: 2px solid var(--card);
+  background: var(--accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 18%, transparent);
+  cursor: grab;
+  touch-action: none;
+}
+.graph-port.is-parent { background: var(--graph-kin, var(--accent)); }
+.graph-port.is-child { background: var(--graph-kin, var(--accent)); }
+.graph-port.is-partner { background: var(--graph-spouse, var(--accent)); }
+.graph-stage.is-edit .portrait-card { overflow: visible; }
+.graph-stage.is-edit .graph-lines { pointer-events: auto; }
+.graph-stage.is-edit .graph-lines path:not(.graph-hit),
+.graph-stage.is-edit .graph-lines line:not(.graph-hit) {
+  pointer-events: none;
+}
+.graph-hit { cursor: pointer; }
+.extra-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.extras-field { border: 0; padding: 0; min-width: 0; }
+.extras-field legend { font-weight: 600; padding: 0; }
 .graph-zoom {
   position: absolute;
   right: 12px;

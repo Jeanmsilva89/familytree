@@ -16,6 +16,7 @@ import {
   setFocus,
   setUnionKind,
   startWithName,
+  unlinkExisting,
   updatePerson,
 } from "@/lib/tree";
 import type { LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
@@ -113,6 +114,12 @@ export function useTree() {
     [mutate],
   );
 
+  const unlink = useCallback(
+    async (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) =>
+      mutate((current) => unlinkExisting(current, personId, otherId, role)),
+    [mutate],
+  );
+
   const unionKind = useCallback(
     async (unionId: string, kind: UnionKind) => mutate((current) => setUnionKind(current, unionId, kind)),
     [mutate],
@@ -162,6 +169,7 @@ export function useTree() {
     sibling,
     unlinked,
     link,
+    unlink,
     unionKind,
     focus,
     edit,

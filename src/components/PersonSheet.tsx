@@ -1,8 +1,8 @@
 "use client";
 
 import { FormEvent, useEffect, useId, useRef, useState, type ChangeEvent, type TouchEvent } from "react";
-import type { LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
-import { displayName } from "@/lib/types";
+import type { ExtraField, LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
+import { cleanExtras, displayName } from "@/lib/types";
 import { parentsOf, unionsFor } from "@/lib/tree";
 import { personToVCard, vcardFilename } from "@/lib/vcard";
 import { PeopleList } from "./PeopleList";
@@ -72,6 +72,7 @@ export function PersonSheet({
   const [phone, setPhone] = useState("");
   const [otherLabel, setOtherLabel] = useState("");
   const [otherDate, setOtherDate] = useState("");
+  const [extras, setExtras] = useState<ExtraField[]>([{ key: "", value: "" }]);
   const [hint, setHint] = useState<string | null>(null);
   const [linkOther, setLinkOther] = useState<Person | null>(null);
   const swipeStart = useRef<number | null>(null);
@@ -87,6 +88,7 @@ export function PersonSheet({
       setPhone(person.phones?.[0] ?? "");
       setOtherLabel(person.otherDates?.[0]?.label ?? "");
       setOtherDate(person.otherDates?.[0]?.date ?? "");
+      setExtras(person.extras?.length ? [...person.extras, { key: "", value: "" }] : [{ key: "", value: "" }]);
       setName("");
       setHint(null);
       setLinkOther(null);
@@ -164,6 +166,7 @@ export function PersonSheet({
       birthDate: birthDate || undefined,
       emails: email ? [email] : undefined,
       phones: phone ? [phone] : undefined,
+      extras: cleanExtras(extras),
       otherDates:
         otherLabel && otherDate
           ? [{ id: person.otherDates?.[0]?.id ?? "d1", label: otherLabel, date: otherDate }]
@@ -324,6 +327,34 @@ export function PersonSheet({
               <label htmlFor="phone">Phone (optional)</label>
               <input id="phone" type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} />
             </div>
+            <fieldset className="field extras-field">
+              <legend>More facts (optional)</legend>
+              <p className="hint">Anything beyond genealogy — occupation, nickname, a place you met.</p>
+              {extras.map((item, index) => (
+                <div className="extra-row" key={`ex-${index}`}>
+                  <input
+                    aria-label={`Fact ${index + 1} name`}
+                    placeholder="Name"
+                    value={item.key}
+                    onChange={(e) => {
+                      const next = extras.map((row, i) => (i === index ? { ...row, key: e.target.value } : row));
+                      if (index === extras.length - 1 && e.target.value) next.push({ key: "", value: "" });
+                      setExtras(next);
+                    }}
+                  />
+                  <input
+                    aria-label={`Fact ${index + 1} value`}
+                    placeholder="Value"
+                    value={item.value}
+                    onChange={(e) => {
+                      const next = extras.map((row, i) => (i === index ? { ...row, value: e.target.value } : row));
+                      if (index === extras.length - 1 && e.target.value) next.push({ key: "", value: "" });
+                      setExtras(next);
+                    }}
+                  />
+                </div>
+              ))}
+            </fieldset>
             <div className="actions">
               <button className="btn primary" type="submit">Save</button>
               <button className="btn" type="button" onClick={() => downloadVCard(person)}>Download vCard</button>

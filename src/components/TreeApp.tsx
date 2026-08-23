@@ -29,6 +29,7 @@ export function TreeApp() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPrompt | null>(null);
   const [mobileView, setMobileView] = useState<"family" | "graph">("family");
   const [graphOpen, setGraphOpen] = useState(false);
+  const [graphEdit, setGraphEdit] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
 
@@ -89,6 +90,7 @@ export function TreeApp() {
       }
       if (graphOpen) {
         setGraphOpen(false);
+        setGraphEdit(false);
         setHighlighted(undefined);
       }
     };
@@ -214,22 +216,39 @@ export function TreeApp() {
 
       {graphOpen ? (
         <div className="graph-overlay">
-          <button
-            type="button"
-            className="btn graph-close"
-            onClick={() => {
-              setGraphOpen(false);
-              setHighlighted(undefined);
-            }}
-          >
-            Close
-          </button>
+          <div className="graph-toolbar">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setGraphOpen(false);
+                setGraphEdit(false);
+                setHighlighted(undefined);
+              }}
+            >
+              Close
+            </button>
+            <button
+              type="button"
+              className={graphEdit ? "btn primary" : "btn"}
+              aria-pressed={graphEdit}
+              onClick={() => setGraphEdit((v) => !v)}
+            >
+              {graphEdit ? "Done" : "Edit"}
+            </button>
+            <button type="button" className="btn" onClick={exportGedcom}>
+              Export
+            </button>
+          </div>
           <TreeCanvas
             tree={treeState.tree}
             highlightedId={highlighted?.id}
             onHighlight={setHighlighted}
             onOpen={setSheetPerson}
             fitKey={graphOpen}
+            editMode={graphEdit}
+            onLink={treeState.link}
+            onUnlink={treeState.unlink}
           />
         </div>
       ) : null}

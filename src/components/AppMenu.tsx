@@ -69,7 +69,7 @@ export function AppMenu({
       </div>
       <details>
         <summary>Move data</summary>
-        <button type="button" role="menuitem" onClick={onExport}>Export GEDCOM</button>
+        <button type="button" role="menuitem" onClick={onExport}>Export Kin GEDCOM</button>
         <button type="button" role="menuitem" onClick={onImport}>Import GEDCOM</button>
         <button type="button" role="menuitem" onClick={onExportJson}>Export backup JSON</button>
         <button type="button" role="menuitem" onClick={onImportJson}>Import backup JSON</button>
