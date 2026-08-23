@@ -9,6 +9,7 @@ import {
   type LaidCard,
   type LaidCouple,
   type LaidEdge,
+  type LaidFork,
 } from "./layout";
 
 type Place = { x: number; gen: number };
@@ -129,7 +130,7 @@ function rowY(gen: number, maxGen: number): number {
 }
 
 function emptyGraph(): GraphLayout {
-  return { width: 320, height: 240, cards: [], couples: [], edges: [], householdIds: [] };
+  return { width: 320, height: 240, cards: [], couples: [], edges: [], forks: [], householdIds: [] };
 }
 
 function finiteNumber(n: number | undefined): n is number {
@@ -259,6 +260,34 @@ function packNode(node: Node, left: number, places: Map<string, Place>): { left:
 
 function sittingDistance(left: number, right: number) {
   return right - left <= CARD.w + CARD.coupleGap + 0.51;
+}
+
+function makeFork(id: string, parents: LaidCard[], children: LaidCard[], dotted: boolean): LaidFork | null {
+  if (!parents.length || !children.length) return null;
+  const parentBottom = Math.max(...parents.map((p) => p.y)) + CARD.h;
+  const childTop = Math.min(...children.map((c) => c.y));
+  if (!Number.isFinite(parentBottom) || !Number.isFinite(childTop)) return null;
+  const gap = Math.max(24, childTop - parentBottom);
+  const joinY = parentBottom + Math.min(20, gap * 0.28);
+  const railY = childTop - Math.min(16, gap * 0.22);
+  const parentXs = parents.map((p) => p.x);
+  const childXs = children.map((c) => c.x);
+  const stemX = parentXs.reduce((s, n) => s + n, 0) / parentXs.length;
+  return {
+    id,
+    parentIds: parents.map((p) => p.id),
+    childIds: children.map((c) => c.id),
+    dotted,
+    joinY,
+    railY: Math.max(joinY + 8, railY),
+    joinLeft: Math.min(...parentXs),
+    joinRight: Math.max(...parentXs),
+    railLeft: Math.min(...childXs, stemX),
+    railRight: Math.max(...childXs, stemX),
+    stemX,
+    parentDrops: parents.map((p) => ({ x: p.x, y0: p.y + CARD.h })),
+    childDrops: children.map((c) => ({ x: c.x, y1: c.y, childId: c.id })),
+  };
 }
 
 function extraPartnerFamilies(tree: TreeData, personId: string) {
@@ -774,6 +803,46 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     });
   }
 
+  const forks: LaidFork[] = [];
+  const grouped = new Map<string, { parents: LaidCard[]; children: LaidCard[]; dotted: boolean }>();
+  for (const union of tree.unions) {
+    const parents = union.partnerIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
+    const children = kidsUnderUnion(tree, union)
+      .map((kid) => byCard.get(kid.id))
+      .filter(Boolean) as LaidCard[];
+    if (parents.length < 1 || !children.length) continue;
+    const key = parents
+      .map((p) => p.id)
+      .sort()
+      .join("|");
+    const xs = parents.map((p) => p.x).sort((a, b) => a - b);
+    const adjacent = parents.length > 1 && sittingDistance(xs[0], xs[xs.length - 1]);
+    const dotted = parents.length > 1 && !(adjacent && showsCoupleBar(union.kind, parents.length));
+    grouped.set(key, { parents, children, dotted });
+  }
+  for (const link of tree.childLinks) {
+    const child = byCard.get(link.childId);
+    const parents = link.parentIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
+    if (!child || !parents.length) continue;
+    const key = parents
+      .map((p) => p.id)
+      .sort()
+      .join("|");
+    const existing = grouped.get(key);
+    if (existing) {
+      if (!existing.children.some((c) => c.id === child.id)) existing.children.push(child);
+      continue;
+    }
+    const xs = parents.map((p) => p.x).sort((a, b) => a - b);
+    const adjacent = parents.length > 1 && sittingDistance(xs[0], xs[xs.length - 1]);
+    grouped.set(key, { parents, children: [child], dotted: parents.length > 1 && !adjacent });
+  }
+  let forkN = 0;
+  for (const group of grouped.values()) {
+    const fork = makeFork(`fork-${forkN++}`, group.parents, group.children, group.dotted);
+    if (fork) forks.push(fork);
+  }
+
   const maxCardX = Math.max(...cards.map((c) => c.x)) + CARD.w / 2 + CARD.pad;
   const maxCardY = Math.max(...cards.map((c) => c.y)) + CARD.h + CARD.pad;
   return {
@@ -782,6 +851,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     cards,
     couples,
     edges,
+    forks,
     focusId: focus.id,
     householdIds,
   };
