@@ -20,6 +20,7 @@ export function createPerson(givenName: string, extras: Partial<Person> = {}): P
     emails: extras.emails,
     phones: extras.phones,
     photo: extras.photo,
+    extras: extras.extras,
     ...stamp(),
   };
 }
@@ -178,6 +179,13 @@ export function setUnionKind(tree: TreeData, unionId: string, kind: UnionKind): 
   };
 }
 
+export function updateUnion(tree: TreeData, unionId: string, patch: Partial<Union>): TreeData {
+  return {
+    ...tree,
+    unions: tree.unions.map((u) => (u.id === unionId ? { ...u, ...patch, id: u.id } : u)),
+  };
+}
+
 export function nextFocusAfterRemove(tree: TreeData, id: string): string | undefined {
   const remaining = tree.people.filter((p) => p.id !== id);
   if (!remaining.length) return undefined;
@@ -318,6 +326,41 @@ export function linkExisting(
   }
   const link: ChildLink = { id: newId("c"), childId: otherId, parentIds: [...new Set(parentIds)], unionId };
   return { ...tree, childLinks: [...tree.childLinks, link] };
+}
+
+export function unlinkExisting(
+  tree: TreeData,
+  personId: string,
+  otherId: string,
+  role: Exclude<LinkRole, "sibling">,
+): TreeData {
+  if (personId === otherId) return tree;
+  if (role === "partner") {
+    const dropped = new Set(
+      tree.unions
+        .filter((u) => u.partnerIds.includes(personId) && u.partnerIds.includes(otherId))
+        .map((u) => u.id),
+    );
+    return {
+      ...tree,
+      unions: tree.unions.filter((u) => !dropped.has(u.id)),
+      childLinks: tree.childLinks.map((link) =>
+        link.unionId && dropped.has(link.unionId) ? { ...link, unionId: undefined } : link,
+      ),
+    };
+  }
+
+  const childId = role === "parent" ? personId : otherId;
+  const parentId = role === "parent" ? otherId : personId;
+  return {
+    ...tree,
+    childLinks: tree.childLinks.flatMap((link) => {
+      if (link.childId !== childId || !link.parentIds.includes(parentId)) return [link];
+      const parentIds = link.parentIds.filter((id) => id !== parentId);
+      if (!parentIds.length) return [];
+      return [{ ...link, parentIds, unionId: parentIds.length > 1 ? link.unionId : undefined }];
+    }),
+  };
 }
 
 export function serializeTreeJson(tree: TreeData): string {

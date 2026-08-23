@@ -1,3 +1,8 @@
+export type ExtraField = {
+  key: string;
+  value: string;
+};
+
 export type UnionKind = "unspecified" | "partnered" | "married" | "separated";
 
 export type ImportantDate = {
@@ -17,6 +22,8 @@ export type Person = {
   phones?: string[];
   /** Optional local photo as a small data URL. */
   photo?: string;
+  /** Free-form facts beyond genealogy (occupation, notes, nicknames, …). */
+  extras?: ExtraField[];
   createdAt: string;
   updatedAt: string;
 };
@@ -25,6 +32,8 @@ export type Union = {
   id: string;
   partnerIds: string[];
   kind: UnionKind;
+  marriedOn?: string;
+  extras?: ExtraField[];
 };
 
 export type ChildLink = {
@@ -45,6 +54,13 @@ export type LinkRole = "parent" | "partner" | "child" | "sibling";
 
 export function emptyTree(): TreeData {
   return { people: [], unions: [], childLinks: [] };
+}
+
+export function cleanExtras(extras?: ExtraField[]): ExtraField[] | undefined {
+  const next = (extras ?? [])
+    .map((item) => ({ key: item.key.trim(), value: item.value.trim() }))
+    .filter((item) => item.key && item.value);
+  return next.length ? next : undefined;
 }
 
 export function displayName(person: Person): string {
