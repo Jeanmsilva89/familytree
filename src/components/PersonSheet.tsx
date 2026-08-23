@@ -127,6 +127,14 @@ export function PersonSheet({
     await onEdit(person.id, { givenName, familyName: familyName || undefined });
   }
 
+  async function deletePerson() {
+    if (!person) return;
+    if (confirm(`Delete ${displayName(person)} from this tree?`)) {
+      await onRemove(person.id);
+      onClose();
+    }
+  }
+
   async function submitAdd(event: FormEvent) {
     event.preventDefault();
     if (!name.trim() || !person) return;
@@ -207,6 +215,7 @@ export function PersonSheet({
               <button type="button" className="btn" onClick={() => startAdd("sibling")}>Add sibling</button>
               <button type="button" className="btn" onClick={() => { setLinkOther(null); setMode("link"); }}>Link someone on the tree</button>
               <button type="button" className="btn primary" onClick={() => setMode("more")}>More</button>
+              <button type="button" className="btn danger" onClick={() => void deletePerson()}>Delete</button>
             </div>
             {unions.map((u) => (
               <div className="field" key={u.id}>
@@ -298,12 +307,7 @@ export function PersonSheet({
               <button className="btn primary" type="submit">Save</button>
               <button className="btn" type="button" onClick={() => downloadVCard(person)}>Download vCard</button>
               <button className="btn ghost" type="button" onClick={() => setMode("actions")}>Back</button>
-              <button className="btn danger" type="button" onClick={async () => {
-                if (confirm(`Remove ${displayName(person)} from this tree?`)) {
-                  await onRemove(person.id);
-                  onClose();
-                }
-              }}>Remove</button>
+              <button className="btn danger" type="button" onClick={() => void deletePerson()}>Delete</button>
             </div>
           </form>
         ) : null}
