@@ -165,6 +165,8 @@ export function TreeCanvas({
     const stage = stageRef.current;
     if (!stage) return;
     const onWheel = (event: WheelEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (target?.closest(".graph-pick, .graph-filter, .graph-toolbar, .graph-zoom")) return;
       if (event.cancelable) event.preventDefault();
       const pt = stagePoint(event.clientX, event.clientY);
       viewRef.current = scaleAround(viewRef.current, pt.x, pt.y, viewRef.current.s * (event.deltaY < 0 ? 1.08 : 0.92));
@@ -689,7 +691,15 @@ export function TreeCanvas({
         <p className="graph-edit-hint">Drag a card to move it. Drag a dot onto someone to link them. Tap a line to remove it.</p>
       ) : null}
       {partnerPick ? (
-        <div className="graph-pick" role="dialog" aria-label="How they fit">
+        <div
+          className="graph-pick"
+          role="dialog"
+          aria-label="How they fit"
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerMove={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onWheel={(event) => event.stopPropagation()}
+        >
           <LinkRolePicker
             from={
               tree.people.find((p) => p.id === partnerPick.fromId) ?? {
