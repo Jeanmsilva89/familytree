@@ -4,35 +4,21 @@ import { useEffect, useMemo, useRef, type PointerEvent } from "react";
 import type { Person, TreeData } from "@/lib/types";
 import { displayName } from "@/lib/types";
 import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
-import { centerTransform, fitContentScale, highlightedCoupleIds } from "@/lib/graphView";
+import { centerTransform, fitContentScale } from "@/lib/graphView";
 
 type Props = {
   tree: TreeData;
   highlightedId?: string;
   onHighlight: (person?: Person) => void;
   onOpen: (person: Person) => void;
+  fitKey?: string | number | boolean;
 };
 
 type View = { x: number; y: number; s: number };
 
-function familyBranches(
-  fromX: number,
-  fromY: number,
-  targets: { x: number; y: number }[],
-): string[] {
-  if (!targets.length) return [];
-  const top = Math.min(...targets.map((t) => t.y));
-  const busY = fromY + Math.max(18, (top - fromY) * 0.4);
-  const stem = `M ${fromX} ${fromY} L ${fromX} ${busY}`;
-  const xs = targets.map((t) => t.x);
-  const minX = Math.min(...xs, fromX);
-  const maxX = Math.max(...xs, fromX);
-  const bus = maxX - minX > 1 ? [`M ${minX} ${busY} L ${maxX} ${busY}`] : [];
-  const drops = targets.map((t) => {
-    const rise = Math.max(12, (t.y - busY) * 0.38);
-    return `M ${t.x} ${busY} C ${t.x} ${busY + rise}, ${t.x} ${t.y - rise * 0.28}, ${t.x} ${t.y}`;
-  });
-  return [stem, ...bus, ...drops];
+function kinPath(fromX: number, fromY: number, toX: number, toY: number): string {
+  const midY = fromY + Math.max(16, (toY - fromY) * 0.5);
+  return `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
 }
 
 function clampScale(s: number) {
@@ -46,11 +32,17 @@ function isFiniteBox(x: number, y: number, w?: number, h?: number) {
   return true;
 }
 
-export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) {
-  const focusId = highlightedId ?? tree.focusPersonId;
-  const layout = useMemo(() => buildGraph(tree, focusId), [tree, focusId]);
-  const linked = useMemo(() => (focusId ? lineageIds(tree, focusId) : null), [tree, focusId]);
-  const coupleLit = useMemo(() => highlightedCoupleIds(tree, focusId), [tree, focusId]);
+export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }: Props) {
+  const householdHint = tree.focusPersonId;
+  const layout = useMemo(() => buildGraph(tree, householdHint), [tree, householdHint]);
+  const household = useMemo(
+    () => new Set(layout.householdIds.length ? layout.householdIds : layout.focusId ? [layout.focusId] : []),
+    [layout.householdIds, layout.focusId],
+  );
+  const linked = useMemo(
+    () => (highlightedId ? lineageIds(tree, highlightedId) : null),
+    [tree, highlightedId],
+  );
   const stageRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View>({ x: 40, y: 24, s: 1 });
@@ -74,11 +66,7 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     });
   }
 
-  useEffect(() => {
-    applyWorld();
-  }, []);
-
-  useEffect(() => {
+  function fitToView() {
     const stage = stageRef.current;
     if (!stage || layout.cards.length === 0) return;
     const vw = stage.clientWidth || 360;
@@ -92,15 +80,20 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     const scale = fitContentScale(vw, vh, Math.max(maxX - minX, CARD.w), Math.max(maxY - minY, CARD.h));
     viewRef.current = centerTransform(vw, vh, (minX + maxX) / 2, (minY + maxY) / 2, scale);
     applyWorld();
-  }, [focusId, layout, tree.people.length]);
+  }
+
+  function zoomBy(factor: number) {
+    viewRef.current.s = clampScale(viewRef.current.s * factor);
+    scheduleApply();
+  }
 
   useEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onHighlight(undefined);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onHighlight]);
+    applyWorld();
+  }, []);
+
+  useEffect(() => {
+    fitToView();
+  }, [layout, tree.people.length, fitKey]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -136,7 +129,7 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
       pinch.current = { dist, s: viewRef.current.s };
       return;
     }
-    if ((event.target as HTMLElement).closest(".portrait-card")) return;
+    if ((event.target as HTMLElement).closest(".portrait-card, .graph-zoom")) return;
     stageRef.current?.setPointerCapture(event.pointerId);
     drag.current = {
       id: event.pointerId,
@@ -173,7 +166,7 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     if (start && start.id === event.pointerId) {
       const moved = Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y);
       drag.current = null;
-      if (moved < 8 && !(event.target as HTMLElement).closest(".portrait-card")) {
+      if (moved < 8 && !(event.target as HTMLElement).closest(".portrait-card, .graph-zoom")) {
         onHighlight(undefined);
       }
     }
@@ -184,19 +177,12 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
   const stageH = Number.isFinite(layout.height) ? layout.height : 240;
   const cards = layout.cards.filter((card) => isFiniteBox(card.x, card.y));
   const edges = layout.edges.filter((edge) => isFiniteBox(edge.fromX, edge.fromY) && isFiniteBox(edge.toX, edge.toY));
-  const branches = (() => {
-    const groups = new Map<string, { fromX: number; fromY: number; targets: { x: number; y: number }[] }>();
-    for (const edge of edges) {
-      const key = `${edge.fromX.toFixed(1)}:${edge.fromY.toFixed(1)}`;
-      const group = groups.get(key) ?? { fromX: edge.fromX, fromY: edge.fromY, targets: [] };
-      group.targets.push({ x: edge.toX, y: edge.toY });
-      groups.set(key, group);
-    }
-    return [...groups.values()].flatMap((group) =>
-      familyBranches(group.fromX, group.fromY, group.targets),
-    );
-  })();
-  const coupleMate = new Set(layout.couples.filter((c) => c.bar).flatMap((c) => c.partnerIds));
+
+  function lineWeight(lit: boolean) {
+    if (!linked) return { width: 1.6, opacity: 0.4 };
+    if (lit) return { width: 2.6, opacity: 0.9 };
+    return { width: 1.2, opacity: 0.12 };
+  }
 
   return (
     <div
@@ -210,43 +196,87 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     >
       <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH, transform: "translate(40px, 24px) scale(1)" }}>
         <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
-          {branches.map((d, i) => (
-            <path key={i} d={d} fill="none" stroke="var(--graph-line)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-          ))}
+          {edges.map((edge, i) => {
+            const kinLit = Boolean(
+              linked &&
+                linked.has(edge.childId) &&
+                edge.parentIds.some((id) => linked.has(id)),
+            );
+            const w = lineWeight(kinLit);
+            return (
+              <path
+                key={`k${i}`}
+                d={kinPath(edge.fromX, edge.fromY, edge.toX, edge.toY)}
+                fill="none"
+                stroke="var(--graph-kin)"
+                strokeWidth={w.width}
+                strokeOpacity={w.opacity}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            );
+          })}
+          {layout.couples.filter((c) => c.bar).map((couple) => {
+            const pair = couple.partnerIds.map((id) => cards.find((card) => card.id === id)).filter(Boolean);
+            if (pair.length < 2 || !Number.isFinite(couple.cy)) return null;
+            const left = pair.reduce((a, b) => (a!.x < b!.x ? a : b));
+            const right = pair.reduce((a, b) => (a!.x > b!.x ? a : b));
+            if (!left || !right) return null;
+            const x1 = left.x + CARD.w / 2 + 1;
+            const x2 = right.x - CARD.w / 2 - 1;
+            if (x2 <= x1 || !isFiniteBox(x1, couple.cy, x2)) return null;
+            const barLit = Boolean(linked && couple.partnerIds.every((id) => linked.has(id)));
+            const w = lineWeight(barLit);
+            return (
+              <line
+                key={couple.id}
+                x1={x1}
+                y1={couple.cy}
+                x2={x2}
+                y2={couple.cy}
+                stroke="var(--graph-spouse)"
+                strokeWidth={w.width + 0.4}
+                strokeOpacity={w.opacity}
+                strokeLinecap="round"
+              />
+            );
+          })}
         </svg>
 
-        {layout.couples.filter((c) => c.bar && c.partnerIds.length >= 2).map((couple) => {
+        {layout.couples.filter((c) => c.bar && c.partnerIds.some((id) => household.has(id))).map((couple) => {
           const pair = couple.partnerIds.map((id) => cards.find((card) => card.id === id)).filter(Boolean) as typeof cards;
           if (pair.length < 2) return null;
-          const minX = Math.min(...pair.map((c) => c.x)) - CARD.w / 2 - 5;
-          const maxX = Math.max(...pair.map((c) => c.x)) + CARD.w / 2 + 5;
-          const y = Math.min(...pair.map((c) => c.y)) - 5;
+          if (!pair.every((c) => household.has(c.person.id))) return null;
+          const minX = Math.min(...pair.map((c) => c.x)) - CARD.w / 2 - 6;
+          const maxX = Math.max(...pair.map((c) => c.x)) + CARD.w / 2 + 6;
+          const y = Math.min(...pair.map((c) => c.y)) - 6;
           const width = maxX - minX;
-          const height = CARD.h + 10;
+          const height = CARD.h + 12;
           if (!isFiniteBox(minX, y, width, height)) return null;
-          const lit = pair.some((c) => coupleLit.has(c.person.id));
-          return <div key={`${couple.id}-tint`} className={`couple-tint${lit ? " is-lit" : ""}`} style={{ left: minX, top: y, width, height }} />;
+          return <div key={`${couple.id}-home`} className="couple-tint is-home" style={{ left: minX, top: y, width, height }} />;
         })}
 
         {cards.map((card) => {
-          const active = coupleLit.has(card.person.id) || card.person.id === focusId;
-          const dim = linked ? !linked.has(card.person.id) : false;
+          const isHome = household.has(card.person.id);
+          const connected = Boolean(linked?.has(card.person.id));
+          const selected = card.person.id === highlightedId;
+          const active = selected || connected || isHome;
+          const dim = Boolean(linked && !connected);
           const age = ageLabel(card.person.birthDate);
           const left = card.x - CARD.w / 2;
           if (!isFiniteBox(left, card.y, CARD.w, CARD.h)) return null;
           const photo = card.person.photo;
-          const inCouple = coupleMate.has(card.person.id);
           return (
             <button
               key={card.id}
               type="button"
-              className={`portrait-card${photo ? " has-photo" : ""}${active ? " is-active" : ""}${dim ? " is-dim" : ""}${inCouple ? " in-couple" : ""}`}
+              className={`portrait-card${photo ? " has-photo" : ""}${isHome ? " is-home" : ""}${active ? " is-active" : ""}${dim ? " is-dim" : ""}`}
               style={{ left, top: card.y, width: CARD.w, height: CARD.h }}
               onClick={(event) => {
                 event.stopPropagation();
                 tapCard(card.person);
               }}
-              aria-pressed={active}
+              aria-pressed={selected}
             >
               {photo ? <img className="portrait-photo" src={photo} alt="" /> : (
                 <span className="swatch" style={{ ["--swatch-hue" as string]: String(swatchHue(card.person)) }} aria-hidden>
@@ -260,6 +290,11 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
             </button>
           );
         })}
+      </div>
+      <div className="graph-zoom" role="group" aria-label="Zoom">
+        <button type="button" className="icon-btn" aria-label="Zoom in" onClick={() => zoomBy(1.15)}>+</button>
+        <button type="button" className="icon-btn" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.15)}>−</button>
+        <button type="button" className="icon-btn" aria-label="Recenter" onClick={fitToView}>⌂</button>
       </div>
     </div>
   );

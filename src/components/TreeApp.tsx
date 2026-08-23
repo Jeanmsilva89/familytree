@@ -28,6 +28,7 @@ export function TreeApp() {
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [installEvent, setInstallEvent] = useState<BeforeInstallPrompt | null>(null);
   const [mobileView, setMobileView] = useState<"family" | "graph">("family");
+  const [graphOpen, setGraphOpen] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
 
@@ -78,6 +79,22 @@ export function TreeApp() {
     }
     setMobileView(window.matchMedia("(max-width: 719px)").matches ? "family" : "graph");
   }, []);
+
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      if (sheetPerson) {
+        setSheetPerson(undefined);
+        return;
+      }
+      if (graphOpen) {
+        setGraphOpen(false);
+        setHighlighted(undefined);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [sheetPerson, graphOpen]);
 
   const chooseView = (next: "family" | "graph") => {
     setMobileView(next);
@@ -149,6 +166,7 @@ export function TreeApp() {
             await treeState.reset();
             setHighlighted(undefined);
             setSheetPerson(undefined);
+            setGraphOpen(false);
             setMenuOpen(false);
           }
         }}
@@ -166,7 +184,7 @@ export function TreeApp() {
             <button type="button" role="tab" aria-selected={mobileView === "family"} className={mobileView === "family" ? "btn primary" : "btn ghost"} onClick={() => chooseView("family")}>Family</button>
             <button type="button" role="tab" aria-selected={mobileView === "graph"} className={mobileView === "graph" ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Graph</button>
           </div>
-          {lookingName ? <p className="looking-at" aria-live="polite">Looking at {lookingName}</p> : null}
+          {lookingName && mobileView === "family" ? <p className="looking-at" aria-live="polite">Looking at {lookingName}</p> : null}
           {mobileView === "family" ? (
             <FocusFamily
               tree={treeState.tree}
@@ -182,18 +200,38 @@ export function TreeApp() {
               onAddSibling={treeState.sibling}
             />
           ) : (
-            <>
-              <TreeCanvas
-                tree={treeState.tree}
-                highlightedId={highlighted?.id ?? treeState.tree.focusPersonId}
-                onHighlight={(person) => { setHighlighted(person); if (person) void treeState.focus(person.id); }}
-                onOpen={setSheetPerson}
-              />
-              <p className="hint graph-hint">Tap once to see a line. Tap again to open. Drag the graph.</p>
-            </>
+            <div className="graph-intro">
+              <h2>Our family</h2>
+              <p>Open the graph to see everyone on one canvas.</p>
+              <button type="button" className="btn primary graph-open" onClick={() => setGraphOpen(true)}>
+                Open
+              </button>
+            </div>
           )}
         </>
       )}
+
+      {graphOpen ? (
+        <div className="graph-overlay">
+          <button
+            type="button"
+            className="btn graph-close"
+            onClick={() => {
+              setGraphOpen(false);
+              setHighlighted(undefined);
+            }}
+          >
+            Close
+          </button>
+          <TreeCanvas
+            tree={treeState.tree}
+            highlightedId={highlighted?.id}
+            onHighlight={setHighlighted}
+            onOpen={setSheetPerson}
+            fitKey={graphOpen}
+          />
+        </div>
+      ) : null}
 
       {peopleOpen ? (
         <PeopleList

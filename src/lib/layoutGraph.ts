@@ -2,6 +2,7 @@ import type { Person, TreeData } from "./types";
 import { kidsUnderUnion, unionsFor } from "./tree";
 import {
   CARD,
+  householdCouple,
   showsCoupleBar,
   type GraphLayout,
   type LaidCard,
@@ -127,7 +128,7 @@ function rowY(gen: number, maxGen: number): number {
 }
 
 function emptyGraph(): GraphLayout {
-  return { width: 320, height: 240, cards: [], couples: [], edges: [] };
+  return { width: 320, height: 240, cards: [], couples: [], edges: [], householdIds: [] };
 }
 
 function finiteNumber(n: number | undefined): n is number {
@@ -246,51 +247,75 @@ function sittingDistance(left: number, right: number) {
   return right - left <= CARD.w + CARD.coupleGap + 0.51;
 }
 
-export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
-  const focusId = focusHint ?? tree.focusPersonId ?? tree.people[0]?.id;
-  const focus = focusId ? personById(tree, focusId) : undefined;
-  if (!focus || tree.people.length === 0) return emptyGraph();
-  const root = focus;
-
-  const places = new Map<string, Place>();
-  const placed = new Set<string>();
-  const parents = parentIdsOf(tree, focus.id).filter((id) => personById(tree, id));
-  const blocked = new Set<string>(parents);
-
-  const partner = primaryPartnerId(tree, focus.id, placed, blocked);
-  const focusIds = partner ? [focus.id, partner] : [focus.id];
-  const { full, half, step } = siblingSets(tree, focus.id);
-  const aunts = auntsUncles(tree, focus.id).filter((p) => p.id !== partner);
-
-  const extraFamilies: { partnerId: string; parentId: string; kids: Person[] }[] = [];
+function extraPartnerFamilies(tree: TreeData, personId: string) {
+  const parents = parentIdsOf(tree, personId).filter((id) => personById(tree, id));
   const parentSet = new Set(parents);
+  const families: { partnerId: string; parentId: string; kids: Person[] }[] = [];
   for (const parentId of parents) {
     for (const union of unionsFor(tree, parentId)) {
       for (const pid of union.partnerIds) {
-        if (pid === parentId || parentSet.has(pid) || pid === focus.id) continue;
+        if (pid === parentId || parentSet.has(pid) || pid === personId) continue;
         if (!personById(tree, pid)) continue;
-        if (extraFamilies.some((f) => f.partnerId === pid)) continue;
-        extraFamilies.push({
+        if (families.some((f) => f.partnerId === pid)) continue;
+        families.push({
           partnerId: pid,
           parentId,
           kids: sortPeople(
-            childrenOfAny(tree, pid).filter(
-              (k) => k.id !== focus.id && !parentSet.has(k.id),
-            ),
+            childrenOfAny(tree, pid).filter((k) => k.id !== personId && !parentSet.has(k.id)),
           ),
         });
       }
     }
   }
+  return families;
+}
 
-  const splitFull = Math.ceil(full.length / 2);
-  const leftFull = full.slice(0, splitFull);
-  const rightFull = full.slice(splitFull);
-  const splitAunts = Math.ceil(aunts.length / 2);
-  const leftAunts = aunts.slice(0, splitAunts);
-  const rightAunts = aunts.slice(splitAunts);
-  const leftExtras = extraFamilies.filter((f) => parents.indexOf(f.parentId) <= 0);
-  const rightExtras = extraFamilies.filter((f) => parents.indexOf(f.parentId) > 0);
+function bloodScore(tree: TreeData, id: string, household: Set<string>): number {
+  if (household.has(id)) return 4;
+  for (const hid of household) {
+    if (parentIdsOf(tree, hid).includes(id)) return 3;
+    if (parentIdsOf(tree, id).includes(hid)) return 3;
+  }
+  for (const hid of household) {
+    const hp = new Set(parentIdsOf(tree, hid));
+    if (hp.size && parentIdsOf(tree, id).some((pid) => hp.has(pid))) return 2;
+  }
+  return 0;
+}
+
+export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
+  const homeIds = householdCouple(tree, focusHint);
+  const focusId = homeIds[0] ?? focusHint ?? tree.focusPersonId ?? tree.people[0]?.id;
+  const focus = focusId ? personById(tree, focusId) : undefined;
+  if (!focus || tree.people.length === 0) return emptyGraph();
+  const root = focus;
+  const householdIds = homeIds.length ? homeIds : [focus.id];
+  const householdSet = new Set(householdIds);
+  const partner = householdIds.find((id) => id !== focus.id);
+
+  const places = new Map<string, Place>();
+  const placed = new Set<string>();
+  const parents = parentIdsOf(tree, focus.id).filter((id) => personById(tree, id));
+  const blocked = new Set<string>([
+    ...householdIds.flatMap((id) => parentIdsOf(tree, id)),
+  ]);
+
+  const leftHome = householdIds[0];
+  const rightHome = householdIds.length > 1 ? householdIds[householdIds.length - 1] : undefined;
+
+  const leftSibs = siblingSets(tree, leftHome);
+  const rightSibs = rightHome ? siblingSets(tree, rightHome) : { full: [] as Person[], half: [] as Person[], step: [] as Person[] };
+  const leftAunts = auntsUncles(tree, leftHome).filter((p) => !householdSet.has(p.id));
+  const rightAunts = rightHome
+    ? auntsUncles(tree, rightHome).filter((p) => !householdSet.has(p.id))
+    : [];
+  const leftExtras = extraPartnerFamilies(tree, leftHome);
+  const rightExtras = rightHome ? extraPartnerFamilies(tree, rightHome) : [];
+  const extraFamilies = [...leftExtras, ...rightExtras];
+
+  const splitFull = Math.ceil(leftSibs.full.length / 2);
+  const soloLeftFull = rightHome ? leftSibs.full : leftSibs.full.slice(0, splitFull);
+  const soloRightFull = rightHome ? [] : leftSibs.full.slice(splitFull);
 
   function makeColumn(ids: string[], gen: number, maxDown: number): Node | null {
     const present = ids.filter((id) => personById(tree, id) && !placed.has(id));
@@ -298,12 +323,19 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     return buildNode(tree, present, gen, placed, maxDown, blocked);
   }
 
-  function personColumn(personId: string, gen: number, maxDown: number): Node | null {
+  function personColumn(
+    personId: string,
+    gen: number,
+    maxDown: number,
+    inlaw: "left" | "right",
+  ): Node | null {
     if (placed.has(personId) || !personById(tree, personId)) return null;
     const extraBlock = new Set(blocked);
-    if (personId !== root.id) extraBlock.add(root.id);
+    for (const hid of householdIds) extraBlock.add(hid);
     const sit = primaryPartnerId(tree, personId, placed, extraBlock);
-    return makeColumn(sit ? [personId, sit] : [personId], gen, maxDown);
+    if (!sit) return makeColumn([personId], gen, maxDown);
+    const ids = inlaw === "left" ? [sit, personId] : [personId, sit];
+    return makeColumn(ids, gen, maxDown);
   }
 
   let cursor = 0;
@@ -313,35 +345,29 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     cursor = box.right + CARD.gap;
   }
 
-  for (const fam of leftExtras) pack(personColumn(fam.partnerId, 1, 1));
-  for (const aunt of leftAunts) pack(personColumn(aunt.id, 1, 1));
-  for (const person of [...step, ...half, ...leftFull]) pack(personColumn(person.id, 0, 1));
-  pack(makeColumn(focusIds, 0, 2));
-  for (const person of rightFull) pack(personColumn(person.id, 0, 1));
-  for (const aunt of rightAunts) pack(personColumn(aunt.id, 1, 1));
-  for (const fam of rightExtras) pack(personColumn(fam.partnerId, 1, 1));
+  for (const fam of leftExtras) pack(personColumn(fam.partnerId, 1, 1, "left"));
+  for (const aunt of leftAunts) pack(personColumn(aunt.id, 1, 1, "left"));
+  for (const person of [...leftSibs.step, ...leftSibs.half, ...soloLeftFull]) {
+    pack(personColumn(person.id, 0, 1, "left"));
+  }
+  pack(makeColumn(householdIds, 0, 2));
+  for (const person of [...soloRightFull, ...rightSibs.full, ...rightSibs.half, ...rightSibs.step]) {
+    pack(personColumn(person.id, 0, 1, "right"));
+  }
+  for (const aunt of rightAunts) pack(personColumn(aunt.id, 1, 1, "right"));
+  for (const fam of rightExtras) pack(personColumn(fam.partnerId, 1, 1, "right"));
 
-  for (const union of unionsFor(tree, focus.id)) {
-    for (const pid of union.partnerIds) {
-      if (pid === focus.id || placed.has(pid) || !personById(tree, pid)) continue;
-      pack(personColumn(pid, 0, 1));
+  for (const hid of householdIds) {
+    for (const union of unionsFor(tree, hid)) {
+      for (const pid of union.partnerIds) {
+        if (householdSet.has(pid) || placed.has(pid) || !personById(tree, pid)) continue;
+        pack(personColumn(pid, 0, 1, "right"));
+      }
     }
   }
 
-  const nuclearIds = [...focusIds, ...full.map((p) => p.id), ...half.map((p) => p.id)];
-  const nuclearXs = nuclearIds.map((id) => places.get(id)?.x).filter(finiteNumber);
-  const nuclearMid = nuclearXs.length ? avg(nuclearXs) : (places.get(focus.id)?.x ?? 0);
-
-  const parentUnion = tree.unions.find(
-    (u) => parents.length > 0 && parents.every((id) => u.partnerIds.includes(id)),
-  );
-  const orderedParents = (
-    parentUnion ? parentUnion.partnerIds.filter((id) => parents.includes(id)) : parents
-  ).filter((id) => personById(tree, id) && !places.has(id));
-  if (orderedParents.length) {
-    placeCouple(places, orderedParents, 1, nuclearMid);
-    orderedParents.forEach((id) => placed.add(id));
-  }
+  const homeXs = householdIds.map((id) => places.get(id)?.x).filter(finiteNumber);
+  const homeMid = homeXs.length ? avg(homeXs) : (places.get(focus.id)?.x ?? 0);
 
   const placeAncestors = (personId: string, gen: number, preferX: number) => {
     if (gen > 2) return;
@@ -362,36 +388,22 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     }
   };
 
-  for (const pid of parents) {
-    const x = places.get(pid)?.x ?? nuclearMid;
-    placeAncestors(pid, 2, x);
-  }
-  if (partner) {
-    const inLaws = parentIdsOf(tree, partner).filter((id) => personById(tree, id) && !places.has(id));
-    if (inLaws.length) {
-      const px = places.get(partner)?.x ?? nuclearMid;
-      const gen1 = [...places.values()].filter((p) => p.gen === 1).map((p) => p.x);
-      const right = gen1.length ? Math.max(...gen1) : px;
-      placeCouple(places, inLaws, 1, right + CARD.w + CARD.gap + unitWidth(inLaws.length) / 2);
-      inLaws.forEach((id) => placed.add(id));
-      for (const inLaw of inLaws) {
-        placeAncestors(inLaw, 2, places.get(inLaw)?.x ?? px);
-      }
-    }
+  for (const hid of householdIds) {
+    const hx = places.get(hid)?.x ?? homeMid;
+    placeAncestors(hid, 1, hx);
   }
 
   for (const fam of extraFamilies) {
     if (places.has(fam.partnerId)) {
       const kidXs = fam.kids.map((k) => places.get(k.id)?.x).filter(finiteNumber);
       if (kidXs.length && places.get(fam.partnerId)?.gen === 1) {
-        const host = places.get(fam.partnerId)!;
-        host.x = avg(kidXs);
+        places.get(fam.partnerId)!.x = avg(kidXs);
       }
       continue;
     }
     const kidXs = fam.kids.map((k) => places.get(k.id)?.x).filter(finiteNumber);
-    const parentX = places.get(fam.parentId)?.x ?? nuclearMid;
-    const goLeft = (places.get(fam.parentId)?.x ?? 0) <= nuclearMid;
+    const parentX = places.get(fam.parentId)?.x ?? homeMid;
+    const goLeft = (places.get(fam.parentId)?.x ?? 0) <= homeMid;
     const desired = kidXs.length ? avg(kidXs) : parentX + (goLeft ? -1 : 1) * (CARD.w + CARD.gap);
     placeCouple(places, [fam.partnerId], 1, desired);
     placed.add(fam.partnerId);
@@ -422,6 +434,33 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   const gens = [...new Set([...places.values()].map((p) => p.gen).filter(finiteNumber))].sort(
     (a, b) => b - a,
   );
+
+  const faceInlawsOutward = () => {
+    const mid = avg(
+      householdIds.map((id) => places.get(id)?.x).filter(finiteNumber),
+    );
+    if (!Number.isFinite(mid)) return;
+    for (const union of tree.unions) {
+      if (!showsCoupleBar(union.kind, union.partnerIds.length)) continue;
+      const ids = union.partnerIds.filter((id) => places.has(id));
+      if (ids.length !== 2) continue;
+      const [a, b] = ids;
+      const sa = bloodScore(tree, a, householdSet);
+      const sb = bloodScore(tree, b, householdSet);
+      if (sa === sb) continue;
+      const blood = sa > sb ? a : b;
+      const inlaw = sa > sb ? b : a;
+      const bloodP = places.get(blood)!;
+      const inlawP = places.get(inlaw)!;
+      if (bloodP.gen !== inlawP.gen) continue;
+      if (Math.abs(inlawP.x - mid) < Math.abs(bloodP.x - mid)) {
+        const tmp = bloodP.x;
+        bloodP.x = inlawP.x;
+        inlawP.x = tmp;
+      }
+    }
+  };
+  faceInlawsOutward();
 
   const resolveGen = (gen: number) => {
     const ids = [...places.entries()]
@@ -483,14 +522,8 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       kind: union.kind,
       bar: adjacent && showsCoupleBar(union.kind, partners.length),
       cx: (left.x + right.x) / 2,
-      cy: left.y + CARD.h,
+      cy: left.y + CARD.h * 0.5,
     });
-  }
-
-  const pairCenter = new Map<string, number>();
-  for (const couple of couples) {
-    if (!couple.bar) continue;
-    for (const id of couple.partnerIds) pairCenter.set(id, couple.cx);
   }
 
   const edges: LaidEdge[] = [];
@@ -501,9 +534,15 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     if (!parentCards.length) continue;
     const fromX = parentCards.reduce((s, p) => s + p.x, 0) / parentCards.length;
     const fromY = Math.max(...parentCards.map((p) => p.y)) + CARD.h;
-    const toX = pairCenter.get(child.id) ?? child.x;
-    if (!finiteNumber(fromX) || !finiteNumber(fromY) || !finiteNumber(toX) || !finiteNumber(child.y)) continue;
-    edges.push({ fromX, fromY, toX, toY: child.y });
+    if (!finiteNumber(fromX) || !finiteNumber(fromY) || !finiteNumber(child.x) || !finiteNumber(child.y)) continue;
+    edges.push({
+      fromX,
+      fromY,
+      toX: child.x,
+      toY: child.y,
+      parentIds: parentCards.map((p) => p.id),
+      childId: child.id,
+    });
   }
 
   const maxCardX = Math.max(...cards.map((c) => c.x)) + CARD.w / 2 + CARD.pad;
@@ -515,6 +554,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     couples,
     edges,
     focusId: focus.id,
+    householdIds,
   };
 }
 
