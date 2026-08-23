@@ -448,8 +448,36 @@ button { cursor: pointer; }
   background: var(--card);
   box-shadow: var(--shadow);
   border: 1px solid var(--line);
+  max-height: min(72vh, 560px);
+  overflow: auto;
 }
 .graph-pick p { margin: 0; font-weight: 700; }
+.pick-label {
+  margin: 8px 0 0;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.link-roles {
+  display: grid;
+  gap: 8px;
+}
+.couple-row {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--wash);
+}
+.couple-row-title {
+  margin: 0;
+  font-weight: 700;
+}
+.couple-row .field { margin-bottom: 0; }
 .graph-port {
   position: absolute;
   z-index: 4;

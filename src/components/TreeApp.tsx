@@ -271,6 +271,7 @@ export function TreeApp() {
         onAddSibling={treeState.sibling}
         onLinkExisting={treeState.link}
         onSetUnionKind={treeState.unionKind}
+        onUnlink={treeState.unlink}
         onEdit={treeState.edit}
         onRemove={treeState.remove}
       />
