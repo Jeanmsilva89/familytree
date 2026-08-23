@@ -9,6 +9,7 @@ type Props = {
   open: boolean;
   onClose: () => void;
   onPeople: () => void;
+  onVisualize: () => void;
   onAddSomeone: (name: string) => void | Promise<void>;
   onExport: () => void;
   onImport: () => void;
@@ -26,7 +27,7 @@ const THEMES: { id: ThemePreference; label: string }[] = [
 ];
 
 export function AppMenu({
-  open, onClose, onPeople, onAddSomeone, onExport, onImport, onExportJson, onImportJson, onReset, canInstall, onInstall,
+  open, onClose, onPeople, onVisualize, onAddSomeone, onExport, onImport, onExportJson, onImportJson, onReset, canInstall, onInstall,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [adding, setAdding] = useState(false);
@@ -45,6 +46,7 @@ export function AppMenu({
   return (
     <div className="menu" ref={ref} role="menu" aria-label="Family Tree menu">
       <button type="button" role="menuitem" onClick={onPeople}>People</button>
+      <button type="button" role="menuitem" onClick={onVisualize}>Visualize tree</button>
       <Link href="/print" role="menuitem" onClick={onClose}>Print</Link>
       <Link href="/printables" role="menuitem" onClick={onClose}>Printables</Link>
       <button type="button" role="menuitem" onClick={onReset}>Start over</button>
