@@ -41,7 +41,7 @@ export type TreeData = {
   focusPersonId?: string;
 };
 
-export type LinkRole = "parent" | "partner" | "child";
+export type LinkRole = "parent" | "partner" | "child" | "sibling";
 
 export function emptyTree(): TreeData {
   return { people: [], unions: [], childLinks: [] };
@@ -55,6 +55,23 @@ export function initials(person: Person): string {
   const g = person.givenName?.trim()[0] ?? "";
   const f = person.familyName?.trim()[0] ?? "";
   return (g + f).toUpperCase() || "?";
+}
+
+export function matchPeople(people: Person[], query: string, excludeId?: string, limit = 6): Person[] {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return [];
+  return people
+    .filter((person) => person.id !== excludeId)
+    .map((person) => ({ person, name: displayName(person).toLowerCase() }))
+    .filter(({ name }) => name.includes(needle) || name.split(/\s+/).some((part) => part.startsWith(needle)))
+    .sort((a, b) => {
+      const aStart = a.name.startsWith(needle) ? 0 : 1;
+      const bStart = b.name.startsWith(needle) ? 0 : 1;
+      if (aStart !== bStart) return aStart - bStart;
+      return a.name.localeCompare(b.name);
+    })
+    .slice(0, limit)
+    .map(({ person }) => person);
 }
 
 export function ageFromBirthDate(birthDate?: string, now = new Date()): string | undefined {

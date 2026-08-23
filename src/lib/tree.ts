@@ -1,4 +1,4 @@
-import type { ChildLink, Person, TreeData, Union, UnionKind } from "./types";
+import type { ChildLink, LinkRole, Person, TreeData, Union, UnionKind } from "./types";
 import { emptyTree } from "./types";
 import { newId, nowIso } from "./ids";
 
@@ -245,8 +245,6 @@ export function setFocus(tree: TreeData, personId: string): TreeData {
   return { ...tree, focusPersonId: personId };
 }
 
-export type LinkRole = "parent" | "partner" | "child";
-
 export function linkExisting(
   tree: TreeData,
   personId: string,
@@ -297,6 +295,18 @@ export function linkExisting(
       };
     }
     const link: ChildLink = { id: newId("c"), childId: personId, parentIds: [otherId] };
+    return { ...tree, childLinks: [...tree.childLinks, link] };
+  }
+
+  if (role === "sibling") {
+    const parents = parentsOf(tree, personId);
+    if (parents.length === 0) throw new Error("Add a parent first");
+    const parentIds = parents.map((p) => p.id);
+    const unionId = tree.childLinks.find((l) => l.childId === personId)?.unionId;
+    if (tree.childLinks.some((l) => l.childId === otherId && parentIds.every((id) => l.parentIds.includes(id)))) {
+      return tree;
+    }
+    const link: ChildLink = { id: newId("c"), childId: otherId, parentIds: [...parentIds], unionId };
     return { ...tree, childLinks: [...tree.childLinks, link] };
   }
 

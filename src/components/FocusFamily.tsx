@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import type { Person, TreeData, UnionKind } from "@/lib/types";
+import type { LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { ageFromBirthDate, displayName, initials } from "@/lib/types";
 import { buildGenerationLanes, type GenerationGroup, type GenerationLane } from "@/lib/generations";
 import { highlightedCoupleIds } from "@/lib/graphView";
@@ -17,6 +17,7 @@ type Props = {
   onAddPartner: (personId: string, name: string, kind: UnionKind) => Promise<void>;
   onAddChild: (parentIds: string[], name: string, unionId?: string) => Promise<void>;
   onAddSibling: (personId: string, name: string) => Promise<string | void>;
+  onLinkExisting: (personId: string, otherId: string, role: LinkRole) => Promise<void>;
 };
 
 const LANE_WORDS: Record<string, string> = {
@@ -171,7 +172,7 @@ function LaneRow({ tree, lane, focusIds, viewId, onFocus, onOpen, flashId }: {
   );
 }
 
-export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, onAddChild, onAddSibling }: Props) {
+export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, onAddChild, onAddSibling, onLinkExisting }: Props) {
   const [peopleOpen, setPeopleOpen] = useState(false);
   const [flashId, setFlashId] = useState<string | undefined>();
   const [adding, setAdding] = useState<"parent" | "partner" | "child" | "sibling" | null>(null);
@@ -214,6 +215,13 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
     setAdding(null);
   }
 
+  async function pickExisting(person: Person) {
+    if (!adding) return;
+    await onLinkExisting(focus.id, person.id, adding);
+    setFlashId(person.id);
+    setAdding(null);
+  }
+
   return (
     <section className="focus-family" aria-label="Family around the focus person">
       <div className="focus-toolbar">
@@ -232,7 +240,14 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
       </div>
       {adding === "sibling" && !hasParents ? <p className="error">Add a parent first</p> : null}
       {adding && !(adding === "sibling" && !hasParents) ? (
-        <AddNameRow label={addLabel} onAdd={submitAdd} onCancel={() => setAdding(null)} />
+        <AddNameRow
+          label={addLabel}
+          onAdd={submitAdd}
+          onCancel={() => setAdding(null)}
+          people={tree.people}
+          excludeId={focus.id}
+          onPickExisting={pickExisting}
+        />
       ) : null}
       {peopleOpen ? (
         <PeopleList tree={tree} onClose={() => setPeopleOpen(false)} onPick={(person) => { handleFocus(person.id); setPeopleOpen(false); }} />

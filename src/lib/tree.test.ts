@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { matchPeople } from "./types";
 import {
   addChild,
   addParent,
@@ -171,6 +172,13 @@ describe("self-serve mutations", () => {
     const sam = tree.people.find((p) => p.givenName === "Sam")!.id;
     tree = linkExisting(tree, alex, sam, "child");
     assert.equal(tree.childLinks.some((l) => l.childId === sam), true);
+
+    tree = addParent(tree, jordan, "Pat");
+    const patId = parentsOf(tree, jordan)[0].id;
+    tree = addUnlinkedPerson(tree, "Riley");
+    const riley = tree.people.find((p) => p.givenName === "Riley")!.id;
+    tree = linkExisting(tree, jordan, riley, "sibling");
+    assert.equal(parentsOf(tree, riley)[0].id, patId);
   });
 
   it("round-trips JSON backup", () => {
@@ -193,5 +201,21 @@ describe("self-serve mutations", () => {
     const jordan = tree.people.find((p) => p.givenName === "Jordan")!.id;
     tree = setFocus(tree, jordan);
     assert.equal(tree.focusPersonId, jordan);
+  });
+});
+
+describe("people autocomplete", () => {
+  it("ranks existing names that match what you type", () => {
+    const people = [
+      { id: "a", givenName: "Jean", familyName: "Silva", createdAt: "t", updatedAt: "t" },
+      { id: "b", givenName: "Leah", familyName: "Silva", createdAt: "t", updatedAt: "t" },
+      { id: "c", givenName: "Jake", createdAt: "t", updatedAt: "t" },
+    ];
+    const hits = matchPeople(people, "lea");
+    assert.equal(hits.length, 1);
+    assert.equal(hits[0].id, "b");
+    assert.equal(matchPeople(people, "sil")[0].familyName, "Silva");
+    assert.equal(matchPeople(people, "j", "a").some((p) => p.id === "a"), false);
+    assert.deepEqual(matchPeople(people, "   "), []);
   });
 });
