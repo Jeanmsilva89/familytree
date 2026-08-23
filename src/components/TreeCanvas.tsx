@@ -293,12 +293,25 @@ export function TreeCanvas({
 
   const stageW = Number.isFinite(layout.width) ? layout.width : 320;
   const stageH = Number.isFinite(layout.height) ? layout.height : 240;
-  const edges = layout.edges.filter((edge) => isFiniteBox(edge.fromX, edge.fromY) && isFiniteBox(edge.toX, edge.toY));
+  const forks = layout.forks ?? [];
+  const forkedKids = new Set(forks.flatMap((fork) => fork.childIds));
+  const edges = layout.edges.filter(
+    (edge) =>
+      !forkedKids.has(edge.childId) &&
+      isFiniteBox(edge.fromX, edge.fromY) &&
+      isFiniteBox(edge.toX, edge.toY),
+  );
 
   function lineWeight(lit: boolean) {
     if (!linked) return { width: 1.6, opacity: 0.4 };
     if (lit) return { width: 2.6, opacity: 0.9 };
     return { width: 1.2, opacity: 0.12 };
+  }
+
+  function forkWeight(lit: boolean, dotted: boolean) {
+    if (lit) return { width: dotted ? 1.8 : 2.2, opacity: 0.88 };
+    if (!linked) return { width: dotted ? 1.5 : 1.7, opacity: dotted ? 0.5 : 0.42 };
+    return { width: dotted ? 1.4 : 1.5, opacity: dotted ? 0.38 : 0.22 };
   }
 
   async function unlinkKin(childId: string, parentIds: string[]) {
@@ -333,6 +346,97 @@ export function TreeCanvas({
     >
       <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH, transform: "translate(40px, 24px) scale(1)" }}>
         <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
+          {forks.map((fork) => {
+            const lit = Boolean(
+              linked &&
+                (fork.parentIds.some((id) => linked.has(id)) || fork.childIds.some((id) => linked.has(id))),
+            );
+            const w = forkWeight(lit, fork.dotted);
+            const dash = fork.dotted ? "5 7" : undefined;
+            return (
+              <g key={fork.id} className={fork.dotted ? "graph-fork is-split" : "graph-fork"}>
+                {fork.parentDrops.map((drop, i) => (
+                  <line
+                    key={`pd-${i}`}
+                    x1={drop.x}
+                    y1={drop.y0}
+                    x2={drop.x}
+                    y2={fork.joinY}
+                    stroke="var(--graph-kin)"
+                    strokeWidth={w.width}
+                    strokeOpacity={w.opacity}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                ))}
+                {fork.joinRight - fork.joinLeft > 6 ? (
+                  <line
+                    x1={fork.joinLeft}
+                    y1={fork.joinY}
+                    x2={fork.joinRight}
+                    y2={fork.joinY}
+                    stroke="var(--graph-kin)"
+                    strokeWidth={w.width}
+                    strokeOpacity={w.opacity}
+                    strokeDasharray={dash}
+                    strokeLinecap="round"
+                  />
+                ) : null}
+                <line
+                  x1={fork.stemX}
+                  y1={fork.joinY}
+                  x2={fork.stemX}
+                  y2={fork.railY}
+                  stroke="var(--graph-kin)"
+                  strokeWidth={w.width}
+                  strokeOpacity={w.opacity}
+                  strokeLinecap="round"
+                />
+                {fork.railRight - fork.railLeft > 6 ? (
+                  <line
+                    x1={fork.railLeft}
+                    y1={fork.railY}
+                    x2={fork.railRight}
+                    y2={fork.railY}
+                    stroke="var(--graph-kin)"
+                    strokeWidth={w.width}
+                    strokeOpacity={w.opacity}
+                    strokeLinecap="round"
+                  />
+                ) : null}
+                {fork.childDrops.map((drop) => (
+                  <g key={drop.childId}>
+                    <line
+                      x1={drop.x}
+                      y1={fork.railY}
+                      x2={drop.x}
+                      y2={drop.y1}
+                      stroke="var(--graph-kin)"
+                      strokeWidth={w.width}
+                      strokeOpacity={w.opacity}
+                      strokeLinecap="round"
+                    />
+                    {editMode ? (
+                      <line
+                        className="graph-hit"
+                        x1={drop.x}
+                        y1={fork.railY}
+                        x2={drop.x}
+                        y2={drop.y1}
+                        stroke="transparent"
+                        strokeWidth={18}
+                        pointerEvents="stroke"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void unlinkKin(drop.childId, fork.parentIds);
+                        }}
+                      />
+                    ) : null}
+                  </g>
+                ))}
+              </g>
+            );
+          })}
           {edges.map((edge, i) => {
             const kinLit = Boolean(
               linked &&

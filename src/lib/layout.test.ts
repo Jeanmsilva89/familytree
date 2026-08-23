@@ -302,5 +302,32 @@ describe("graph layout", () => {
     assert.equal(couple?.bar, true);
     assert.equal(couple?.kind, "married");
   });
+
+  it("draws a dotted parent bar when two households share children", () => {
+    const family: TreeData = {
+      focusPersonId: "andressa",
+      people: [
+        person("andreia", "Andreia"),
+        person("edson", "Edson"),
+        person("andressa", "Andressa"),
+        person("ingled", "Ingled"),
+        person("lorhan", "Lorhan"),
+      ],
+      unions: [{ id: "u-split", partnerIds: ["andreia", "edson"], kind: "separated" }],
+      childLinks: [
+        { id: "c-a", childId: "andressa", parentIds: ["andreia", "edson"], unionId: "u-split" },
+        { id: "c-i", childId: "ingled", parentIds: ["andreia", "edson"], unionId: "u-split" },
+        { id: "c-l", childId: "lorhan", parentIds: ["andreia", "edson"], unionId: "u-split" },
+      ],
+    };
+    const layout = buildGraph(family, "andressa");
+    const fork = layout.forks.find(
+      (item) => item.parentIds.includes("andreia") && item.parentIds.includes("edson"),
+    );
+    assert.ok(fork, "shared children should get a parent fork");
+    assert.equal(fork?.dotted, true);
+    assert.ok((fork?.childIds.length ?? 0) >= 3);
+    assert.ok((fork?.joinRight ?? 0) - (fork?.joinLeft ?? 0) > CARD.w);
+  });
 });
 

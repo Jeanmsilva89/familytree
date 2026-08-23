@@ -45,12 +45,29 @@ export type LaidEdge = {
   childId: string;
 };
 
+export type LaidFork = {
+  id: string;
+  parentIds: string[];
+  childIds: string[];
+  dotted: boolean;
+  joinY: number;
+  railY: number;
+  joinLeft: number;
+  joinRight: number;
+  railLeft: number;
+  railRight: number;
+  stemX: number;
+  parentDrops: { x: number; y0: number }[];
+  childDrops: { x: number; y1: number; childId: string }[];
+};
+
 export type GraphLayout = {
   width: number;
   height: number;
   cards: LaidCard[];
   couples: LaidCouple[];
   edges: LaidEdge[];
+  forks: LaidFork[];
   focusId?: string;
   householdIds: string[];
 };
