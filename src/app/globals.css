@@ -422,6 +422,37 @@ button { cursor: pointer; }
   pointer-events: none;
 }
 .graph-toolbar .btn { pointer-events: auto; }
+.graph-filter {
+  pointer-events: auto;
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--card) 88%, transparent);
+}
+.graph-filter .chip {
+  appearance: none;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.graph-filter .chip.is-on {
+  background: color-mix(in srgb, var(--accent) 22%, var(--card));
+  border-color: var(--accent);
+}
+.graph-kin-label {
+  font-family: inherit;
+  pointer-events: none;
+}
 .graph-edit-hint {
   position: absolute;
   left: 12px;

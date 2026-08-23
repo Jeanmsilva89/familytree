@@ -7,9 +7,11 @@ import { useTree } from "@/hooks/useTree";
 import { parseGedcom, serializeGedcom } from "@/lib/gedcom";
 import type { Person } from "@/lib/types";
 import { displayName } from "@/lib/types";
+import { DEFAULT_LINE_FILTER, type LineFilter } from "@/lib/kinFilter";
 import { BrandMark } from "./BrandMark";
 import { AppMenu } from "./AppMenu";
 import { FocusFamily } from "./FocusFamily";
+import { GraphLineFilter } from "./GraphLineFilter";
 import { PeopleList } from "./PeopleList";
 import { PersonSheet } from "./PersonSheet";
 import { StartScreen } from "./StartScreen";
@@ -30,6 +32,7 @@ export function TreeApp() {
   const [mobileView, setMobileView] = useState<"family" | "graph">("family");
   const [graphOpen, setGraphOpen] = useState(false);
   const [graphEdit, setGraphEdit] = useState(false);
+  const [lineFilter, setLineFilter] = useState<LineFilter>(DEFAULT_LINE_FILTER);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
 
@@ -253,6 +256,7 @@ export function TreeApp() {
                 Reset layout
               </button>
             ) : null}
+            <GraphLineFilter value={lineFilter} onChange={setLineFilter} />
           </div>
           <TreeCanvas
             tree={treeState.tree}
@@ -264,6 +268,7 @@ export function TreeApp() {
             onLink={treeState.link}
             onUnlink={treeState.unlink}
             onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
+            lineFilter={lineFilter}
           />
         </div>
       ) : null}

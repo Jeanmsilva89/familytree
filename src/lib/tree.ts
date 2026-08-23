@@ -1,4 +1,5 @@
-import type { ChildLink, LinkRole, ParentRole, Person, TreeData, Union, UnionKind } from "./types";
+import type { ChildLink, KinKind, LinkRole, ParentRole, Person, TreeData, Union, UnionKind } from "./types";
+import { kinOf } from "./types";
 import { emptyTree } from "./types";
 import { newId, nowIso } from "./ids";
 
@@ -49,6 +50,13 @@ export function parentsOf(tree: TreeData, childId: string): Person[] {
     if (link.childId === childId) link.parentIds.forEach((id) => ids.add(id));
   }
   return tree.people.filter((p) => ids.has(p.id));
+}
+
+export function kinBetween(tree: TreeData, childId: string, parentId: string): KinKind {
+  for (const link of tree.childLinks) {
+    if (link.childId === childId && link.parentIds.includes(parentId)) return kinOf(link, parentId);
+  }
+  return "blood";
 }
 
 export function kidsOfParents(tree: TreeData, parentIds: string[]): Person[] {
@@ -260,6 +268,7 @@ export function linkExisting(
   role: LinkRole,
   kind: UnionKind = "partnered",
   parentRole?: ParentRole,
+  kinKind: KinKind = "blood",
 ): TreeData {
   if (personId === otherId) throw new Error("Cannot link a person to themselves.");
   const person = getPerson(tree, personId);
@@ -276,19 +285,21 @@ export function linkExisting(
   }
 
   if (role === "parent") {
-    const withRole = (link: ChildLink): ChildLink => {
-      if (!parentRole) return link;
-      return { ...link, roles: { ...link.roles, [otherId]: parentRole } };
+    const withMeta = (link: ChildLink): ChildLink => {
+      const next: ChildLink = { ...link };
+      if (parentRole) next.roles = { ...link.roles, [otherId]: parentRole };
+      if (kinKind !== "blood") next.kin = { ...link.kin, [otherId]: kinKind };
+      return next;
     };
     const existing = tree.childLinks.find((link) => link.childId === personId);
     if (!existing) {
-      const link = withRole({ id: newId("c"), childId: personId, parentIds: [otherId] });
+      const link = withMeta({ id: newId("c"), childId: personId, parentIds: [otherId] });
       return { ...tree, childLinks: [...tree.childLinks, link] };
     }
     if (existing.parentIds.includes(otherId)) {
       return {
         ...tree,
-        childLinks: tree.childLinks.map((l) => (l.id === existing.id ? withRole(l) : l)),
+        childLinks: tree.childLinks.map((l) => (l.id === existing.id ? withMeta(l) : l)),
       };
     }
     if (existing.parentIds.length === 1) {
@@ -308,11 +319,11 @@ export function linkExisting(
         ...tree,
         unions,
         childLinks: tree.childLinks.map((l) =>
-          l.id === existing.id ? withRole({ ...existing, parentIds: [otherParentId, otherId], unionId }) : l,
+          l.id === existing.id ? withMeta({ ...existing, parentIds: [otherParentId, otherId], unionId }) : l,
         ),
       };
     }
-    const link = withRole({ id: newId("c"), childId: personId, parentIds: [otherId] });
+    const link = withMeta({ id: newId("c"), childId: personId, parentIds: [otherId] });
     return { ...tree, childLinks: [...tree.childLinks, link] };
   }
 
@@ -332,9 +343,22 @@ export function linkExisting(
   const parentIds = unions[0]?.partnerIds ?? [personId];
   const unionId = unions[0]?.id;
   if (tree.childLinks.some((l) => l.childId === otherId && parentIds.every((id) => l.parentIds.includes(id)))) {
-    return tree;
+    if (kinKind === "blood") return tree;
+    return {
+      ...tree,
+      childLinks: tree.childLinks.map((l) => {
+        if (l.childId !== otherId) return l;
+        const kin = { ...l.kin };
+        for (const id of parentIds) kin[id] = kinKind;
+        return { ...l, kin };
+      }),
+    };
   }
-  const link: ChildLink = { id: newId("c"), childId: otherId, parentIds: [...new Set(parentIds)], unionId };
+  const kin =
+    kinKind === "blood"
+      ? undefined
+      : Object.fromEntries(parentIds.map((id) => [id, kinKind]));
+  const link: ChildLink = { id: newId("c"), childId: otherId, parentIds: [...new Set(parentIds)], unionId, kin };
   return { ...tree, childLinks: [...tree.childLinks, link] };
 }
 
@@ -371,7 +395,16 @@ export function unlinkExisting(
       const roles = link.roles
         ? Object.fromEntries(Object.entries(link.roles).filter(([id]) => parentIds.includes(id)))
         : undefined;
-      return [{ ...link, parentIds, roles: roles && Object.keys(roles).length ? roles : undefined, unionId: parentIds.length > 1 ? link.unionId : undefined }];
+      const kin = link.kin
+        ? Object.fromEntries(Object.entries(link.kin).filter(([id]) => parentIds.includes(id)))
+        : undefined;
+      return [{
+        ...link,
+        parentIds,
+        roles: roles && Object.keys(roles).length ? roles : undefined,
+        kin: kin && Object.keys(kin).length ? kin : undefined,
+        unionId: parentIds.length > 1 ? link.unionId : undefined,
+      }];
     }),
   };
 }

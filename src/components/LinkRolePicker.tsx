@@ -1,13 +1,13 @@
 "use client";
 
-import type { LinkRole, ParentRole, Person, UnionKind } from "@/lib/types";
+import type { KinKind, LinkRole, ParentRole, Person, UnionKind } from "@/lib/types";
 import { UNION_KIND_OPTIONS, displayName } from "@/lib/types";
 
 type Props = {
   from: Person;
   to: Person;
   showSibling?: boolean;
-  onPick: (role: LinkRole, kind?: UnionKind, parentRole?: ParentRole) => void | Promise<void>;
+  onPick: (role: LinkRole, kind?: UnionKind, parentRole?: ParentRole, kin?: KinKind) => void | Promise<void>;
   onCancel: () => void;
 };
 
@@ -45,6 +45,25 @@ export function LinkRolePicker({ from, to, showSibling, onPick, onCancel }: Prop
           {`${toName} is ${fromName}’s sibling`}
         </button>
       ) : null}
+      <p className="pick-label">Adopted and step</p>
+      <button type="button" className="btn" onClick={() => void onPick("parent", undefined, "father", "step")}>
+        {`${toName} is ${fromName}’s stepfather`}
+      </button>
+      <button type="button" className="btn" onClick={() => void onPick("parent", undefined, "mother", "step")}>
+        {`${toName} is ${fromName}’s stepmother`}
+      </button>
+      <button type="button" className="btn" onClick={() => void onPick("parent", undefined, undefined, "adopted")}>
+        {`${toName} adopted ${fromName}`}
+      </button>
+      <button type="button" className="btn" onClick={() => void onPick("parent", undefined, undefined, "foster")}>
+        {`${toName} fostered ${fromName}`}
+      </button>
+      <button type="button" className="btn" onClick={() => void onPick("child", undefined, undefined, "adopted")}>
+        {`${toName} is ${fromName}’s adopted child`}
+      </button>
+      <button type="button" className="btn" onClick={() => void onPick("child", undefined, undefined, "step")}>
+        {`${toName} is ${fromName}’s stepchild`}
+      </button>
       <button type="button" className="btn ghost" onClick={onCancel}>
         Cancel
       </button>

@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useId, useRef, useState, type ChangeEvent, type TouchEvent } from "react";
-import type { ExtraField, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
+import type { ExtraField, KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { UNION_KIND_OPTIONS, cleanExtras, displayName, unionKindLabel } from "@/lib/types";
 import { parentsOf, unionsFor } from "@/lib/tree";
 import { personToVCard, vcardFilename } from "@/lib/vcard";
@@ -20,7 +20,7 @@ type Props = {
   onAddPartner: (personId: string, name: string, kind: UnionKind) => Promise<void>;
   onAddChild: (parentIds: string[], name: string, unionId?: string) => Promise<void>;
   onAddSibling: (personId: string, name: string) => Promise<string | void>;
-  onLinkExisting: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole) => Promise<void>;
+  onLinkExisting: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole, kin?: KinKind) => Promise<void>;
   onSetUnionKind: (unionId: string, kind: UnionKind) => Promise<void>;
   onUnlink: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => Promise<void>;
   onEdit: (id: string, patch: Partial<Person>) => Promise<void>;
@@ -334,8 +334,8 @@ export function PersonSheet({
                 from={person}
                 to={linkOther}
                 showSibling={hasParents}
-                onPick={async (role, nextKind, parentRole) => {
-                  await onLinkExisting(person.id, linkOther.id, role, nextKind, parentRole);
+                onPick={async (role, nextKind, parentRole, kin) => {
+                  await onLinkExisting(person.id, linkOther.id, role, nextKind, parentRole, kin);
                   onClose();
                 }}
                 onCancel={() => setLinkOther(null)}
