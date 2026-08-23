@@ -1,6 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { matchPeople } from "./types";
+import { matchPeople, unionKindLabel } from "./types";
 import {
   addChild,
   addParent,
@@ -13,6 +13,7 @@ import {
   addSibling,
   addUnlinkedPerson,
   linkExisting,
+  unlinkExisting,
   parseTreeJson,
   serializeTreeJson,
   setFocus,
@@ -201,6 +202,27 @@ describe("self-serve mutations", () => {
     const jordan = tree.people.find((p) => p.givenName === "Jordan")!.id;
     tree = setFocus(tree, jordan);
     assert.equal(tree.focusPersonId, jordan);
+  });
+
+  it("names couple kinds and can unlink a partner", () => {
+    assert.equal(unionKindLabel("separated"), "Two households / separated");
+    let tree = startWithName("Edson");
+    const edson = tree.people[0].id;
+    tree = addPartner(tree, edson, "Andreia", "married");
+    const andreia = tree.people.find((p) => p.givenName === "Andreia")!.id;
+    assert.equal(tree.unions[0].kind, "married");
+    tree = unlinkExisting(tree, edson, andreia, "partner");
+    assert.equal(tree.unions.length, 0);
+  });
+
+  it("links a named father or mother", () => {
+    let tree = startWithName("Jean");
+    const jean = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Edson");
+    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
+    tree = linkExisting(tree, jean, edson, "parent", undefined, "father");
+    assert.equal(parentsOf(tree, jean)[0].id, edson);
+    assert.equal(tree.childLinks[0].roles?.[edson], "father");
   });
 });
 

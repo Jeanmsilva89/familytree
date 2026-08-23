@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import type { LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
+import type { LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName } from "@/lib/types";
 import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
 import { centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround } from "@/lib/graphView";
+import { LinkRolePicker } from "./LinkRolePicker";
 
 type Port = "parent" | "partner" | "child";
 
@@ -15,7 +16,7 @@ type Props = {
   onOpen: (person: Person) => void;
   fitKey?: string | number | boolean;
   editMode?: boolean;
-  onLink?: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind) => void | Promise<void>;
+  onLink?: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole) => void | Promise<void>;
   onUnlink?: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => void | Promise<void>;
 };
 
@@ -200,11 +201,7 @@ export function TreeCanvas({
     const pt = worldPoint(clientX, clientY);
     const target = cardAt(pt.x, pt.y);
     if (!target || target.id === start.fromId) return;
-    if (start.port === "partner") {
-      setPartnerPick({ fromId: start.fromId, toId: target.id });
-      return;
-    }
-    await onLink(start.fromId, target.id, start.port);
+    setPartnerPick({ fromId: start.fromId, toId: target.id });
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
@@ -509,32 +506,29 @@ export function TreeCanvas({
       ) : null}
       {partnerPick ? (
         <div className="graph-pick" role="dialog" aria-label="How they fit">
-          <p>
-            {displayName(tree.people.find((p) => p.id === partnerPick.fromId) ?? { givenName: "This person", id: "", createdAt: "", updatedAt: "" })}
-            {" + "}
-            {displayName(tree.people.find((p) => p.id === partnerPick.toId) ?? { givenName: "them", id: "", createdAt: "", updatedAt: "" })}
-          </p>
-          <button
-            type="button"
-            className="btn primary"
-            onClick={async () => {
-              await onLink?.(partnerPick.fromId, partnerPick.toId, "partner", "married");
+          <LinkRolePicker
+            from={
+              tree.people.find((p) => p.id === partnerPick.fromId) ?? {
+                givenName: "This person",
+                id: "",
+                createdAt: "",
+                updatedAt: "",
+              }
+            }
+            to={
+              tree.people.find((p) => p.id === partnerPick.toId) ?? {
+                givenName: "them",
+                id: "",
+                createdAt: "",
+                updatedAt: "",
+              }
+            }
+            onPick={async (role, kind, parentRole) => {
+              await onLink?.(partnerPick.fromId, partnerPick.toId, role, kind, parentRole);
               setPartnerPick(null);
             }}
-          >
-            Married
-          </button>
-          <button
-            type="button"
-            className="btn"
-            onClick={async () => {
-              await onLink?.(partnerPick.fromId, partnerPick.toId, "partner", "partnered");
-              setPartnerPick(null);
-            }}
-          >
-            Partnered
-          </button>
-          <button type="button" className="btn ghost" onClick={() => setPartnerPick(null)}>Cancel</button>
+            onCancel={() => setPartnerPick(null)}
+          />
         </div>
       ) : null}
       <div className="graph-zoom" role="group" aria-label="Zoom">

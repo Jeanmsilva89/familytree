@@ -4,6 +4,18 @@ export type ExtraField = {
 };
 
 export type UnionKind = "unspecified" | "partnered" | "married" | "separated";
+export type ParentRole = "father" | "mother";
+
+export const UNION_KIND_OPTIONS: { value: UnionKind; label: string }[] = [
+  { value: "married", label: "Married" },
+  { value: "partnered", label: "Partnered" },
+  { value: "separated", label: "Two households / separated" },
+  { value: "unspecified", label: "Unspecified" },
+];
+
+export function unionKindLabel(kind: UnionKind): string {
+  return UNION_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? "Unspecified";
+}
 
 export type ImportantDate = {
   id: string;
@@ -41,6 +53,7 @@ export type ChildLink = {
   childId: string;
   parentIds: string[];
   unionId?: string;
+  roles?: Partial<Record<string, ParentRole>>;
 };
 
 export type TreeData = {

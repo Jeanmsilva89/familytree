@@ -1,4 +1,4 @@
-import type { ChildLink, LinkRole, Person, TreeData, Union, UnionKind } from "./types";
+import type { ChildLink, LinkRole, ParentRole, Person, TreeData, Union, UnionKind } from "./types";
 import { emptyTree } from "./types";
 import { newId, nowIso } from "./ids";
 
@@ -259,6 +259,7 @@ export function linkExisting(
   otherId: string,
   role: LinkRole,
   kind: UnionKind = "partnered",
+  parentRole?: ParentRole,
 ): TreeData {
   if (personId === otherId) throw new Error("Cannot link a person to themselves.");
   const person = getPerson(tree, personId);
@@ -275,12 +276,21 @@ export function linkExisting(
   }
 
   if (role === "parent") {
+    const withRole = (link: ChildLink): ChildLink => {
+      if (!parentRole) return link;
+      return { ...link, roles: { ...link.roles, [otherId]: parentRole } };
+    };
     const existing = tree.childLinks.find((link) => link.childId === personId);
     if (!existing) {
-      const link: ChildLink = { id: newId("c"), childId: personId, parentIds: [otherId] };
+      const link = withRole({ id: newId("c"), childId: personId, parentIds: [otherId] });
       return { ...tree, childLinks: [...tree.childLinks, link] };
     }
-    if (existing.parentIds.includes(otherId)) return tree;
+    if (existing.parentIds.includes(otherId)) {
+      return {
+        ...tree,
+        childLinks: tree.childLinks.map((l) => (l.id === existing.id ? withRole(l) : l)),
+      };
+    }
     if (existing.parentIds.length === 1) {
       const otherParentId = existing.parentIds[0];
       let unions = tree.unions;
@@ -298,11 +308,11 @@ export function linkExisting(
         ...tree,
         unions,
         childLinks: tree.childLinks.map((l) =>
-          l.id === existing.id ? { ...existing, parentIds: [otherParentId, otherId], unionId } : l,
+          l.id === existing.id ? withRole({ ...existing, parentIds: [otherParentId, otherId], unionId }) : l,
         ),
       };
     }
-    const link: ChildLink = { id: newId("c"), childId: personId, parentIds: [otherId] };
+    const link = withRole({ id: newId("c"), childId: personId, parentIds: [otherId] });
     return { ...tree, childLinks: [...tree.childLinks, link] };
   }
 
@@ -358,7 +368,10 @@ export function unlinkExisting(
       if (link.childId !== childId || !link.parentIds.includes(parentId)) return [link];
       const parentIds = link.parentIds.filter((id) => id !== parentId);
       if (!parentIds.length) return [];
-      return [{ ...link, parentIds, unionId: parentIds.length > 1 ? link.unionId : undefined }];
+      const roles = link.roles
+        ? Object.fromEntries(Object.entries(link.roles).filter(([id]) => parentIds.includes(id)))
+        : undefined;
+      return [{ ...link, parentIds, roles: roles && Object.keys(roles).length ? roles : undefined, unionId: parentIds.length > 1 ? link.unionId : undefined }];
     }),
   };
 }

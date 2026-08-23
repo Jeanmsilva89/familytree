@@ -19,7 +19,7 @@ import {
   unlinkExisting,
   updatePerson,
 } from "@/lib/tree";
-import type { LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
+import type { LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { emptyTree } from "@/lib/types";
 
 export function useTree() {
@@ -109,8 +109,8 @@ export function useTree() {
   );
 
   const link = useCallback(
-    async (personId: string, otherId: string, role: LinkRole, kind?: UnionKind) =>
-      mutate((current) => linkExisting(current, personId, otherId, role, kind)),
+    async (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole) =>
+      mutate((current) => linkExisting(current, personId, otherId, role, kind, parentRole)),
     [mutate],
   );
 
