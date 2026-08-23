@@ -76,6 +76,7 @@ export function TreeApp() {
     const stored = window.localStorage.getItem(VIEW_KEY);
     if (stored === "family" || stored === "graph") {
       setMobileView(stored);
+      if (stored === "graph") setGraphOpen(true);
       return;
     }
     setMobileView(window.matchMedia("(max-width: 719px)").matches ? "family" : "graph");
@@ -91,7 +92,8 @@ export function TreeApp() {
       if (graphOpen) {
         setGraphOpen(false);
         setGraphEdit(false);
-        setHighlighted(undefined);
+        setMobileView("family");
+        window.localStorage.setItem(VIEW_KEY, "family");
       }
     };
     window.addEventListener("keydown", onKey);
@@ -101,6 +103,18 @@ export function TreeApp() {
   const chooseView = (next: "family" | "graph") => {
     setMobileView(next);
     window.localStorage.setItem(VIEW_KEY, next);
+    if (next === "graph") {
+      setGraphOpen(true);
+      return;
+    }
+    setGraphOpen(false);
+    setGraphEdit(false);
+  };
+
+  const closeVisualize = () => {
+    setGraphOpen(false);
+    setGraphEdit(false);
+    chooseView("family");
   };
 
   const exportGedcom = useCallback(() => {
@@ -158,6 +172,7 @@ export function TreeApp() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         onPeople={() => { setPeopleOpen(true); setMenuOpen(false); }}
+        onVisualize={() => { setMenuOpen(false); chooseView("graph"); }}
         onAddSomeone={async (name) => { await treeState.unlinked(name); setMenuOpen(false); }}
         onExport={exportGedcom}
         onImport={() => { fileRef.current?.click(); setMenuOpen(false); }}
@@ -184,33 +199,23 @@ export function TreeApp() {
         <>
           <div className="view-toggle" role="tablist" aria-label="Tree view">
             <button type="button" role="tab" aria-selected={mobileView === "family"} className={mobileView === "family" ? "btn primary" : "btn ghost"} onClick={() => chooseView("family")}>Family</button>
-            <button type="button" role="tab" aria-selected={mobileView === "graph"} className={mobileView === "graph" ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Graph</button>
+            <button type="button" role="tab" aria-selected={graphOpen || mobileView === "graph"} className={graphOpen || mobileView === "graph" ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Visualize</button>
           </div>
-          {lookingName && mobileView === "family" ? <p className="looking-at" aria-live="polite">Looking at {lookingName}</p> : null}
-          {mobileView === "family" ? (
-            <FocusFamily
-              tree={treeState.tree}
-              onFocus={(id) => {
-                void treeState.focus(id);
-                const person = treeState.tree.people.find((p) => p.id === id);
-                if (person) setHighlighted(person);
-              }}
-              onOpen={setSheetPerson}
-              onAddParent={treeState.parent}
-              onAddPartner={treeState.partner}
-              onAddChild={treeState.child}
-              onAddSibling={treeState.sibling}
-              onLinkExisting={treeState.link}
-            />
-          ) : (
-            <div className="graph-intro">
-              <h2>Our family</h2>
-              <p>Open the graph to see everyone on one canvas.</p>
-              <button type="button" className="btn primary graph-open" onClick={() => setGraphOpen(true)}>
-                Open
-              </button>
-            </div>
-          )}
+          {lookingName ? <p className="looking-at" aria-live="polite">Looking at {lookingName}</p> : null}
+          <FocusFamily
+            tree={treeState.tree}
+            onFocus={(id) => {
+              void treeState.focus(id);
+              const person = treeState.tree.people.find((p) => p.id === id);
+              if (person) setHighlighted(person);
+            }}
+            onOpen={setSheetPerson}
+            onAddParent={treeState.parent}
+            onAddPartner={treeState.partner}
+            onAddChild={treeState.child}
+            onAddSibling={treeState.sibling}
+            onLinkExisting={treeState.link}
+          />
         </>
       )}
 
@@ -220,11 +225,7 @@ export function TreeApp() {
             <button
               type="button"
               className="btn"
-              onClick={() => {
-                setGraphOpen(false);
-                setGraphEdit(false);
-                setHighlighted(undefined);
-              }}
+              onClick={closeVisualize}
             >
               Close
             </button>
