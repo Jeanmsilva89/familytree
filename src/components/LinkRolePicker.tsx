@@ -32,17 +32,17 @@ export function LinkRolePicker({ from, to, showSibling, onPick, onCancel }: Prop
       ))}
       <p className="pick-label">Family</p>
       <button type="button" className="btn" onClick={() => void onPick("parent", undefined, "father")}>
-        {toName} is {fromName}'s father
+        {`${toName} is ${fromName}’s father`}
       </button>
       <button type="button" className="btn" onClick={() => void onPick("parent", undefined, "mother")}>
-        {toName} is {fromName}'s mother
+        {`${toName} is ${fromName}’s mother`}
       </button>
       <button type="button" className="btn" onClick={() => void onPick("child")}>
-        {toName} is {fromName}'s child
+        {`${toName} is ${fromName}’s child`}
       </button>
       {showSibling ? (
         <button type="button" className="btn" onClick={() => void onPick("sibling")}>
-          {toName} is {fromName}'s sibling
+          {`${toName} is ${fromName}’s sibling`}
         </button>
       ) : null}
       <button type="button" className="btn ghost" onClick={onCancel}>
