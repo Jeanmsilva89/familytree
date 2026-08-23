@@ -469,6 +469,16 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
 
   const placedXs = [...places.values()].map((p) => p.x).filter(finiteNumber);
   let extraX = (placedXs.length ? Math.max(...placedXs) : 0) + CARD.w + CARD.gap * 3;
+  for (const union of tree.unions) {
+    if (!showsCoupleBar(union.kind, union.partnerIds.length)) continue;
+    const members = union.partnerIds.filter((id) => personById(tree, id) && !places.has(id));
+    if (members.length < 2) continue;
+    const gen = kinGen.get(members[0]) ?? 0;
+    const mid = extraX + unitWidth(members.length) / 2;
+    placeCouple(places, members, gen, mid);
+    members.forEach((id) => placed.add(id));
+    extraX += unitWidth(members.length) + CARD.gap;
+  }
   for (const person of tree.people) {
     if (places.has(person.id)) continue;
     places.set(person.id, { x: extraX, gen: kinGen.get(person.id) ?? 0 });
@@ -566,6 +576,44 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     placeCouple(places, ordered, unit.gen, mid);
   };
 
+  const cohereCouples = () => {
+    const rank = (union: (typeof tree.unions)[number]) => {
+      const kids = kidsUnderUnion(tree, union).length;
+      const home = union.partnerIds.some((id) => householdSet.has(id)) ? 8 : 0;
+      const kind = union.kind === "married" ? 4 : union.kind === "partnered" ? 2 : 0;
+      return home + (kids ? 6 : 0) + kind;
+    };
+    const seated = new Set<string>();
+    const unions = tree.unions
+      .filter((union) => showsCoupleBar(union.kind, union.partnerIds.length))
+      .slice()
+      .sort((a, b) => rank(b) - rank(a));
+    for (const union of unions) {
+      const members = union.partnerIds.filter((id) => places.has(id));
+      if (members.length < 2) continue;
+      if (members.some((id) => seated.has(id))) continue;
+      const gens = members.map((id) => places.get(id)!.gen);
+      let gen = gens[0];
+      if (gens.some((g) => g !== gen)) {
+        const anchor =
+          members.find((id) => householdSet.has(id)) ??
+          members.find((id) => reserved.has(id)) ??
+          members[0];
+        gen = places.get(anchor)!.gen;
+        const childless = (id: string) =>
+          !tree.childLinks.some((link) => link.parentIds.includes(id));
+        for (const id of members) {
+          if (id === anchor || householdSet.has(id)) continue;
+          if (childless(id)) places.get(id)!.gen = gen;
+        }
+        if (members.some((id) => places.get(id)!.gen !== gen)) continue;
+      }
+      const ordered = [...members].sort((a, b) => (places.get(a)?.x ?? 0) - (places.get(b)?.x ?? 0));
+      placeCouple(places, ordered, gen, avgX(ordered));
+      members.forEach((id) => seated.add(id));
+    }
+  };
+
   const parentKidGroups = (): { parents: string[]; kids: string[]; parentGen: number }[] => {
     const groups: { parents: string[]; kids: string[]; parentGen: number }[] = [];
     const seen = new Set<string>();
@@ -658,14 +706,19 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     }
   };
 
+  cohereCouples();
   alignParentsToKids();
+  cohereCouples();
   for (const gen of gens) separateUnits(gen);
   alignParentsToKids();
+  cohereCouples();
   for (const gen of gens) separateUnits(gen);
   pushFamilySides();
   faceInlawsOutward();
+  cohereCouples();
   for (const gen of gens) separateUnits(gen);
   pushFamilySides();
+  cohereCouples();
 
   const xs = [...places.values()].map((p) => p.x).filter(finiteNumber);
   if (!xs.length) return emptyGraph();
@@ -673,7 +726,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   const shift = CARD.pad + CARD.w / 2 - minX;
   for (const place of places.values()) place.x += shift;
 
-  const maxGen = Math.max(...gens);
+  const maxGen = Math.max(...[...places.values()].map((p) => p.gen).filter(finiteNumber));
   const cards: LaidCard[] = tree.people.flatMap((person) => {
     const place = places.get(person.id);
     if (!place) return [];

@@ -273,5 +273,34 @@ describe("graph layout", () => {
     assert.ok(card("edson").x < card("leah").x);
     assert.ok((card("bob").x + card("sue").x) / 2 > card("jean").x);
   });
+
+  it("sits a childless married couple together with a visible marriage bar", () => {
+    const family: TreeData = {
+      focusPersonId: "jean",
+      people: [
+        person("jean", "Jean"),
+        person("leah", "Leah"),
+        person("jay", "Jay"),
+        person("rosana", "Rosana"),
+      ],
+      unions: [
+        { id: "u-home", partnerIds: ["jean", "leah"], kind: "partnered" },
+        { id: "u-jr", partnerIds: ["jay", "rosana"], kind: "married" },
+      ],
+      childLinks: [],
+    };
+    const layout = buildGraph(family, "jean");
+    const jay = layout.cards.find((c) => c.id === "jay")!;
+    const rosana = layout.cards.find((c) => c.id === "rosana")!;
+    assert.equal(jay.gen, rosana.gen);
+    assert.ok(
+      Math.abs(jay.x - rosana.x) <= CARD.w + CARD.coupleGap + 0.51,
+      `Jay and Rosana should sit together (dx=${Math.abs(jay.x - rosana.x)})`,
+    );
+    const couple = layout.couples.find((c) => c.id === "u-jr");
+    assert.ok(couple, "childless marriage should still be a couple unit");
+    assert.equal(couple?.bar, true);
+    assert.equal(couple?.kind, "married");
+  });
 });
 
