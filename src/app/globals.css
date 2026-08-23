@@ -470,17 +470,21 @@ button { cursor: pointer; }
   position: absolute;
   left: 12px;
   right: 12px;
-  bottom: calc(64px + var(--safe-bottom));
-  z-index: 7;
+  top: calc(152px + var(--safe-top));
+  bottom: calc(76px + var(--safe-bottom));
+  z-index: 8;
   display: grid;
+  align-content: start;
   gap: 8px;
   padding: 14px;
   border-radius: 18px;
   background: var(--card);
   box-shadow: var(--shadow);
   border: 1px solid var(--line);
-  max-height: min(72vh, 560px);
-  overflow: auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 .graph-pick p { margin: 0; font-weight: 700; }
 .pick-label {
