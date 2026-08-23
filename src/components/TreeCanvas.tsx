@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, type PointerEvent } from "react";
 import type { Person, TreeData } from "@/lib/types";
 import { displayName } from "@/lib/types";
 import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
-import { centerTransform, fitContentScale } from "@/lib/graphView";
+import { centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround } from "@/lib/graphView";
 
 type Props = {
   tree: TreeData;
@@ -15,14 +15,11 @@ type Props = {
 };
 
 type View = { x: number; y: number; s: number };
+type PinchStart = View & { dist: number; midX: number; midY: number };
 
 function kinPath(fromX: number, fromY: number, toX: number, toY: number): string {
   const midY = fromY + Math.max(16, (toY - fromY) * 0.5);
   return `M ${fromX} ${fromY} C ${fromX} ${midY}, ${toX} ${midY}, ${toX} ${toY}`;
-}
-
-function clampScale(s: number) {
-  return Math.min(2.2, Math.max(0.45, s));
 }
 
 function isFiniteBox(x: number, y: number, w?: number, h?: number) {
@@ -48,7 +45,8 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
   const viewRef = useRef<View>({ x: 40, y: 24, s: 1 });
   const pointers = useRef(new Map<number, { x: number; y: number }>());
   const drag = useRef<{ id: number; x: number; y: number; vx: number; vy: number } | null>(null);
-  const pinch = useRef<{ dist: number; s: number } | null>(null);
+  const pinch = useRef<PinchStart | null>(null);
+  const suppressTap = useRef(false);
   const raf = useRef<number | null>(null);
 
   function applyWorld() {
@@ -64,6 +62,28 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
       raf.current = null;
       applyWorld();
     });
+  }
+
+  function stagePoint(clientX: number, clientY: number) {
+    const stage = stageRef.current;
+    if (!stage) return { x: clientX, y: clientY };
+    const rect = stage.getBoundingClientRect();
+    return { x: clientX - rect.left, y: clientY - rect.top };
+  }
+
+  function pinchSnapshot(): PinchStart | null {
+    const pts = activePoints();
+    if (pts.length < 2) return null;
+    const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+    if (dist < 8) return null;
+    const a = stagePoint(pts[0].x, pts[0].y);
+    const b = stagePoint(pts[1].x, pts[1].y);
+    return {
+      ...viewRef.current,
+      dist,
+      midX: (a.x + b.x) / 2,
+      midY: (a.y + b.y) / 2,
+    };
   }
 
   function fitToView() {
@@ -83,7 +103,10 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
   }
 
   function zoomBy(factor: number) {
-    viewRef.current.s = clampScale(viewRef.current.s * factor);
+    const stage = stageRef.current;
+    const cx = (stage?.clientWidth ?? 360) / 2;
+    const cy = (stage?.clientHeight ?? 480) / 2;
+    viewRef.current = scaleAround(viewRef.current, cx, cy, viewRef.current.s * factor);
     scheduleApply();
   }
 
@@ -100,7 +123,8 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
     if (!stage) return;
     const onWheel = (event: WheelEvent) => {
       if (event.cancelable) event.preventDefault();
-      viewRef.current.s = clampScale(viewRef.current.s * (event.deltaY < 0 ? 1.08 : 0.92));
+      const pt = stagePoint(event.clientX, event.clientY);
+      viewRef.current = scaleAround(viewRef.current, pt.x, pt.y, viewRef.current.s * (event.deltaY < 0 ? 1.08 : 0.92));
       scheduleApply();
     };
     stage.addEventListener("wheel", onWheel, { passive: false });
@@ -108,6 +132,7 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
   }, []);
 
   function tapCard(person: Person) {
+    if (suppressTap.current) return;
     if (highlightedId === person.id) onOpen(person);
     else onHighlight(person);
   }
@@ -117,16 +142,13 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (pointers.current.size === 0) suppressTap.current = false;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     if (pointers.current.size >= 2) {
       drag.current = null;
-      const [a, b] = activePoints();
-      const dist = Math.hypot(a.x - b.x, a.y - b.y);
-      if (dist < 8) {
-        pinch.current = null;
-        return;
-      }
-      pinch.current = { dist, s: viewRef.current.s };
+      suppressTap.current = true;
+      stageRef.current?.setPointerCapture(event.pointerId);
+      pinch.current = pinchSnapshot();
       return;
     }
     if ((event.target as HTMLElement).closest(".portrait-card, .graph-zoom")) return;
@@ -145,10 +167,13 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
     }
     if (pinch.current && pointers.current.size >= 2) {
-      const [a, b] = activePoints();
-      const dist = Math.hypot(a.x - b.x, a.y - b.y);
+      const pts = activePoints();
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
       if (dist < 8) return;
-      viewRef.current.s = clampScale((pinch.current.s * dist) / pinch.current.dist);
+      const a = stagePoint(pts[0].x, pts[0].y);
+      const b = stagePoint(pts[1].x, pts[1].y);
+      viewRef.current = pinchCamera(pinch.current, dist, (a.x + b.x) / 2, (a.y + b.y) / 2);
+      suppressTap.current = true;
       scheduleApply();
       return;
     }
@@ -166,7 +191,7 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
     if (start && start.id === event.pointerId) {
       const moved = Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y);
       drag.current = null;
-      if (moved < 8 && !(event.target as HTMLElement).closest(".portrait-card, .graph-zoom")) {
+      if (moved < 8 && !suppressTap.current && !(event.target as HTMLElement).closest(".portrait-card, .graph-zoom")) {
         onHighlight(undefined);
       }
     }
@@ -243,17 +268,19 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen, fitKey }:
           })}
         </svg>
 
-        {layout.couples.filter((c) => c.bar && c.partnerIds.some((id) => household.has(id))).map((couple) => {
+        {layout.couples.filter((c) => c.bar).map((couple) => {
           const pair = couple.partnerIds.map((id) => cards.find((card) => card.id === id)).filter(Boolean) as typeof cards;
           if (pair.length < 2) return null;
-          if (!pair.every((c) => household.has(c.person.id))) return null;
-          const minX = Math.min(...pair.map((c) => c.x)) - CARD.w / 2 - 6;
-          const maxX = Math.max(...pair.map((c) => c.x)) + CARD.w / 2 + 6;
-          const y = Math.min(...pair.map((c) => c.y)) - 6;
-          const width = maxX - minX;
-          const height = CARD.h + 12;
-          if (!isFiniteBox(minX, y, width, height)) return null;
-          return <div key={`${couple.id}-home`} className="couple-tint is-home" style={{ left: minX, top: y, width, height }} />;
+          const box = coupleTintBox(pair);
+          if (!box || !isFiniteBox(box.left, box.top, box.width, box.height)) return null;
+          const isHome = pair.every((c) => household.has(c.person.id));
+          return (
+            <div
+              key={`${couple.id}-tint`}
+              className={`couple-tint${isHome ? " is-home" : ""}`}
+              style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+            />
+          );
         })}
 
         {cards.map((card) => {
