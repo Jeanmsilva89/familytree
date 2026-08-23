@@ -382,6 +382,7 @@ export function TreeCanvas({
             if (x2 <= x1 || !isFiniteBox(x1, couple.cy, x2)) return null;
             const barLit = Boolean(linked && couple.partnerIds.every((id) => linked.has(id)));
             const w = lineWeight(barLit);
+            const married = couple.kind === "married";
             return (
               <g key={couple.id}>
                 <line
@@ -390,7 +391,7 @@ export function TreeCanvas({
                   x2={x2}
                   y2={couple.cy}
                   stroke="var(--graph-spouse)"
-                  strokeWidth={w.width + 0.4}
+                  strokeWidth={w.width + (married ? 1.6 : 0.4)}
                   strokeOpacity={w.opacity}
                   strokeLinecap="round"
                 />
@@ -437,7 +438,7 @@ export function TreeCanvas({
           return (
             <div
               key={`${couple.id}-tint`}
-              className={`couple-tint${isHome ? " is-home" : ""}`}
+              className={`couple-tint${isHome ? " is-home" : ""}${couple.kind === "married" ? " is-married" : ""}`}
               style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
             />
           );

@@ -521,6 +521,10 @@ button { cursor: pointer; }
   border: 1.5px solid color-mix(in srgb, var(--accent) 58%, transparent);
   background: color-mix(in srgb, var(--accent) 16%, var(--couple-fill));
 }
+.couple-tint.is-married {
+  border: 2px solid color-mix(in srgb, var(--graph-spouse) 72%, var(--line-ink));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--graph-spouse) 24%, transparent);
+}
 
 .portrait-card {
   appearance: none;
