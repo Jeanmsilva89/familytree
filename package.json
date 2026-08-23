@@ -12,6 +12,7 @@
     "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts src/lib/generations.test.ts src/lib/graphView.test.ts src/lib/persist.test.ts"
   },
   "dependencies": {
+    "@vercel/analytics": "^2.0.1",
     "idb": "^8.0.3",
     "next": "^15.4.6",
     "react": "^19.1.1",
