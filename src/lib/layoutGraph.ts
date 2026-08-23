@@ -1,5 +1,6 @@
 import type { Person, TreeData } from "./types";
-import { kidsUnderUnion, unionsFor } from "./tree";
+import { strongestKin, type KinKind } from "./types";
+import { kidsUnderUnion, kinBetween, unionsFor } from "./tree";
 import {
   CARD,
   computeGenerations,
@@ -285,8 +286,26 @@ function makeFork(id: string, parents: LaidCard[], children: LaidCard[], dotted:
     railLeft: Math.min(...childXs, stemX),
     railRight: Math.max(...childXs, stemX),
     stemX,
-    parentDrops: parents.map((p) => ({ x: p.x, y0: p.y + CARD.h })),
-    childDrops: children.map((c) => ({ x: c.x, y1: c.y, childId: c.id })),
+    parentDrops: parents.map((p) => ({ x: p.x, y0: p.y + CARD.h, parentId: p.id, kin: "blood" as KinKind })),
+    childDrops: children.map((c) => ({ x: c.x, y1: c.y, childId: c.id, kin: "blood" as KinKind })),
+    kin: "blood",
+  };
+}
+
+function annotateFork(fork: LaidFork, tree: TreeData): LaidFork {
+  const parentDrops = fork.parentDrops.map((drop) => ({
+    ...drop,
+    kin: strongestKin(fork.childIds.map((childId) => kinBetween(tree, childId, drop.parentId))),
+  }));
+  const childDrops = fork.childDrops.map((drop) => ({
+    ...drop,
+    kin: strongestKin(fork.parentIds.map((parentId) => kinBetween(tree, drop.childId, parentId))),
+  }));
+  return {
+    ...fork,
+    parentDrops,
+    childDrops,
+    kin: strongestKin([...parentDrops.map((drop) => drop.kin), ...childDrops.map((drop) => drop.kin)]),
   };
 }
 
@@ -940,7 +959,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   let forkN = 0;
   for (const group of grouped.values()) {
     const fork = makeFork(`fork-${forkN++}`, group.parents, group.children, group.dotted);
-    if (fork) forks.push(fork);
+    if (fork) forks.push(annotateFork(fork, tree));
   }
 
   const maxCardX = Math.max(...cards.map((c) => c.x)) + CARD.w / 2 + CARD.pad;

@@ -1,4 +1,4 @@
-import type { Person, TreeData, Union, UnionKind } from "./types";
+import type { KinKind, Person, TreeData, Union, UnionKind } from "./types";
 import { displayName } from "./types";
 import { kidsUnderUnion, parentsOf, unionsFor } from "./tree";
 
@@ -50,6 +50,7 @@ export type LaidFork = {
   parentIds: string[];
   childIds: string[];
   dotted: boolean;
+  kin: KinKind;
   joinY: number;
   railY: number;
   joinLeft: number;
@@ -57,8 +58,8 @@ export type LaidFork = {
   railLeft: number;
   railRight: number;
   stemX: number;
-  parentDrops: { x: number; y0: number }[];
-  childDrops: { x: number; y1: number; childId: string }[];
+  parentDrops: { x: number; y0: number; parentId: string; kin: KinKind }[];
+  childDrops: { x: number; y1: number; childId: string; kin: KinKind }[];
 };
 
 export type GraphLayout = {

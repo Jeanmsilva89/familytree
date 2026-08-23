@@ -27,13 +27,32 @@
  *   1 _KV / 2 _VAL
  *   1 _UID <stable id>
  */
-import type { ChildLink, ExtraField, Person, TreeData, Union, UnionKind } from "./types";
-import { cleanExtras, emptyTree } from "./types";
+import type { ChildLink, ExtraField, KinKind, Person, TreeData, Union, UnionKind } from "./types";
+import { cleanExtras, emptyTree, kinOf } from "./types";
 import { newId, nowIso } from "./ids";
 
 type GedLine = { level: number; xref?: string; tag: string; value: string };
 
 const KIN_VERSION = "1.0";
+
+function parseKinTag(value: string): KinKind | undefined {
+  const v = value.trim().toLowerCase();
+  if (v === "blood" || v === "birth") return "blood";
+  if (v === "adopted" || v === "adoption") return "adopted";
+  if (v === "step") return "step";
+  if (v === "foster") return "foster";
+  return undefined;
+}
+
+function pediToKin(value: string): KinKind {
+  return parseKinTag(value) ?? "blood";
+}
+
+function kinToPedi(kin: KinKind): string | undefined {
+  if (kin === "adopted") return "adopted";
+  if (kin === "foster") return "foster";
+  return undefined;
+}
 
 function parseLines(text: string): GedLine[] {
   const lines: GedLine[] = [];
@@ -226,7 +245,7 @@ export function parseGedcom(text: string): TreeData {
     const line = lines[i];
     if (line.level === 0 && line.tag === "FAM" && line.xref) {
       const partners: string[] = [];
-      const children: string[] = [];
+      const children: { id: string; kin?: Partial<Record<string, KinKind>> }[] = [];
       const events: string[] = [line.tag];
       const extras: ExtraField[] = [];
       let kindTag: string | undefined;
@@ -241,8 +260,36 @@ export function parseGedcom(text: string): TreeData {
           i += 1;
         } else if (cur.level === 1 && cur.tag === "CHIL") {
           const cid = xrefToId.get(cur.value.trim());
-          if (cid) children.push(cid);
+          const kin: Partial<Record<string, KinKind>> = {};
+          let allKin: KinKind | undefined;
           i += 1;
+          while (i < lines.length && lines[i].level > 1) {
+            const nested = lines[i];
+            if (nested.tag === "PEDI") {
+              allKin = pediToKin(nested.value);
+              i += 1;
+            } else if (nested.tag === "_KIN") {
+              allKin = parseKinTag(nested.value) ?? allKin;
+              i += 1;
+            } else if (nested.tag === "_FROM") {
+              const pid = xrefToId.get(nested.value.trim());
+              let pk: KinKind = "blood";
+              i += 1;
+              while (i < lines.length && lines[i].level > nested.level) {
+                if (lines[i].tag === "_KIN") pk = parseKinTag(lines[i].value) ?? pk;
+                i += 1;
+              }
+              if (pid) kin[pid] = pk;
+            } else {
+              i += 1;
+            }
+          }
+          if (cid) {
+            if (allKin && allKin !== "blood") {
+              for (const pid of partners) if (!kin[pid]) kin[pid] = allKin;
+            }
+            children.push({ id: cid, kin: Object.keys(kin).length ? kin : undefined });
+          }
         } else if (cur.level === 1 && cur.tag === "_KIND") {
           kindTag = cur.value.trim();
           i += 1;
@@ -282,12 +329,13 @@ export function parseGedcom(text: string): TreeData {
             }
           : undefined;
       if (union) unions.push(union);
-      for (const childId of children) {
+      for (const child of children) {
         childLinks.push({
           id: newId("c"),
-          childId,
+          childId: child.id,
           parentIds: partners.length ? partners : [],
           unionId: union?.id,
+          kin: child.kin,
         });
       }
       continue;
@@ -417,7 +465,28 @@ export function serializeGedcom(tree: TreeData): string {
     emitKv(lines, fam.union?.extras);
     for (const childId of fam.children) {
       const cx = idToXref.get(childId);
-      if (cx) lines.push(`1 CHIL ${cx}`);
+      if (!cx) continue;
+      lines.push(`1 CHIL ${cx}`);
+      const link = tree.childLinks.find(
+        (item) => item.childId === childId && fam.partners.every((id) => item.parentIds.includes(id)),
+      );
+      if (!link) continue;
+      const kinds = fam.partners.map((pid) => kinOf(link, pid));
+      const same = kinds.length > 0 && kinds.every((k) => k === kinds[0]);
+      if (same && kinds[0] !== "blood") {
+        const pedi = kinToPedi(kinds[0]);
+        if (pedi) lines.push(`2 PEDI ${pedi}`);
+        lines.push(`2 _KIN ${kinds[0]}`);
+      } else if (!same) {
+        for (const pid of fam.partners) {
+          const k = kinOf(link, pid);
+          if (k === "blood") continue;
+          const px = idToXref.get(pid);
+          if (!px) continue;
+          lines.push(`2 _FROM ${px}`);
+          lines.push(`3 _KIN ${k}`);
+        }
+      }
     }
   }
 

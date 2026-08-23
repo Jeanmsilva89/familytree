@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { parseGedcom, serializeGedcom } from "./gedcom";
-import { addChild, addPartner, linkExisting, startWithName, unlinkExisting, updatePerson, updateUnion } from "./tree";
+import { addChild, addPartner, addUnlinkedPerson, linkExisting, startWithName, unlinkExisting, updatePerson, updateUnion } from "./tree";
 
 describe("gedcom", () => {
   it("roundtrips people, partners, and children", () => {
@@ -99,5 +99,19 @@ describe("gedcom", () => {
     assert.equal(tree.unions.length, 0);
     assert.equal(tree.childLinks.length, 1);
     assert.ok(tree.people.some((p) => p.givenName === "Rosana"));
+  });
+
+  it("roundtrips adopted and step parent links", () => {
+    let tree = startWithName("Andressa");
+    const andressa = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Edson");
+    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
+    tree = linkExisting(tree, andressa, edson, "parent", undefined, "father", "step");
+    const text = serializeGedcom(tree);
+    assert.match(text, /2 _KIN step/);
+    const imported = parseGedcom(text);
+    const link = imported.childLinks.find((item) => item.childId === andressa);
+    const dad = imported.people.find((p) => p.givenName === "Edson")!;
+    assert.equal(link?.kin?.[dad.id], "step");
   });
 });

@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
-import type { LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
-import { displayName } from "@/lib/types";
+import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
+import { displayName, kinKindLabel } from "@/lib/types";
 import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
 import { centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround } from "@/lib/graphView";
+import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
 import { LinkRolePicker } from "./LinkRolePicker";
 
 type Port = "parent" | "partner" | "child";
@@ -16,9 +17,10 @@ type Props = {
   onOpen: (person: Person) => void;
   fitKey?: string | number | boolean;
   editMode?: boolean;
-  onLink?: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole) => void | Promise<void>;
+  onLink?: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole, kin?: KinKind) => void | Promise<void>;
   onUnlink?: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => void | Promise<void>;
   onPlace?: (personId: string, x: number) => void | Promise<void>;
+  lineFilter?: LineFilter;
 };
 
 type View = { x: number; y: number; s: number };
@@ -53,6 +55,7 @@ export function TreeCanvas({
   onLink,
   onUnlink,
   onPlace,
+  lineFilter = DEFAULT_LINE_FILTER,
 }: Props) {
   const householdHint = tree.focusPersonId;
   const layout = useMemo(() => buildGraph(tree, householdHint), [tree, householdHint]);
@@ -346,10 +349,16 @@ export function TreeCanvas({
     return { width: 1.2, opacity: 0.12 };
   }
 
-  function forkWeight(lit: boolean, dotted: boolean) {
-    if (lit) return { width: dotted ? 1.8 : 2.2, opacity: 0.88 };
-    if (!linked) return { width: dotted ? 1.5 : 1.7, opacity: dotted ? 0.5 : 0.42 };
-    return { width: dotted ? 1.4 : 1.5, opacity: dotted ? 0.38 : 0.22 };
+  function kinStyle(kin: KinKind, lit: boolean, splitDotted: boolean) {
+    const dash =
+      kin === "step" ? "2 6" :
+      kin === "adopted" ? "7 5" :
+      kin === "foster" ? "8 4 2 4" :
+      splitDotted ? "5 7" : undefined;
+    const quiet = kin !== "blood";
+    if (lit) return { width: quiet ? 1.6 : splitDotted ? 1.8 : 2.2, opacity: quiet ? 0.55 : 0.88, dash };
+    if (!linked) return { width: quiet ? 1.3 : splitDotted ? 1.5 : 1.7, opacity: quiet ? 0.32 : splitDotted ? 0.5 : 0.42, dash };
+    return { width: quiet ? 1.15 : splitDotted ? 1.4 : 1.5, opacity: quiet ? 0.2 : splitDotted ? 0.38 : 0.22, dash };
   }
 
   async function unlinkKin(childId: string, parentIds: string[]) {
@@ -385,93 +394,125 @@ export function TreeCanvas({
       <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH, transform: "translate(40px, 24px) scale(1)" }}>
         <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
           {forks.map((fork) => {
+            const parents = fork.parentDrops.filter((drop) => lineFilterAllows(lineFilter, drop.kin));
+            const kids = fork.childDrops.filter((drop) => lineFilterAllows(lineFilter, drop.kin));
+            if (!parents.length || !kids.length) return null;
             const lit = Boolean(
               linked &&
-                (fork.parentIds.some((id) => linked.has(id)) || fork.childIds.some((id) => linked.has(id))),
+                (parents.some((drop) => linked.has(drop.parentId)) || kids.some((drop) => linked.has(drop.childId))),
             );
-            const w = forkWeight(lit, fork.dotted);
-            const dash = fork.dotted ? "5 7" : undefined;
+            const joinXs = parents.map((drop) => drop.x);
+            const railXs = kids.map((drop) => drop.x);
+            const stemX = joinXs.reduce((sum, n) => sum + n, 0) / joinXs.length;
+            const joinLeft = Math.min(...joinXs);
+            const joinRight = Math.max(...joinXs);
+            const railLeft = Math.min(...railXs, stemX);
+            const railRight = Math.max(...railXs, stemX);
+            const forkKin = kids.every((drop) => drop.kin === kids[0].kin) ? kids[0].kin : fork.kin;
+            const barStyle = kinStyle(forkKin, lit, fork.dotted && forkKin === "blood");
             return (
               <g key={fork.id} className={fork.dotted ? "graph-fork is-split" : "graph-fork"}>
-                {fork.parentDrops.map((drop, i) => (
+                {parents.map((drop) => {
+                  const w = kinStyle(drop.kin, lit, fork.dotted && drop.kin === "blood");
+                  return (
+                    <line
+                      key={`pd-${drop.parentId}`}
+                      x1={drop.x}
+                      y1={drop.y0}
+                      x2={drop.x}
+                      y2={fork.joinY}
+                      stroke="var(--graph-kin)"
+                      strokeWidth={w.width}
+                      strokeOpacity={w.opacity}
+                      strokeDasharray={w.dash}
+                      strokeLinecap="round"
+                    />
+                  );
+                })}
+                {joinRight - joinLeft > 6 ? (
                   <line
-                    key={`pd-${i}`}
-                    x1={drop.x}
-                    y1={drop.y0}
-                    x2={drop.x}
-                    y2={fork.joinY}
-                    stroke="var(--graph-kin)"
-                    strokeWidth={w.width}
-                    strokeOpacity={w.opacity}
-                    strokeDasharray={dash}
-                    strokeLinecap="round"
-                  />
-                ))}
-                {fork.joinRight - fork.joinLeft > 6 ? (
-                  <line
-                    x1={fork.joinLeft}
+                    x1={joinLeft}
                     y1={fork.joinY}
-                    x2={fork.joinRight}
+                    x2={joinRight}
                     y2={fork.joinY}
                     stroke="var(--graph-kin)"
-                    strokeWidth={w.width}
-                    strokeOpacity={w.opacity}
-                    strokeDasharray={dash}
+                    strokeWidth={barStyle.width}
+                    strokeOpacity={barStyle.opacity}
+                    strokeDasharray={barStyle.dash}
                     strokeLinecap="round"
                   />
                 ) : null}
                 <line
-                  x1={fork.stemX}
+                  x1={stemX}
                   y1={fork.joinY}
-                  x2={fork.stemX}
+                  x2={stemX}
                   y2={fork.railY}
                   stroke="var(--graph-kin)"
-                  strokeWidth={w.width}
-                  strokeOpacity={w.opacity}
+                  strokeWidth={barStyle.width}
+                  strokeOpacity={barStyle.opacity}
+                  strokeDasharray={barStyle.dash}
                   strokeLinecap="round"
                 />
-                {fork.railRight - fork.railLeft > 6 ? (
+                {forkKin !== "blood" ? (
+                  <text
+                    className="graph-kin-label"
+                    x={stemX}
+                    y={(fork.joinY + fork.railY) / 2}
+                    textAnchor="middle"
+                    fill="var(--graph-kin)"
+                    fillOpacity={Math.min(0.55, barStyle.opacity + 0.12)}
+                    fontSize="11"
+                  >
+                    {kinKindLabel(forkKin)}
+                  </text>
+                ) : null}
+                {railRight - railLeft > 6 ? (
                   <line
-                    x1={fork.railLeft}
+                    x1={railLeft}
                     y1={fork.railY}
-                    x2={fork.railRight}
+                    x2={railRight}
                     y2={fork.railY}
                     stroke="var(--graph-kin)"
-                    strokeWidth={w.width}
-                    strokeOpacity={w.opacity}
+                    strokeWidth={barStyle.width}
+                    strokeOpacity={barStyle.opacity}
+                    strokeDasharray={barStyle.dash}
                     strokeLinecap="round"
                   />
                 ) : null}
-                {fork.childDrops.map((drop) => (
-                  <g key={drop.childId}>
-                    <line
-                      x1={drop.x}
-                      y1={fork.railY}
-                      x2={drop.x}
-                      y2={drop.y1}
-                      stroke="var(--graph-kin)"
-                      strokeWidth={w.width}
-                      strokeOpacity={w.opacity}
-                      strokeLinecap="round"
-                    />
-                    {editMode ? (
+                {kids.map((drop) => {
+                  const w = kinStyle(drop.kin, lit, false);
+                  return (
+                    <g key={drop.childId}>
                       <line
-                        className="graph-hit"
                         x1={drop.x}
                         y1={fork.railY}
                         x2={drop.x}
                         y2={drop.y1}
-                        stroke="transparent"
-                        strokeWidth={18}
-                        pointerEvents="stroke"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          void unlinkKin(drop.childId, fork.parentIds);
-                        }}
+                        stroke="var(--graph-kin)"
+                        strokeWidth={w.width}
+                        strokeOpacity={w.opacity}
+                        strokeDasharray={w.dash}
+                        strokeLinecap="round"
                       />
-                    ) : null}
-                  </g>
-                ))}
+                      {editMode ? (
+                        <line
+                          className="graph-hit"
+                          x1={drop.x}
+                          y1={fork.railY}
+                          x2={drop.x}
+                          y2={drop.y1}
+                          stroke="transparent"
+                          strokeWidth={18}
+                          pointerEvents="stroke"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void unlinkKin(drop.childId, fork.parentIds);
+                          }}
+                        />
+                      ) : null}
+                    </g>
+                  );
+                })}
               </g>
             );
           })}
@@ -510,7 +551,7 @@ export function TreeCanvas({
               </g>
             );
           })}
-          {layout.couples.filter((c) => c.bar).map((couple) => {
+          {layout.couples.filter((c) => c.bar && lineFilterAllowsCouples(lineFilter)).map((couple) => {
             const pair = couple.partnerIds.map((id) => cards.find((card) => card.id === id)).filter(Boolean);
             if (pair.length < 2 || !Number.isFinite(couple.cy)) return null;
             const left = pair.reduce((a, b) => (a!.x < b!.x ? a : b));
@@ -666,8 +707,8 @@ export function TreeCanvas({
                 updatedAt: "",
               }
             }
-            onPick={async (role, kind, parentRole) => {
-              await onLink?.(partnerPick.fromId, partnerPick.toId, role, kind, parentRole);
+            onPick={async (role, kind, parentRole, kin) => {
+              await onLink?.(partnerPick.fromId, partnerPick.toId, role, kind, parentRole, kin);
               setPartnerPick(null);
             }}
             onCancel={() => setPartnerPick(null)}

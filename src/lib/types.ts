@@ -5,6 +5,7 @@ export type ExtraField = {
 
 export type UnionKind = "unspecified" | "partnered" | "married" | "separated";
 export type ParentRole = "father" | "mother";
+export type KinKind = "blood" | "adopted" | "step" | "foster";
 
 export const UNION_KIND_OPTIONS: { value: UnionKind; label: string }[] = [
   { value: "married", label: "Married" },
@@ -13,8 +14,30 @@ export const UNION_KIND_OPTIONS: { value: UnionKind; label: string }[] = [
   { value: "unspecified", label: "Unspecified" },
 ];
 
+export const KIN_KIND_OPTIONS: { value: KinKind; label: string }[] = [
+  { value: "blood", label: "Blood" },
+  { value: "adopted", label: "Adopted" },
+  { value: "step", label: "Step" },
+  { value: "foster", label: "Foster" },
+];
+
 export function unionKindLabel(kind: UnionKind): string {
   return UNION_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? "Unspecified";
+}
+
+export function kinKindLabel(kind: KinKind): string {
+  return KIN_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? "Blood";
+}
+
+export function kinOf(link: { kin?: Partial<Record<string, KinKind>> }, parentId: string): KinKind {
+  return link.kin?.[parentId] ?? "blood";
+}
+
+export function strongestKin(kinds: KinKind[]): KinKind {
+  if (kinds.includes("blood")) return "blood";
+  if (kinds.includes("adopted")) return "adopted";
+  if (kinds.includes("foster")) return "foster";
+  return kinds[0] ?? "blood";
 }
 
 export type ImportantDate = {
@@ -56,6 +79,8 @@ export type ChildLink = {
   parentIds: string[];
   unionId?: string;
   roles?: Partial<Record<string, ParentRole>>;
+  /** How each parent relates to the child. Missing keys are blood. */
+  kin?: Partial<Record<string, KinKind>>;
 };
 
 export type TreeData = {

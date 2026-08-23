@@ -224,6 +224,21 @@ describe("self-serve mutations", () => {
     assert.equal(parentsOf(tree, jean)[0].id, edson);
     assert.equal(tree.childLinks[0].roles?.[edson], "father");
   });
+
+  it("links a stepfather and an adopted child with quieter kin", () => {
+    let tree = startWithName("Andressa");
+    const andressa = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Edson");
+    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
+    tree = linkExisting(tree, andressa, edson, "parent", undefined, "father", "step");
+    assert.equal(tree.childLinks[0].kin?.[edson], "step");
+    tree = addUnlinkedPerson(tree, "Sam");
+    const sam = tree.people.find((p) => p.givenName === "Sam")!.id;
+    tree = linkExisting(tree, andressa, sam, "child", undefined, undefined, "adopted");
+    const adopted = tree.childLinks.find((l) => l.childId === sam);
+    assert.ok(adopted);
+    assert.equal(adopted?.kin?.[andressa], "adopted");
+  });
 });
 
 describe("people autocomplete", () => {
