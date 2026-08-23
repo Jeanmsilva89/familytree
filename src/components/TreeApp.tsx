@@ -198,6 +198,7 @@ export function TreeApp() {
               onAddPartner={treeState.partner}
               onAddChild={treeState.child}
               onAddSibling={treeState.sibling}
+              onLinkExisting={treeState.link}
             />
           ) : (
             <div className="graph-intro">

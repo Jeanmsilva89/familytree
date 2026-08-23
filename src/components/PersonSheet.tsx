@@ -6,6 +6,7 @@ import { displayName } from "@/lib/types";
 import { parentsOf, unionsFor } from "@/lib/tree";
 import { personToVCard, vcardFilename } from "@/lib/vcard";
 import { PeopleList } from "./PeopleList";
+import { NameAutocomplete } from "./AddNameRow";
 
 type Mode = "closed" | "actions" | "add" | "more" | "link";
 type Rel = "parent" | "partner" | "child" | "sibling";
@@ -146,6 +147,13 @@ export function PersonSheet({
     onClose();
   }
 
+  async function pickExisting(other: Person) {
+    if (!person) return;
+    await onLinkExisting(person.id, other.id, rel, rel === "partner" ? kind : undefined);
+    setName("");
+    onClose();
+  }
+
   async function submitMore(event: FormEvent) {
     event.preventDefault();
     if (!person) return;
@@ -236,7 +244,17 @@ export function PersonSheet({
               <label htmlFor="rel-name">
                 {rel === "parent" ? "Parent's name" : rel === "partner" ? "Partner's name" : rel === "sibling" ? "Sibling's name" : "Child's name"}
               </label>
-              <input id="rel-name" value={name} onChange={(e) => setName(e.target.value)} required autoFocus />
+              <NameAutocomplete
+                id="rel-name"
+                label={rel === "parent" ? "Parent's name" : rel === "partner" ? "Partner's name" : rel === "sibling" ? "Sibling's name" : "Child's name"}
+                value={name}
+                onChange={setName}
+                people={tree.people}
+                excludeId={person.id}
+                onPick={pickExisting}
+                autoFocus
+                required
+              />
             </div>
             {rel === "partner" ? (
               <div className="field">
@@ -263,6 +281,9 @@ export function PersonSheet({
               <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "parent"); onClose(); }}>Parent</button>
               <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "partner"); onClose(); }}>Partner</button>
               <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "child"); onClose(); }}>Child</button>
+              {hasParents ? (
+                <button type="button" className="btn" onClick={async () => { await onLinkExisting(person.id, linkOther.id, "sibling"); onClose(); }}>Sibling</button>
+              ) : null}
               <button type="button" className="btn ghost" onClick={() => setLinkOther(null)}>Back</button>
             </div>
           ) : (

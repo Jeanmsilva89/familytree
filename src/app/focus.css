@@ -461,6 +461,40 @@ html, body {
   min-height: 48px;
 }
 
+.suggest {
+  position: relative;
+  flex: 1 1 140px;
+  min-width: 0;
+  display: grid;
+  gap: 6px;
+}
+.suggest input {
+  width: 100%;
+}
+.suggest-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px;
+  display: grid;
+  gap: 4px;
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.suggest-list .people-row.is-active,
+.suggest-list .people-row[aria-selected="true"] {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--cream));
+}
+.suggest-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
 @media print {
   html, body { overflow: visible; }
 }
