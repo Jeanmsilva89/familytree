@@ -133,6 +133,106 @@ export function householdCouple(tree: TreeData, hint?: string): string[] {
   return ids;
 }
 
+export function computeGenerations(tree: TreeData, householdIds: string[]): Map<string, number> {
+  const known = new Set(tree.people.map((p) => p.id));
+  const home = householdIds.filter((id) => known.has(id));
+  const gen = new Map<string, number>();
+  for (const id of home) gen.set(id, 0);
+
+  const parentsOfId = (id: string) =>
+    tree.childLinks.filter((l) => l.childId === id).flatMap((l) => l.parentIds).filter((pid) => known.has(pid));
+  const childrenOfId = (id: string) =>
+    tree.childLinks.filter((l) => l.parentIds.includes(id)).map((l) => l.childId).filter((cid) => known.has(cid));
+  const partnersOfId = (id: string) => {
+    const out: string[] = [];
+    for (const union of tree.unions) {
+      if (!union.partnerIds.includes(id)) continue;
+      for (const pid of union.partnerIds) {
+        if (pid !== id && known.has(pid)) out.push(pid);
+      }
+    }
+    return out;
+  };
+
+  const walk = (dir: "up" | "down") => {
+    const q = [...home];
+    const seen = new Set(home);
+    while (q.length) {
+      const id = q.shift()!;
+      const g = gen.get(id);
+      if (g === undefined) continue;
+      const next = dir === "up" ? parentsOfId(id) : childrenOfId(id);
+      const ng = dir === "up" ? g + 1 : g - 1;
+      if (ng >= -16 && ng <= 16) {
+        for (const other of next) {
+          if (home.includes(other)) continue;
+          const cur = gen.get(other);
+          const better = dir === "up" ? cur === undefined || ng > cur : cur === undefined || ng < cur;
+          if (better) gen.set(other, ng);
+          if (!seen.has(other) || better) {
+            seen.add(other);
+            q.push(other);
+          }
+        }
+      }
+      for (const pid of partnersOfId(id)) {
+        if (home.includes(pid)) continue;
+        if (!gen.has(pid)) gen.set(pid, g);
+        if (!seen.has(pid)) {
+          seen.add(pid);
+          q.push(pid);
+        }
+      }
+    }
+  };
+
+  walk("up");
+  walk("down");
+
+  let changed = true;
+  let guard = 0;
+  while (changed && guard++ < 48) {
+    changed = false;
+    for (const link of tree.childLinks) {
+      if (!known.has(link.childId)) continue;
+      const childG = gen.get(link.childId);
+      for (const parent of link.parentIds) {
+        if (!known.has(parent) || home.includes(parent)) continue;
+        if (childG !== undefined) {
+          const want = childG + 1;
+          if (gen.get(parent) === undefined || gen.get(parent)! < want) {
+            gen.set(parent, want);
+            changed = true;
+          }
+        }
+        const parentG = gen.get(parent);
+        if (parentG !== undefined && !home.includes(link.childId)) {
+          const want = parentG - 1;
+          if (gen.get(link.childId) === undefined || gen.get(link.childId)! > want) {
+            gen.set(link.childId, want);
+            changed = true;
+          }
+        }
+      }
+    }
+    for (const union of tree.unions) {
+      const numbered = union.partnerIds.map((id) => gen.get(id)).filter((g): g is number => g !== undefined);
+      if (!numbered.length) continue;
+      const target = Math.max(...numbered);
+      for (const id of union.partnerIds) {
+        if (!known.has(id) || home.includes(id)) continue;
+        if (gen.get(id) !== target) {
+          gen.set(id, target);
+          changed = true;
+        }
+      }
+    }
+  }
+
+  for (const id of home) gen.set(id, 0);
+  return gen;
+}
+
 export function buildView(tree: TreeData, selectedId?: string): TreeView {
   const focusId = selectedId ?? tree.focusPersonId ?? tree.people[0]?.id;
   const focus = tree.people.find((p) => p.id === focusId);

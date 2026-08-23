@@ -117,6 +117,41 @@ describe("generation lanes", () => {
     assert.equal(momGp.label, "Mom's parents");
   });
 
+  it("shows both partners' grandparents when looking at the household", () => {
+    const family: TreeData = {
+      focusPersonId: "jean",
+      people: [
+        person("jean", "Jean"),
+        person("leah", "Leah"),
+        person("edson", "Edson"),
+        person("eunice", "Eunice"),
+        person("jacyron", "Jacyron"),
+        person("bob", "Bob"),
+        person("sue", "Sue"),
+        person("lgp1", "Lgp1"),
+        person("lgp2", "Lgp2"),
+      ],
+      unions: [
+        { id: "u-home", partnerIds: ["jean", "leah"], kind: "partnered" },
+        { id: "u-gp", partnerIds: ["eunice", "jacyron"], kind: "married" },
+        { id: "u-l", partnerIds: ["bob", "sue"], kind: "married" },
+        { id: "u-lgp", partnerIds: ["lgp1", "lgp2"], kind: "married" },
+      ],
+      childLinks: [
+        { id: "c-j", childId: "jean", parentIds: ["edson"] },
+        { id: "c-e", childId: "edson", parentIds: ["eunice", "jacyron"], unionId: "u-gp" },
+        { id: "c-l", childId: "leah", parentIds: ["bob", "sue"], unionId: "u-l" },
+        { id: "c-b", childId: "bob", parentIds: ["lgp1", "lgp2"], unionId: "u-lgp" },
+      ],
+    };
+    const lanes = buildGenerationLanes(family, "jean");
+    assert.deepEqual(lanes.map((l) => l.id), ["grandparents", "parents", "focus"]);
+    const gps = lanes.find((l) => l.id === "grandparents")!.people.map((p) => p.id).sort();
+    assert.deepEqual(gps, ["eunice", "jacyron", "lgp1", "lgp2"]);
+    const parents = lanes.find((l) => l.id === "parents")!.people.map((p) => p.id).sort();
+    assert.deepEqual(parents, ["bob", "edson", "sue"]);
+  });
+
   it("shows siblings of the focus on the focus generation, not among kids", () => {
     let tree = startWithName("Sam");
     const sam = tree.people[0].id;
