@@ -15,13 +15,28 @@ type Props = {
 
 type View = { x: number; y: number; s: number };
 
-function gutterPath(fromX: number, fromY: number, toX: number, toY: number): string {
-  const midY = fromY + Math.max(16, (toY - fromY) * 0.45);
-  return `M ${fromX} ${fromY} L ${fromX} ${midY} L ${toX} ${midY} L ${toX} ${toY}`;
+function familyBranches(
+  fromX: number,
+  fromY: number,
+  targets: { x: number; y: number }[],
+): string[] {
+  if (!targets.length) return [];
+  const top = Math.min(...targets.map((t) => t.y));
+  const busY = fromY + Math.max(18, (top - fromY) * 0.4);
+  const stem = `M ${fromX} ${fromY} L ${fromX} ${busY}`;
+  const xs = targets.map((t) => t.x);
+  const minX = Math.min(...xs, fromX);
+  const maxX = Math.max(...xs, fromX);
+  const bus = maxX - minX > 1 ? [`M ${minX} ${busY} L ${maxX} ${busY}`] : [];
+  const drops = targets.map((t) => {
+    const rise = Math.max(12, (t.y - busY) * 0.38);
+    return `M ${t.x} ${busY} C ${t.x} ${busY + rise}, ${t.x} ${t.y - rise * 0.28}, ${t.x} ${t.y}`;
+  });
+  return [stem, ...bus, ...drops];
 }
 
 function clampScale(s: number) {
-  return Math.min(2.2, Math.max(0.55, s));
+  return Math.min(2.2, Math.max(0.45, s));
 }
 
 function isFiniteBox(x: number, y: number, w?: number, h?: number) {
@@ -169,6 +184,19 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
   const stageH = Number.isFinite(layout.height) ? layout.height : 240;
   const cards = layout.cards.filter((card) => isFiniteBox(card.x, card.y));
   const edges = layout.edges.filter((edge) => isFiniteBox(edge.fromX, edge.fromY) && isFiniteBox(edge.toX, edge.toY));
+  const branches = (() => {
+    const groups = new Map<string, { fromX: number; fromY: number; targets: { x: number; y: number }[] }>();
+    for (const edge of edges) {
+      const key = `${edge.fromX.toFixed(1)}:${edge.fromY.toFixed(1)}`;
+      const group = groups.get(key) ?? { fromX: edge.fromX, fromY: edge.fromY, targets: [] };
+      group.targets.push({ x: edge.toX, y: edge.toY });
+      groups.set(key, group);
+    }
+    return [...groups.values()].flatMap((group) =>
+      familyBranches(group.fromX, group.fromY, group.targets),
+    );
+  })();
+  const coupleMate = new Set(layout.couples.filter((c) => c.bar).flatMap((c) => c.partnerIds));
 
   return (
     <div
@@ -182,43 +210,37 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
     >
       <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH, transform: "translate(40px, 24px) scale(1)" }}>
         <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
-          {edges.map((edge, i) => (
-            <path key={i} d={gutterPath(edge.fromX, edge.fromY, edge.toX, edge.toY)} fill="none" stroke="var(--line-ink)" strokeWidth="2.4" strokeLinecap="round" />
+          {branches.map((d, i) => (
+            <path key={i} d={d} fill="none" stroke="var(--graph-line)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           ))}
-          {layout.couples.filter((c) => c.bar).map((couple) => {
-            const [a, b] = couple.partnerIds.map((id) => cards.find((card) => card.id === id)).filter(Boolean);
-            if (!a || !b || !Number.isFinite(couple.cy)) return null;
-            const left = a.x < b.x ? a : b;
-            const right = a.x < b.x ? b : a;
-            const x1 = left.x + CARD.w / 2 + 2;
-            const x2 = right.x - CARD.w / 2 - 2;
-            if (!isFiniteBox(x1, couple.cy, x2)) return null;
-            return <line key={couple.id} x1={x1} y1={couple.cy} x2={x2} y2={couple.cy} stroke="var(--ink)" strokeWidth="4" strokeLinecap="round" />;
-          })}
         </svg>
 
         {layout.couples.filter((c) => c.bar && c.partnerIds.length >= 2).map((couple) => {
           const pair = couple.partnerIds.map((id) => cards.find((card) => card.id === id)).filter(Boolean) as typeof cards;
           if (pair.length < 2) return null;
-          const minX = Math.min(...pair.map((c) => c.x)) - CARD.w / 2 - 8;
-          const maxX = Math.max(...pair.map((c) => c.x)) + CARD.w / 2 + 8;
-          const y = Math.min(...pair.map((c) => c.y)) - 8;
+          const minX = Math.min(...pair.map((c) => c.x)) - CARD.w / 2 - 5;
+          const maxX = Math.max(...pair.map((c) => c.x)) + CARD.w / 2 + 5;
+          const y = Math.min(...pair.map((c) => c.y)) - 5;
           const width = maxX - minX;
-          if (!isFiniteBox(minX, y, width, CARD.h + 16)) return null;
-          return <div key={`${couple.id}-tint`} className="couple-tint" style={{ left: minX, top: y, width, height: CARD.h + 16 }} />;
+          const height = CARD.h + 10;
+          if (!isFiniteBox(minX, y, width, height)) return null;
+          const lit = pair.some((c) => coupleLit.has(c.person.id));
+          return <div key={`${couple.id}-tint`} className={`couple-tint${lit ? " is-lit" : ""}`} style={{ left: minX, top: y, width, height }} />;
         })}
 
         {cards.map((card) => {
-          const active = coupleLit.has(card.person.id);
+          const active = coupleLit.has(card.person.id) || card.person.id === focusId;
           const dim = linked ? !linked.has(card.person.id) : false;
           const age = ageLabel(card.person.birthDate);
           const left = card.x - CARD.w / 2;
           if (!isFiniteBox(left, card.y, CARD.w, CARD.h)) return null;
+          const photo = card.person.photo;
+          const inCouple = coupleMate.has(card.person.id);
           return (
             <button
               key={card.id}
               type="button"
-              className={`portrait-card${active ? " is-active" : ""}${dim ? " is-dim" : ""}`}
+              className={`portrait-card${photo ? " has-photo" : ""}${active ? " is-active" : ""}${dim ? " is-dim" : ""}${inCouple ? " in-couple" : ""}`}
               style={{ left, top: card.y, width: CARD.w, height: CARD.h }}
               onClick={(event) => {
                 event.stopPropagation();
@@ -226,12 +248,14 @@ export function TreeCanvas({ tree, highlightedId, onHighlight, onOpen }: Props) 
               }}
               aria-pressed={active}
             >
-              <span className="swatch" style={{ ["--swatch-hue" as string]: String(swatchHue(card.person)) }} aria-hidden>
-                {initialsOf(card.person)}
-              </span>
+              {photo ? <img className="portrait-photo" src={photo} alt="" /> : (
+                <span className="swatch" style={{ ["--swatch-hue" as string]: String(swatchHue(card.person)) }} aria-hidden>
+                  {initialsOf(card.person)}
+                </span>
+              )}
               <span className="identity">
-                <strong title={displayName(card.person)}>{displayName(card.person)}</strong>
-                {age ? <em>{age}</em> : null}
+                <strong title={displayName(card.person)}>{card.person.givenName || displayName(card.person)}</strong>
+                <em>{age ?? "—"}</em>
               </span>
             </button>
           );
