@@ -2,7 +2,7 @@ import type { Person, TreeData, Union, UnionKind } from "./types";
 import { displayName } from "./types";
 import { kidsUnderUnion, parentsOf, unionsFor } from "./tree";
 
-export const CARD = { w: 120, h: 140, gap: 28, coupleGap: 6, laneGap: 92, pad: 56 };
+export const CARD = { w: 120, h: 140, gap: 28, coupleGap: 6, laneGap: 104, pad: 56 };
 
 export type CoupleUnit = {
   id: string;
@@ -41,6 +41,8 @@ export type LaidEdge = {
   fromY: number;
   toX: number;
   toY: number;
+  parentIds: string[];
+  childId: string;
 };
 
 export type GraphLayout = {
@@ -50,6 +52,7 @@ export type GraphLayout = {
   couples: LaidCouple[];
   edges: LaidEdge[];
   focusId?: string;
+  householdIds: string[];
 };
 
 export function displayNames(people: Person[]): string {
@@ -91,29 +94,42 @@ export function lineageIds(tree: TreeData, id: string): Set<string> {
     for (const pid of union.partnerIds) ids.add(pid);
   }
 
-  const walkUp = (personId: string, depth: number) => {
-    if (depth <= 0) return;
+  const walkUp = (personId: string) => {
     for (const parent of parentsOf(tree, personId)) {
+      if (ids.has(parent.id)) continue;
       ids.add(parent.id);
-      walkUp(parent.id, depth - 1);
+      walkUp(parent.id);
     }
   };
-  const walkDown = (personId: string, depth: number) => {
-    if (depth <= 0) return;
+  const walkDown = (personId: string) => {
     for (const link of tree.childLinks) {
-      if (link.parentIds.includes(personId)) {
-        ids.add(link.childId);
-        walkDown(link.childId, depth - 1);
-      }
+      if (!link.parentIds.includes(personId)) continue;
+      if (ids.has(link.childId)) continue;
+      ids.add(link.childId);
+      walkDown(link.childId);
     }
   };
-  walkUp(id, 2);
-  walkDown(id, 2);
-  for (const parent of parentsOf(tree, id)) {
-    for (const link of tree.childLinks) {
-      if (link.parentIds.includes(parent.id)) ids.add(link.childId);
+  walkUp(id);
+  walkDown(id);
+  return ids;
+}
+
+export function householdCouple(tree: TreeData, hint?: string): string[] {
+  const seed = hint ?? tree.focusPersonId ?? tree.people[0]?.id;
+  if (!seed || !tree.people.some((p) => p.id === seed)) return [];
+  const unions = unionsFor(tree, seed).filter((u) => showsCoupleBar(u.kind, u.partnerIds.length));
+  if (!unions.length) return [seed];
+  let best = unions[0];
+  let bestKids = -1;
+  for (const union of unions) {
+    const n = kidsUnderUnion(tree, union).length;
+    if (n > bestKids) {
+      bestKids = n;
+      best = union;
     }
   }
+  const ids = best.partnerIds.filter((id) => tree.people.some((p) => p.id === id));
+  if (ids.includes(seed)) return [seed, ...ids.filter((id) => id !== seed)];
   return ids;
 }
 

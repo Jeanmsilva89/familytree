@@ -4,6 +4,7 @@ import {
   CARD,
   ageLabel,
   buildGraph,
+  householdCouple,
   kidClusterCenters,
   lineageIds,
   showsCoupleBar,
@@ -87,6 +88,8 @@ describe("graph layout", () => {
     assert.ok(linked.has("dad"));
     assert.ok(linked.has("kidA"));
     assert.equal(linked.has("uncleKid"), false);
+    assert.equal(linked.has("half"), false);
+    assert.equal(linked.has("step"), false);
   });
 
   it("reads a small age from a birth date", () => {
@@ -127,5 +130,40 @@ describe("graph layout", () => {
     const focus = layout.cards.find((c) => c.id === "focus")!;
     assert.equal(uncleKid.gen, aunt.gen - 1);
     assert.ok(Math.abs(uncleKid.x - aunt.x) < Math.abs(uncleKid.x - focus.x));
+  });
+
+  it("picks the household couple with the most children", () => {
+    const ids = householdCouple(tree, "focus");
+    assert.deepEqual(ids, ["focus", "partner"]);
+    assert.deepEqual(buildGraph(tree, "focus").householdIds, ["focus", "partner"]);
+  });
+
+  it("sits an in-law outside and the blood relative toward the household", () => {
+    const split: TreeData = {
+      focusPersonId: "jean",
+      people: [
+        person("jean", "Jean"),
+        person("leah", "Leah"),
+        person("craig", "Craig"),
+        person("jake", "Jake"),
+        person("amy", "Amy"),
+      ],
+      unions: [
+        { id: "u-home", partnerIds: ["jean", "leah"], kind: "partnered" },
+        { id: "u-jake", partnerIds: ["jake", "amy"], kind: "married" },
+      ],
+      childLinks: [
+        { id: "c-jean", childId: "jean", parentIds: ["craig"] },
+        { id: "c-jake", childId: "jake", parentIds: ["craig"] },
+      ],
+    };
+    const layout = buildGraph(split, "jean");
+    const jean = layout.cards.find((c) => c.id === "jean")!;
+    const leah = layout.cards.find((c) => c.id === "leah")!;
+    const jake = layout.cards.find((c) => c.id === "jake")!;
+    const amy = layout.cards.find((c) => c.id === "amy")!;
+    const mid = (jean.x + leah.x) / 2;
+    assert.equal(jake.gen, jean.gen);
+    assert.ok(Math.abs(jake.x - mid) < Math.abs(amy.x - mid));
   });
 });
