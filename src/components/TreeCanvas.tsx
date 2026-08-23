@@ -18,6 +18,7 @@ type Props = {
   editMode?: boolean;
   onLink?: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole) => void | Promise<void>;
   onUnlink?: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => void | Promise<void>;
+  onPlace?: (personId: string, x: number) => void | Promise<void>;
 };
 
 type View = { x: number; y: number; s: number };
@@ -51,6 +52,7 @@ export function TreeCanvas({
   editMode = false,
   onLink,
   onUnlink,
+  onPlace,
 }: Props) {
   const householdHint = tree.focusPersonId;
   const layout = useMemo(() => buildGraph(tree, householdHint), [tree, householdHint]);
@@ -71,10 +73,14 @@ export function TreeCanvas({
   const suppressTap = useRef(false);
   const raf = useRef<number | null>(null);
   const connectRef = useRef<ConnectDrag | null>(null);
+  const cardMove = useRef<{ id: string; pointerId: number; originX: number; startX: number } | null>(null);
   const [wire, setWire] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const [partnerPick, setPartnerPick] = useState<{ fromId: string; toId: string } | null>(null);
+  const [dragX, setDragX] = useState<{ id: string; x: number } | null>(null);
 
-  const cards = layout.cards.filter((card) => isFiniteBox(card.x, card.y));
+  const cards = layout.cards
+    .filter((card) => isFiniteBox(card.x, card.y))
+    .map((card) => (dragX && card.id === dragX.id ? { ...card, x: dragX.x } : card));
   const byId = useMemo(() => new Map(cards.map((c) => [c.id, c])), [cards]);
 
   function applyWorld() {
@@ -218,6 +224,19 @@ export function TreeCanvas({
       }
       return;
     }
+    if (editMode && onPlace && target.closest(".portrait-card") && !target.closest(".graph-port")) {
+      const cardEl = target.closest(".portrait-card") as HTMLElement;
+      const id = cardEl.dataset.personId;
+      const card = id ? byId.get(id) : undefined;
+      if (id && card) {
+        event.stopPropagation();
+        pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
+        stageRef.current?.setPointerCapture(event.pointerId);
+        cardMove.current = { id, pointerId: event.pointerId, originX: card.x, startX: event.clientX };
+        setPartnerPick(null);
+      }
+      return;
+    }
     if (editMode && target.closest(".graph-hit, .graph-pick")) return;
     if (pointers.current.size === 0) suppressTap.current = false;
     pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
@@ -252,6 +271,12 @@ export function TreeCanvas({
       setWire({ x1: from.x, y1: from.y, x2: pt.x, y2: pt.y });
       return;
     }
+    if (cardMove.current && cardMove.current.pointerId === event.pointerId) {
+      const dx = (event.clientX - cardMove.current.startX) / (viewRef.current.s || 1);
+      if (Math.abs(dx) > 4) suppressTap.current = true;
+      setDragX({ id: cardMove.current.id, x: cardMove.current.originX + dx });
+      return;
+    }
     if (pinch.current && pointers.current.size >= 2) {
       const pts = activePoints();
       const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
@@ -276,6 +301,19 @@ export function TreeCanvas({
     if (pointers.current.size < 2) pinch.current = null;
     if (connecting) {
       void finishConnect(event.clientX, event.clientY);
+      drag.current = null;
+      return;
+    }
+    if (cardMove.current && cardMove.current.pointerId === event.pointerId) {
+      const originX = cardMove.current.originX;
+      const id = cardMove.current.id;
+      const nextX = dragX && dragX.id === id ? dragX.x : originX;
+      cardMove.current = null;
+      setDragX(null);
+      if (Math.abs(nextX - originX) > 8) {
+        suppressTap.current = true;
+        void onPlace?.(id, nextX);
+      }
       drag.current = null;
       return;
     }
@@ -559,7 +597,8 @@ export function TreeCanvas({
             <button
               key={card.id}
               type="button"
-              className={`portrait-card${photo ? " has-photo" : ""}${isHome ? " is-home" : ""}${active ? " is-active" : ""}${dim ? " is-dim" : ""}`}
+              data-person-id={card.id}
+              className={`portrait-card${photo ? " has-photo" : ""}${isHome ? " is-home" : ""}${active ? " is-active" : ""}${dim ? " is-dim" : ""}${editMode ? " is-movable" : ""}`}
               style={{ left, top: card.y, width: CARD.w, height: CARD.h }}
               onClick={(event) => {
                 event.stopPropagation();
@@ -606,7 +645,7 @@ export function TreeCanvas({
           : null}
       </div>
       {editMode ? (
-        <p className="graph-edit-hint">Drag a dot onto someone to link them. Tap a line to remove it.</p>
+        <p className="graph-edit-hint">Drag a card to move it. Drag a dot onto someone to link them. Tap a line to remove it.</p>
       ) : null}
       {partnerPick ? (
         <div className="graph-pick" role="dialog" aria-label="How they fit">

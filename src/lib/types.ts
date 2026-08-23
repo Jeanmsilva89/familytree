@@ -36,6 +36,8 @@ export type Person = {
   photo?: string;
   /** Free-form facts beyond genealogy (occupation, notes, nicknames, …). */
   extras?: ExtraField[];
+  /** Manual graph x after auto-layout, set by dragging in edit mode. */
+  graphX?: number;
   createdAt: string;
   updatedAt: string;
 };

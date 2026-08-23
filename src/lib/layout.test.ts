@@ -329,5 +329,43 @@ describe("graph layout", () => {
     assert.ok((fork?.childIds.length ?? 0) >= 3);
     assert.ok((fork?.joinRight ?? 0) - (fork?.joinLeft ?? 0) > CARD.w);
   });
+
+  it("keeps one couple's kids together instead of mixing them into another sibling row", () => {
+    const family: TreeData = {
+      focusPersonId: "andressa",
+      people: [
+        person("andreia", "Andreia"),
+        person("edson", "Edson"),
+        person("jay", "Jay"),
+        person("rosana", "Rosana"),
+        person("andressa", "Andressa"),
+        person("jack", "Jack"),
+        person("jaqueline", "Jaqueline"),
+        person("ingled", "Ingled"),
+        person("indyla", "Indyla"),
+        person("lorhan", "Lorhan"),
+      ],
+      unions: [
+        { id: "u-ae", partnerIds: ["andreia", "edson"], kind: "separated" },
+        { id: "u-jr", partnerIds: ["jay", "rosana"], kind: "married" },
+      ],
+      childLinks: [
+        { id: "c-a", childId: "andressa", parentIds: ["andreia", "edson"], unionId: "u-ae" },
+        { id: "c-j", childId: "jack", parentIds: ["andreia", "edson"], unionId: "u-ae" },
+        { id: "c-q", childId: "jaqueline", parentIds: ["andreia", "edson"], unionId: "u-ae" },
+        { id: "c-i", childId: "ingled", parentIds: ["jay", "rosana"], unionId: "u-jr" },
+        { id: "c-n", childId: "indyla", parentIds: ["jay", "rosana"], unionId: "u-jr" },
+        { id: "c-l", childId: "lorhan", parentIds: ["jay", "rosana"], unionId: "u-jr" },
+      ],
+    };
+    const layout = buildGraph(family, "andressa");
+    const x = (id: string) => layout.cards.find((c) => c.id === id)!.x;
+    const sibs = ["andressa", "jack", "jaqueline"].map(x).sort((a, b) => a - b);
+    const ros = ["ingled", "indyla", "lorhan"].map(x).sort((a, b) => a - b);
+    assert.ok(
+      ros[2] < sibs[0] - 1 || sibs[2] < ros[0] - 1,
+      `Rosana's kids (${ros.join(",")}) should not sit inside Andreia's siblings (${sibs.join(",")})`,
+    );
+  });
 });
 
