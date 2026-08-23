@@ -166,4 +166,61 @@ describe("graph layout", () => {
     assert.equal(jake.gen, jean.gen);
     assert.ok(Math.abs(jake.x - mid) < Math.abs(amy.x - mid));
   });
+
+  it("keeps each partner's parents on that partner's side so lines do not cross", () => {
+    const family: TreeData = {
+      focusPersonId: "jean",
+      people: [
+        person("jean", "Jean"),
+        person("leah", "Leah"),
+        person("craig", "Craig"),
+        person("mom", "Mom"),
+        person("bob", "Bob"),
+        person("sue", "Sue"),
+        person("kid", "Kid"),
+        person("gp1", "Gp1"),
+        person("gp2", "Gp2"),
+        person("lgp1", "Lgp1"),
+        person("lgp2", "Lgp2"),
+      ],
+      unions: [
+        { id: "u-home", partnerIds: ["jean", "leah"], kind: "partnered" },
+        { id: "u-j", partnerIds: ["craig", "mom"], kind: "married" },
+        { id: "u-l", partnerIds: ["bob", "sue"], kind: "married" },
+        { id: "u-gp", partnerIds: ["gp1", "gp2"], kind: "married" },
+        { id: "u-lgp", partnerIds: ["lgp1", "lgp2"], kind: "married" },
+      ],
+      childLinks: [
+        { id: "c-k", childId: "kid", parentIds: ["jean", "leah"], unionId: "u-home" },
+        { id: "c-j", childId: "jean", parentIds: ["craig", "mom"], unionId: "u-j" },
+        { id: "c-l", childId: "leah", parentIds: ["bob", "sue"], unionId: "u-l" },
+        { id: "c-m", childId: "mom", parentIds: ["gp1", "gp2"], unionId: "u-gp" },
+        { id: "c-b", childId: "bob", parentIds: ["lgp1", "lgp2"], unionId: "u-lgp" },
+      ],
+    };
+    const layout = buildGraph(family, "jean");
+    const x = (id: string) => layout.cards.find((c) => c.id === id)!.x;
+    assert.ok(x("leah") > x("jean"));
+    const jeanParents = (x("craig") + x("mom")) / 2;
+    const leahParents = (x("bob") + x("sue")) / 2;
+    assert.ok(leahParents > x("jean"), `Leah's parents (${leahParents}) should sit right of Jean (${x("jean")})`);
+    assert.ok(jeanParents < x("leah"), `Jean's parents (${jeanParents}) should sit left of Leah (${x("leah")})`);
+    assert.ok(leahParents > jeanParents);
+    const jeanGps = [x("gp1"), x("gp2")].sort((a, b) => a - b);
+    const leahGps = [x("lgp1"), x("lgp2")].sort((a, b) => a - b);
+    assert.ok(jeanGps[1] < leahGps[0] + 0.01, "grandparent couples should not interleave");
+    for (let i = 0; i < layout.edges.length; i++) {
+      for (let j = i + 1; j < layout.edges.length; j++) {
+        const a = layout.edges[i];
+        const b = layout.edges[j];
+        const parentOrder = Math.sign(a.fromX - b.fromX);
+        const childOrder = Math.sign(a.toX - b.toX);
+        assert.ok(
+          parentOrder * childOrder >= 0,
+          `${a.childId} and ${b.childId} lines cross (${a.fromX}->${a.toX} vs ${b.fromX}->${b.toX})`,
+        );
+      }
+    }
+  });
 });
+
