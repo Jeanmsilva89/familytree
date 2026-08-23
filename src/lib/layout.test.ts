@@ -4,6 +4,7 @@ import {
   CARD,
   ageLabel,
   buildGraph,
+  computeGenerations,
   householdCouple,
   kidClusterCenters,
   lineageIds,
@@ -221,6 +222,56 @@ describe("graph layout", () => {
         );
       }
     }
+  });
+
+  it("puts a father above the couple and grandparents above him, families on opposite sides", () => {
+    const family: TreeData = {
+      focusPersonId: "jean",
+      people: [
+        person("jean", "Jean"),
+        person("leah", "Leah"),
+        person("edson", "Edson"),
+        person("eunice", "Eunice"),
+        person("jacyron", "Jacyron"),
+        person("bob", "Bob"),
+        person("sue", "Sue"),
+        person("lgp1", "Lgp1"),
+        person("lgp2", "Lgp2"),
+      ],
+      unions: [
+        { id: "u-home", partnerIds: ["jean", "leah"], kind: "partnered" },
+        { id: "u-gp", partnerIds: ["eunice", "jacyron"], kind: "married" },
+        { id: "u-l", partnerIds: ["bob", "sue"], kind: "married" },
+        { id: "u-lgp", partnerIds: ["lgp1", "lgp2"], kind: "married" },
+      ],
+      childLinks: [
+        { id: "c-j", childId: "jean", parentIds: ["edson"] },
+        { id: "c-e", childId: "edson", parentIds: ["eunice", "jacyron"], unionId: "u-gp" },
+        { id: "c-l", childId: "leah", parentIds: ["bob", "sue"], unionId: "u-l" },
+        { id: "c-b", childId: "bob", parentIds: ["lgp1", "lgp2"], unionId: "u-lgp" },
+      ],
+    };
+    const gens = computeGenerations(family, ["jean", "leah"]);
+    assert.equal(gens.get("jean"), 0);
+    assert.equal(gens.get("leah"), 0);
+    assert.equal(gens.get("edson"), 1);
+    assert.equal(gens.get("eunice"), 2);
+    assert.equal(gens.get("jacyron"), 2);
+    assert.equal(gens.get("bob"), 1);
+    assert.equal(gens.get("lgp1"), 2);
+
+    const layout = buildGraph(family, "jean");
+    const card = (id: string) => layout.cards.find((c) => c.id === id)!;
+    assert.equal(card("edson").gen, 1);
+    assert.equal(card("eunice").gen, 2);
+    assert.equal(card("jacyron").gen, 2);
+    assert.ok(card("eunice").y < card("edson").y, "grandparents sit above the father");
+    assert.ok(card("edson").y < card("jean").y, "father sits above Jean");
+    const jeanSide = [card("edson").x, card("eunice").x, card("jacyron").x];
+    const leahSide = [card("bob").x, card("sue").x, card("lgp1").x, card("lgp2").x];
+    assert.ok(Math.max(...jeanSide) < Math.min(...leahSide), "Jean's family stays left of Leah's family");
+    assert.ok(card("edson").x < card("leah").x);
+    assert.ok((card("bob").x + card("sue").x) / 2 > card("jean").x);
   });
 });
 

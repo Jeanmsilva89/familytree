@@ -88,7 +88,11 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
   const coupleBar = showsCoupleBar(primary?.kind, couple.length);
 
   const grandGroups: GenerationGroup[] = [];
-  for (const parent of parents) {
+  const parentGeneration = uniquePeople([
+    ...parents,
+    ...partners.flatMap((p) => parentsOf(tree, p.id)),
+  ]);
+  for (const parent of parentGeneration) {
     const group = parentSideGroup(tree, parent);
     if (group) grandGroups.push(group);
   }

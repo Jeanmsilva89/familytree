@@ -2,6 +2,7 @@ import type { Person, TreeData } from "./types";
 import { kidsUnderUnion, unionsFor } from "./tree";
 import {
   CARD,
+  computeGenerations,
   householdCouple,
   showsCoupleBar,
   type GraphLayout,
@@ -384,7 +385,6 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   const homeMid = homeXs.length ? avg(homeXs) : (places.get(focus.id)?.x ?? 0);
 
   const placeAncestors = (personId: string, gen: number, preferX: number) => {
-    if (gen > 2) return;
     const elders = parentIdsOf(tree, personId).filter((id) => personById(tree, id));
     if (!elders.length) return;
     const union = tree.unions.find((u) => elders.every((id) => u.partnerIds.includes(id)));
@@ -397,6 +397,8 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
       missing.forEach((id) => placed.add(id));
     }
     for (const pid of ordered) {
+      const cur = places.get(pid);
+      if (cur && cur.gen < gen) cur.gen = gen;
       const x = places.get(pid)?.x ?? preferX;
       placeAncestors(pid, gen + 1, x);
     }
@@ -432,12 +434,50 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     });
   }
 
+  const kinGen = computeGenerations(tree, householdIds);
+
+  const relativeX = (id: string): number | undefined => {
+    const childXs = childrenOfAny(tree, id).map((k) => places.get(k.id)?.x).filter(finiteNumber);
+    if (childXs.length) return avg(childXs);
+    const parentXs = parentIdsOf(tree, id).map((pid) => places.get(pid)?.x).filter(finiteNumber);
+    if (parentXs.length) return avg(parentXs);
+    const partnerXs = unionsFor(tree, id)
+      .flatMap((u) => u.partnerIds)
+      .filter((pid) => pid !== id)
+      .map((pid) => places.get(pid)?.x)
+      .filter(finiteNumber);
+    if (partnerXs.length) return avg(partnerXs);
+    return undefined;
+  };
+
+  let attached = true;
+  while (attached) {
+    attached = false;
+    for (const person of tree.people) {
+      if (places.has(person.id)) continue;
+      const x = relativeX(person.id);
+      if (x === undefined && !kinGen.has(person.id)) continue;
+      const fallback = [...places.values()].map((p) => p.x).filter(finiteNumber);
+      places.set(person.id, {
+        x: x ?? (fallback.length ? Math.max(...fallback) + CARD.w + CARD.gap : 0),
+        gen: kinGen.get(person.id) ?? 0,
+      });
+      placed.add(person.id);
+      attached = true;
+    }
+  }
+
   const placedXs = [...places.values()].map((p) => p.x).filter(finiteNumber);
   let extraX = (placedXs.length ? Math.max(...placedXs) : 0) + CARD.w + CARD.gap * 3;
   for (const person of tree.people) {
     if (places.has(person.id)) continue;
-    places.set(person.id, { x: extraX, gen: 0 });
+    places.set(person.id, { x: extraX, gen: kinGen.get(person.id) ?? 0 });
     extraX += CARD.w + CARD.gap;
+  }
+
+  for (const [id, place] of places) {
+    const g = kinGen.get(id);
+    if (g !== undefined) place.gen = g;
   }
 
   for (const [id, place] of [...places.entries()]) {
@@ -597,12 +637,35 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     }
   };
 
+  const pushFamilySides = () => {
+    if (!rightHome) return;
+    const leftX = places.get(leftHome)?.x;
+    const rightX = places.get(rightHome)?.x;
+    if (!finiteNumber(leftX) || !finiteNumber(rightX) || rightX <= leftX) return;
+    const divide = (leftX + rightX) / 2;
+    const ancestorGens = [...new Set([...places.values()].map((p) => p.gen).filter((g) => g > 0))];
+    for (const gen of ancestorGens) {
+      for (const unit of unitsForGen(gen)) {
+        const mid = avgX(unit.ids);
+        const half = unitWidth(unit.ids.length) / 2;
+        if (unit.side < 0 && mid + half > divide - CARD.gap / 2) {
+          setUnitMid(unit, divide - CARD.gap / 2 - half);
+        } else if (unit.side > 0 && mid - half < divide + CARD.gap / 2) {
+          setUnitMid(unit, divide + CARD.gap / 2 + half);
+        }
+      }
+      separateUnits(gen);
+    }
+  };
+
   alignParentsToKids();
   for (const gen of gens) separateUnits(gen);
   alignParentsToKids();
   for (const gen of gens) separateUnits(gen);
+  pushFamilySides();
   faceInlawsOutward();
   for (const gen of gens) separateUnits(gen);
+  pushFamilySides();
 
   const xs = [...places.values()].map((p) => p.x).filter(finiteNumber);
   if (!xs.length) return emptyGraph();
