@@ -415,6 +415,38 @@ select {
   display: flex;
   flex-direction: column;
 }
+.family-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15;
+  background: var(--paper);
+  display: flex;
+  flex-direction: column;
+  padding-top: calc(8px + var(--safe-top));
+}
+.family-overlay .graph-toolbar {
+  position: relative;
+  top: 0;
+  flex: 0 0 auto;
+}
+.family-overlay .focus-family {
+  flex: 1;
+  min-height: 0;
+  padding: 4px 10px calc(10px + var(--safe-bottom));
+}
+.family-overlay .focus-actions {
+  margin-top: auto;
+  position: sticky;
+  bottom: 0;
+  background: var(--paper);
+  padding-top: 8px;
+}
+.family-overlay .card-actions .icon-btn {
+  width: 32px;
+  height: 32px;
+  min-width: 32px;
+  min-height: 32px;
+}
 .graph-overlay .graph-stage {
   flex: 1;
   min-height: 0;
