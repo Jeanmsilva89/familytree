@@ -17,6 +17,7 @@ import {
   setUnionKind,
   startWithName,
   unlinkExisting,
+  dropUnion,
   updateParentLink,
   updatePerson,
 } from "@/lib/tree";
@@ -127,6 +128,11 @@ export function useTree() {
     [mutate],
   );
 
+  const dropPair = useCallback(
+    async (unionId: string) => mutate((current) => dropUnion(current, unionId)),
+    [mutate],
+  );
+
   const unionKind = useCallback(
     async (unionId: string, kind: UnionKind) => mutate((current) => setUnionKind(current, unionId, kind)),
     [mutate],
@@ -183,6 +189,7 @@ export function useTree() {
     unlinked,
     link,
     unlink,
+    dropUnion: dropPair,
     unionKind,
     updateLink,
     focus,

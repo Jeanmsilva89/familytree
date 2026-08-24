@@ -362,6 +362,7 @@ export function TreeApp() {
         onSetUnionKind={treeState.unionKind}
         onUpdateLink={treeState.updateLink}
         onUnlink={treeState.unlink}
+        onDropUnion={treeState.dropUnion}
         onEdit={treeState.edit}
         onRemove={treeState.remove}
       />

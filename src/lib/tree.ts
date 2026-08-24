@@ -459,6 +459,17 @@ export function unlinkExisting(
   };
 }
 
+export function dropUnion(tree: TreeData, unionId: string): TreeData {
+  if (!tree.unions.some((union) => union.id === unionId)) return tree;
+  return {
+    ...tree,
+    unions: tree.unions.filter((union) => union.id !== unionId),
+    childLinks: tree.childLinks.map((link) =>
+      link.unionId === unionId ? { ...link, unionId: undefined } : link,
+    ),
+  };
+}
+
 export function serializeTreeJson(tree: TreeData): string {
   return JSON.stringify(tree);
 }

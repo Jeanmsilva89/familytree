@@ -30,6 +30,7 @@ type Props = {
   onSetUnionKind: (unionId: string, kind: UnionKind) => Promise<void>;
   onUpdateLink: (childId: string, parentId: string, patch: { role?: ParentRole | ""; kin?: KinKind }) => Promise<void>;
   onUnlink: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => Promise<void>;
+  onDropUnion: (unionId: string) => Promise<void>;
   onEdit: (id: string, patch: Partial<Person>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
 };
@@ -67,6 +68,7 @@ export function PersonSheet({
   onSetUnionKind,
   onUpdateLink,
   onUnlink,
+  onDropUnion,
   onEdit,
   onRemove,
 }: Props) {
@@ -136,10 +138,11 @@ export function PersonSheet({
     unions[0]?.partnerIds.filter((id) => tree.people.some((p) => p.id === id)) ?? [person.id];
   const hasParents = parents.length > 0;
 
-  async function unlinkCouple(unionPartnerId: string, label: string) {
+  async function unlinkCouple(unionId: string, otherId: string | undefined, label: string) {
     if (!person) return;
-    if (!confirm(`Unlink ${label} from ${displayName(person)}?`)) return;
-    await onUnlink(person.id, unionPartnerId, "partner");
+    if (!confirm(`Unlink ${label} from ${displayName(person)}? Kids stay on the tree.`)) return;
+    if (otherId) await onUnlink(person.id, otherId, "partner");
+    else await onDropUnion(unionId);
   }
 
   async function unlinkParent(parent: Person) {
@@ -315,11 +318,11 @@ export function PersonSheet({
             );
           })}
           {unions.map((u) => {
-            const others = u.partnerIds
-              .filter((id) => id !== person.id)
+            const otherIds = u.partnerIds.filter((id) => id !== person.id);
+            const others = otherIds
               .map((id) => tree.people.find((p) => p.id === id))
               .filter(Boolean) as Person[];
-            const withNames = others.map(displayName).join(", ") || "someone";
+            const withNames = others.map(displayName).join(", ") || (otherIds.length ? "Unknown person" : "someone");
             return (
               <article className="rel-row" key={u.id}>
                 <header>
@@ -336,11 +339,9 @@ export function PersonSheet({
                     </select>
                   </label>
                 </div>
-                {others[0] ? (
-                  <button type="button" className="btn ghost danger-text" onClick={() => void unlinkCouple(others[0].id, withNames)}>
-                    Unlink
-                  </button>
-                ) : null}
+                <button type="button" className="btn ghost danger-text" onClick={() => void unlinkCouple(u.id, otherIds[0], withNames)}>
+                  Unlink
+                </button>
               </article>
             );
           })}
