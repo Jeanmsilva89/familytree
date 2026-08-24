@@ -95,7 +95,7 @@ function CoupleUnit({ tree, people, coupleBar, lit, focusIds, viewId, onFocus, o
   tree: TreeData; people: Person[]; coupleBar?: boolean; lit?: boolean; focusIds: Set<string>; viewId?: string;
   onFocus: (id: string) => void; onOpen: (person: Person) => void; flashId?: string;
 }) {
-  const unit = Boolean(coupleBar && people.length >= 2);
+  const unit = Boolean(coupleBar && people.length === 2);
   const focused = people.find((p) => p.id === viewId);
   const unitParents = unit && focused ? parentsOf(tree, focused.id).slice(0, 2) : [];
   return (
@@ -158,7 +158,7 @@ function LaneRow({ tree, lane, focusIds, viewId, onFocus, onOpen, flashId }: {
           <CoupleUnit
             tree={tree}
             people={lane.people}
-            coupleBar={focusCouple ? lane.coupleBar : false}
+            coupleBar={Boolean(focusCouple && lane.coupleBar && lane.people.length === 2)}
             lit={Boolean(lane.coupleBar) && lane.people.some((p) => focusIds.has(p.id))}
             focusIds={focusIds}
             viewId={viewId}

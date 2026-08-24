@@ -1,6 +1,6 @@
 import type { Person, TreeData, Union } from "./types";
 import { kidsUnderUnion, parentsOf, unionsFor } from "./tree";
-import { showsCoupleBar } from "./layout";
+import { householdCouple, showsCoupleBar } from "./layout";
 
 export type GenerationLaneId =
   | "grandparents"
@@ -46,6 +46,71 @@ function sharedUnion(tree: TreeData, people: Person[]): Union | undefined {
   return tree.unions.find((u) => people.every((p) => u.partnerIds.includes(p.id)));
 }
 
+function isBarredCouple(tree: TreeData, people: Person[]): boolean {
+  if (people.length !== 2) return false;
+  const union = sharedUnion(tree, people);
+  return showsCoupleBar(union?.kind, 2);
+}
+
+function focusHouseholdGroups(tree: TreeData, focus: Person): GenerationGroup[] {
+  const homeIds = householdCouple(tree, focus.id);
+  const homePeople = uniquePeople(
+    homeIds.map((id) => tree.people.find((p) => p.id === id)).filter(Boolean) as Person[],
+  );
+  const seated = new Set(homePeople.map((p) => p.id));
+  const groups: GenerationGroup[] = [];
+  if (homePeople.length) {
+    groups.push({
+      parentId: `home-${focus.id}`,
+      label: "",
+      people: homePeople,
+      coupleBar: isBarredCouple(tree, homePeople),
+    });
+  }
+  for (const union of unionsFor(tree, focus.id)) {
+    for (const pid of union.partnerIds) {
+      if (pid === focus.id || seated.has(pid)) continue;
+      const other = tree.people.find((p) => p.id === pid);
+      if (!other) continue;
+      seated.add(pid);
+      groups.push({
+        parentId: `partner-${pid}`,
+        label: "",
+        people: [other],
+        coupleBar: false,
+      });
+    }
+  }
+  return groups;
+}
+
+function childGroupsFor(tree: TreeData, focus: Person, unions: Union[]): GenerationGroup[] {
+  const used = new Set<string>();
+  const groups: GenerationGroup[] = [];
+  const homeIds = householdCouple(tree, focus.id);
+  const homeUnion = tree.unions.find(
+    (union) => homeIds.length >= 2 && homeIds.every((id) => union.partnerIds.includes(id)),
+  );
+  const ordered = [...(homeUnion ? [homeUnion] : []), ...unions.filter((union) => union.id !== homeUnion?.id)];
+  for (const union of ordered) {
+    const kids = uniquePeople(kidsUnderUnion(tree, union)).filter((kid) => !used.has(kid.id));
+    if (!kids.length) continue;
+    kids.forEach((kid) => used.add(kid.id));
+    const otherId = union.partnerIds.find((id) => id !== focus.id);
+    const other = otherId ? tree.people.find((p) => p.id === otherId) : undefined;
+    groups.push({
+      parentId: union.id,
+      label: other ? `With ${other.givenName.trim()}` : "",
+      people: kids,
+    });
+  }
+  const lone = uniquePeople(childrenOfPerson(tree, focus.id).filter((kid) => !used.has(kid.id)));
+  if (lone.length) {
+    groups.push({ parentId: `lone-${focus.id}`, label: "", people: lone });
+  }
+  return groups;
+}
+
 function parentsLabel(child: Person): string {
   const first = child.givenName.trim() || "Their";
   return `${first}'s parents`;
@@ -65,12 +130,11 @@ export function siblingsOf(tree: TreeData, personId: string): Person[] {
 export function parentSideGroup(tree: TreeData, child: Person): GenerationGroup | undefined {
   const people = parentsOf(tree, child.id);
   if (!people.length) return undefined;
-  const union = sharedUnion(tree, people);
   return {
     parentId: child.id,
     label: parentsLabel(child),
     people,
-    coupleBar: showsCoupleBar(union?.kind, people.length),
+    coupleBar: isBarredCouple(tree, people),
   };
 }
 
@@ -81,11 +145,9 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
 
   const parents = parentsOf(tree, focus.id);
   const unions = unionsFor(tree, focus.id);
-  const primary = unions[0];
-  const partnerIds = new Set(unions.flatMap((u) => u.partnerIds).filter((id) => id !== focus.id));
-  const partners = tree.people.filter((p) => partnerIds.has(p.id));
-  const couple = uniquePeople([focus, ...partners]);
-  const coupleBar = showsCoupleBar(primary?.kind, couple.length);
+  const household = focusHouseholdGroups(tree, focus);
+  const partners = uniquePeople(household.flatMap((group) => group.people)).filter((p) => p.id !== focus.id);
+  const coupleBar = household.some((group) => group.coupleBar);
 
   const grandGroups: GenerationGroup[] = [];
   const parentGeneration = uniquePeople([
@@ -100,12 +162,11 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
 
   const parentGroups: GenerationGroup[] = [];
   if (parents.length) {
-    const union = sharedUnion(tree, parents);
     parentGroups.push({
       parentId: focus.id,
       label: parentsLabel(focus),
       people: parents,
-      coupleBar: showsCoupleBar(union?.kind, parents.length),
+      coupleBar: isBarredCouple(tree, parents),
     });
   }
   for (const partner of partners) {
@@ -114,9 +175,8 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
   }
   const parentLanePeople = uniquePeople(parentGroups.flatMap((g) => g.people));
 
-  const fromUnions = unions.flatMap((u) => kidsUnderUnion(tree, u));
-  const lone = childrenOfPerson(tree, focus.id);
-  const children = uniquePeople([...fromUnions, ...lone]);
+  const kidGroups = childGroupsFor(tree, focus, unions);
+  const children = uniquePeople(kidGroups.flatMap((group) => group.people));
 
   const groups: GenerationGroup[] = [];
   for (const child of children) {
@@ -138,19 +198,27 @@ export function buildGenerationLanes(tree: TreeData, focusHint?: string): Genera
     lanes.push({ id: "parents", people: parentLanePeople, groups: parentGroups });
   }
   const siblings = uniquePeople(siblingsOf(tree, focus.id));
-  const focusPeople = uniquePeople([...couple, ...siblings]);
-  const focusGroups: GenerationGroup[] | undefined = siblings.length
-    ? [
-        { parentId: `couple-${focus.id}`, label: "", people: couple, coupleBar },
-        {
-          parentId: `sibs-${focus.id}`,
-          label: `${focus.givenName.trim()} siblings`,
-          people: siblings,
-        },
-      ]
-    : undefined;
+  const focusGroups: GenerationGroup[] = [
+    ...household,
+    ...(siblings.length
+      ? [
+          {
+            parentId: `sibs-${focus.id}`,
+            label: `${focus.givenName.trim()} siblings`,
+            people: siblings,
+          },
+        ]
+      : []),
+  ];
+  const focusPeople = uniquePeople([...household.flatMap((group) => group.people), ...siblings]);
   lanes.push({ id: "focus", people: focusPeople, coupleBar, groups: focusGroups });
-  if (children.length) lanes.push({ id: "children", people: children });
+  if (children.length) {
+    lanes.push({
+      id: "children",
+      people: children,
+      groups: kidGroups.length ? kidGroups : undefined,
+    });
+  }
   if (grandchildren.length) lanes.push({ id: "grandchildren", people: grandchildren, groups });
   return lanes;
 }

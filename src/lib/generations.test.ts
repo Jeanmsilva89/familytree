@@ -180,6 +180,46 @@ describe("generation lanes", () => {
     assert.ok(asParent.find((l) => l.id === "children")?.people.some((p) => p.id === sam));
     assert.ok(asParent.find((l) => l.id === "children")?.people.some((p) => p.id === riley.id));
   });
+
+  it("does not box two partners of the focus as one family", () => {
+    const tree: TreeData = {
+      focusPersonId: "andreia",
+      people: [
+        person("eunice", "Eunice"),
+        person("jacyron", "Jacyron"),
+        person("andreia", "Andreia"),
+        person("jay", "Jay"),
+        person("edson", "Edson"),
+        person("jean", "Jean"),
+        person("jack", "Jack"),
+      ],
+      unions: [
+        { id: "u-gp", partnerIds: ["eunice", "jacyron"], kind: "married" },
+        { id: "u-aj", partnerIds: ["andreia", "jay"], kind: "married" },
+        { id: "u-ae", partnerIds: ["andreia", "edson"], kind: "unspecified" },
+      ],
+      childLinks: [
+        { id: "c-a", childId: "andreia", parentIds: ["eunice", "jacyron"], unionId: "u-gp" },
+        { id: "c-jean", childId: "jean", parentIds: ["andreia", "edson"], unionId: "u-ae" },
+        { id: "c-jack", childId: "jack", parentIds: ["andreia", "edson"], unionId: "u-ae" },
+      ],
+    };
+    const lanes = buildGenerationLanes(tree, "andreia");
+    const family = lanes.find((l) => l.id === "focus")!;
+    const boxed = family.groups!.filter((g) => g.coupleBar);
+    assert.equal(boxed.length, 1);
+    assert.deepEqual(boxed[0].people.map((p) => p.id).sort(), ["andreia", "jay"]);
+    assert.ok(!boxed[0].people.some((p) => p.id === "edson"));
+    const extra = family.groups!.find((g) => g.people.some((p) => p.id === "edson"));
+    assert.ok(extra);
+    assert.equal(extra!.coupleBar, false);
+    assert.deepEqual(extra!.people.map((p) => p.id), ["edson"]);
+    const kids = lanes.find((l) => l.id === "children")!;
+    assert.ok(kids.groups);
+    const withEdson = kids.groups!.find((g) => g.label === "With Edson");
+    assert.ok(withEdson);
+    assert.deepEqual(withEdson!.people.map((p) => p.givenName).sort(), ["Jack", "Jean"]);
+  });
 });
 
 describe("five-generation graph", () => {
