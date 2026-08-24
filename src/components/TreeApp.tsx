@@ -31,6 +31,7 @@ export function TreeApp() {
   const [installEvent, setInstallEvent] = useState<BeforeInstallPrompt | null>(null);
   const [mobileView, setMobileView] = useState<"family" | "graph">("family");
   const [graphOpen, setGraphOpen] = useState(false);
+  const [familyOpen, setFamilyOpen] = useState(true);
   const [graphEdit, setGraphEdit] = useState(false);
   const [lineFilter, setLineFilter] = useState<LineFilter>(DEFAULT_LINE_FILTER);
   const [graphAddName, setGraphAddName] = useState<string | null>(null);
@@ -80,7 +81,13 @@ export function TreeApp() {
     const stored = window.localStorage.getItem(VIEW_KEY);
     if (stored === "family" || stored === "graph") {
       setMobileView(stored);
-      if (stored === "graph") setGraphOpen(true);
+      if (stored === "graph") {
+        setGraphOpen(true);
+        setFamilyOpen(false);
+      } else {
+        setFamilyOpen(true);
+        setGraphOpen(false);
+      }
       return;
     }
     setMobileView(window.matchMedia("(max-width: 719px)").matches ? "family" : "graph");
@@ -96,23 +103,30 @@ export function TreeApp() {
       if (graphOpen) {
         setGraphOpen(false);
         setGraphEdit(false);
+        setFamilyOpen(true);
         setMobileView("family");
         window.localStorage.setItem(VIEW_KEY, "family");
+        return;
+      }
+      if (familyOpen) {
+        setFamilyOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sheetPerson, graphOpen]);
+  }, [sheetPerson, graphOpen, familyOpen]);
 
   const chooseView = (next: "family" | "graph") => {
     setMobileView(next);
     window.localStorage.setItem(VIEW_KEY, next);
     if (next === "graph") {
       setGraphOpen(true);
+      setFamilyOpen(false);
       return;
     }
     setGraphOpen(false);
     setGraphEdit(false);
+    setFamilyOpen(true);
   };
 
   const closeVisualize = () => {
@@ -175,7 +189,7 @@ export function TreeApp() {
       <AppMenu
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
-        onPeople={() => { setPeopleOpen(true); setMenuOpen(false); }}
+        onPeople={() => { setPeopleOpen(true); setFamilyOpen(true); setGraphOpen(false); setMenuOpen(false); }}
         onVisualize={() => { setMenuOpen(false); chooseView("graph"); }}
         onAddSomeone={async (name) => { await treeState.unlinked(name); setMenuOpen(false); }}
         onExport={exportGedcom}
@@ -188,6 +202,7 @@ export function TreeApp() {
             setHighlighted(undefined);
             setSheetPerson(undefined);
             setGraphOpen(false);
+            setFamilyOpen(true);
             setMenuOpen(false);
           }
         }}
@@ -202,10 +217,26 @@ export function TreeApp() {
       ) : (
         <>
           <div className="view-toggle" role="tablist" aria-label="Tree view">
-            <button type="button" role="tab" aria-selected={mobileView === "family"} className={mobileView === "family" ? "btn primary" : "btn ghost"} onClick={() => chooseView("family")}>Family</button>
-            <button type="button" role="tab" aria-selected={graphOpen || mobileView === "graph"} className={graphOpen || mobileView === "graph" ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Visualize</button>
+            <button type="button" role="tab" aria-selected={familyOpen && !graphOpen} className={familyOpen && !graphOpen ? "btn primary" : "btn ghost"} onClick={() => chooseView("family")}>Family</button>
+            <button type="button" role="tab" aria-selected={graphOpen} className={graphOpen ? "btn primary" : "btn ghost"} onClick={() => chooseView("graph")}>Visualize</button>
           </div>
           {lookingName ? <p className="looking-at" aria-live="polite">Looking at {lookingName}</p> : null}
+        </>
+      )}
+
+      {treeState.started && familyOpen && !graphOpen ? (
+        <div className="family-overlay">
+          <div className="graph-toolbar">
+            <button type="button" className="btn" onClick={() => setFamilyOpen(false)}>
+              Close
+            </button>
+            <button type="button" className="btn" onClick={() => setPeopleOpen(true)}>
+              People
+            </button>
+            <button type="button" className="btn" onClick={() => chooseView("graph")}>
+              Visualize
+            </button>
+          </div>
           <FocusFamily
             tree={treeState.tree}
             onFocus={(id) => {
@@ -220,8 +251,8 @@ export function TreeApp() {
             onAddSibling={treeState.sibling}
             onLinkExisting={treeState.link}
           />
-        </>
-      )}
+        </div>
+      ) : null}
 
       {graphOpen ? (
         <div className="graph-overlay">

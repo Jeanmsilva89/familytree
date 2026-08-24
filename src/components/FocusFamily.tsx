@@ -224,9 +224,6 @@ export function FocusFamily({ tree, onFocus, onOpen, onAddParent, onAddPartner, 
 
   return (
     <section className="focus-family" aria-label="Family around the focus person">
-      <div className="focus-toolbar">
-        <button type="button" className="btn" onClick={() => setPeopleOpen(true)}>People</button>
-      </div>
       <div className="gen-stack">
         {lanes.map((lane) => (
           <LaneRow key={lane.id} tree={tree} lane={lane} focusIds={focusIds} viewId={focus.id} onFocus={handleFocus} onOpen={onOpen} flashId={flashId} />
