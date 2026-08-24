@@ -635,9 +635,6 @@ select {
   margin: 0 auto;
 }
 .graph-add p { margin: 0; font-weight: 700; }
-  margin: 0;
-  font-weight: 700;
-}
 .couple-row .field { margin-bottom: 0; }
 .graph-port {
   position: absolute;
