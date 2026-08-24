@@ -14,6 +14,7 @@ import {
 import { childrenOfPerson, kinBetween, parentRoleOf, parentsOf, unionsFor } from "@/lib/tree";
 import { personToVCard, vcardFilename } from "@/lib/vcard";
 import { NameAutocomplete } from "./AddNameRow";
+import { scrollFieldIntoSheet, useBodyScrollLock } from "@/hooks/useVisualViewport";
 
 type Rel = "parent" | "partner" | "child" | "sibling";
 
@@ -86,6 +87,7 @@ export function PersonSheet({
   const [extras, setExtras] = useState<ExtraField[]>([{ key: "", value: "" }]);
   const [hint, setHint] = useState<string | null>(null);
   const swipeStart = useRef<number | null>(null);
+  useBodyScrollLock(Boolean(person));
 
   useEffect(() => {
     if (!person) return;
@@ -105,6 +107,15 @@ export function PersonSheet({
   }, [person]);
 
   function onSheetTouchStart(event: TouchEvent) {
+    const sheet = event.currentTarget as HTMLElement;
+    if ((event.target as HTMLElement).closest("input, textarea, select, button")) {
+      swipeStart.current = null;
+      return;
+    }
+    if (sheet.scrollTop > 8) {
+      swipeStart.current = null;
+      return;
+    }
     swipeStart.current = event.touches[0]?.clientY ?? null;
   }
 
@@ -236,6 +247,7 @@ export function PersonSheet({
         onClick={(e) => e.stopPropagation()}
         onTouchStart={onSheetTouchStart}
         onTouchEnd={onSheetTouchEnd}
+        onFocusCapture={(event) => scrollFieldIntoSheet(event.target)}
       >
         <div className="sheet-handle" aria-hidden />
         <div className="sheet-head">

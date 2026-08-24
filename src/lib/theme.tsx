@@ -1,6 +1,7 @@
 "use client";
 
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useVisualViewport } from "@/hooks/useVisualViewport";
 
 export const THEME_KEY = "familytree-theme";
 export type ThemePreference = "light" | "dark" | "system";
@@ -33,6 +34,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [preference, setPreferenceState] = useState<ThemePreference>("system");
   const [resolved, setResolved] = useState<ResolvedTheme>("light");
   const [hydrated, setHydrated] = useState(false);
+  useVisualViewport();
 
   useEffect(() => {
     setPreferenceState(readStored());

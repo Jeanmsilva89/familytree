@@ -633,6 +633,8 @@ select {
   border: 1px solid var(--line);
   max-width: 420px;
   margin: 0 auto;
+  max-height: calc(var(--vv-height, 100dvh) - 24px);
+  overflow-y: auto;
 }
 .graph-add p { margin: 0; font-weight: 700; }
 .couple-row .field { margin-bottom: 0; }
@@ -831,7 +833,10 @@ html[data-theme="dark"] .portrait-card .swatch {
 
 .sheet-backdrop {
   position: fixed;
-  inset: 0;
+  top: var(--vv-top, 0px);
+  left: 0;
+  right: 0;
+  height: var(--vv-height, 100dvh);
   background: var(--sheet-overlay);
   display: flex;
   align-items: flex-end;
@@ -844,14 +849,29 @@ html[data-theme="dark"] .portrait-card .swatch {
   position: relative;
   width: 100%;
   max-width: 100%;
-  max-height: min(90dvh, 860px);
+  max-height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
   min-width: 0;
   background: var(--card);
   border-radius: 22px 22px 0 0;
   border: 1px solid var(--line);
   padding: 10px 16px calc(22px + var(--safe-bottom));
+}
+
+.sheet-search {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--card);
+  padding-bottom: 4px;
+}
+.sheet input,
+.sheet textarea,
+.sheet select {
+  font-size: 16px;
 }
 
 .sheet-handle {
@@ -988,7 +1008,11 @@ html[data-theme="dark"] .portrait-card .swatch {
   .app-shell { padding: 20px 20px 40px; }
   .graph-stage { min-height: 68dvh; }
   .sheet-backdrop { align-items: center; padding: 24px; }
-  .sheet { width: min(560px, 100%); border-radius: 24px; }
+  .sheet {
+    width: min(560px, 100%);
+    border-radius: 24px;
+    max-height: min(860px, calc(var(--vv-height, 100dvh) - 48px));
+  }
   .privacy { font-size: 0.9rem; }
 }
 
