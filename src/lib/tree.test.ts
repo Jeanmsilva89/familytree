@@ -14,6 +14,7 @@ import {
   addUnlinkedPerson,
   linkExisting,
   unlinkExisting,
+  dropUnion,
   parseTreeJson,
   serializeTreeJson,
   setFocus,
@@ -213,6 +214,17 @@ describe("self-serve mutations", () => {
     const andreia = tree.people.find((p) => p.givenName === "Andreia")!.id;
     assert.equal(tree.unions[0].kind, "married");
     tree = unlinkExisting(tree, edson, andreia, "partner");
+    assert.equal(tree.unions.length, 0);
+  });
+
+  it("drops a couple with no remaining partner on the tree", () => {
+    let tree = startWithName("Andreia");
+    const andreia = tree.people[0].id;
+    tree = {
+      ...tree,
+      unions: [{ id: "u-ghost", partnerIds: [andreia, "missing"], kind: "unspecified" }],
+    };
+    tree = dropUnion(tree, "u-ghost");
     assert.equal(tree.unions.length, 0);
   });
 

@@ -605,10 +605,12 @@ select {
 }
 .btn.danger-text {
   color: var(--danger);
-  justify-self: start;
-  width: fit-content;
+  justify-self: stretch;
+  width: 100%;
+  min-height: var(--tap);
   padding-inline: 12px;
   box-shadow: none;
+  border: 1px solid var(--danger-line);
 }
 .seg {
   display: grid;
