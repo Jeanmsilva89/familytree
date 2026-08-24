@@ -21,6 +21,12 @@ export const KIN_KIND_OPTIONS: { value: KinKind; label: string }[] = [
   { value: "foster", label: "Foster" },
 ];
 
+export const PARENT_ROLE_OPTIONS: { value: ParentRole | ""; label: string }[] = [
+  { value: "mother", label: "Mother" },
+  { value: "father", label: "Father" },
+  { value: "", label: "Parent" },
+];
+
 export function unionKindLabel(kind: UnionKind): string {
   return UNION_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? "Unspecified";
 }

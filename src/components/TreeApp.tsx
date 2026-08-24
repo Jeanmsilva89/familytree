@@ -33,6 +33,7 @@ export function TreeApp() {
   const [graphOpen, setGraphOpen] = useState(false);
   const [graphEdit, setGraphEdit] = useState(false);
   const [lineFilter, setLineFilter] = useState<LineFilter>(DEFAULT_LINE_FILTER);
+  const [graphAddName, setGraphAddName] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
 
@@ -243,6 +244,13 @@ export function TreeApp() {
             <button type="button" className="btn" onClick={exportGedcom}>
               Export
             </button>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setGraphAddName("")}
+            >
+              Add person
+            </button>
             {treeState.tree.people.some((person) => typeof person.graphX === "number") ? (
               <button
                 type="button"
@@ -270,6 +278,36 @@ export function TreeApp() {
             onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
             lineFilter={lineFilter}
           />
+          {graphAddName != null ? (
+            <form
+              className="graph-add"
+              onSubmit={async (event) => {
+                event.preventDefault();
+                const next = await treeState.unlinked(graphAddName);
+                setGraphAddName(null);
+                if (next) {
+                  setHighlighted(next);
+                  setSheetPerson(next);
+                  setGraphEdit(true);
+                }
+              }}
+            >
+              <p>New person</p>
+              <label className="field">
+                Given name
+                <input
+                  value={graphAddName}
+                  onChange={(e) => setGraphAddName(e.target.value)}
+                  autoFocus
+                  required
+                />
+              </label>
+              <div className="actions">
+                <button className="btn primary" type="submit">Add</button>
+                <button className="btn ghost" type="button" onClick={() => setGraphAddName(null)}>Cancel</button>
+              </div>
+            </form>
+          ) : null}
         </div>
       ) : null}
 
@@ -291,6 +329,7 @@ export function TreeApp() {
         onAddSibling={treeState.sibling}
         onLinkExisting={treeState.link}
         onSetUnionKind={treeState.unionKind}
+        onUpdateLink={treeState.updateLink}
         onUnlink={treeState.unlink}
         onEdit={treeState.edit}
         onRemove={treeState.remove}
