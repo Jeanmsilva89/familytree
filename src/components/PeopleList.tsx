@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { Person, TreeData } from "@/lib/types";
 import { displayName, initials } from "@/lib/types";
+import { scrollFieldIntoSheet, useBodyScrollLock } from "@/hooks/useVisualViewport";
 
 type Props = {
   tree: TreeData;
@@ -13,8 +14,17 @@ type Props = {
   onClose: () => void;
 };
 
+function isPhone() {
+  return typeof window !== "undefined" && window.matchMedia("(pointer: coarse)").matches;
+}
+
 export function PeopleList({ tree, title = "Everyone", excludeId, embedded, onPick, onClose }: Props) {
   const [q, setQ] = useState("");
+  const [autoFocus, setAutoFocus] = useState(false);
+  useBodyScrollLock(!embedded);
+  useEffect(() => {
+    setAutoFocus(!isPhone());
+  }, []);
   const people = useMemo(() => {
     const needle = q.trim().toLowerCase();
     return tree.people
@@ -24,15 +34,32 @@ export function PeopleList({ tree, title = "Everyone", excludeId, embedded, onPi
   const noneOnTree = tree.people.filter((p) => p.id !== excludeId).length === 0;
 
   const inner = (
-    <div className={embedded ? "people-embed" : "sheet"} role={embedded ? "region" : "dialog"} aria-modal={embedded ? undefined : true} aria-label={title} onClick={(e) => e.stopPropagation()}>
+    <div
+      className={embedded ? "people-embed" : "sheet"}
+      role={embedded ? "region" : "dialog"}
+      aria-modal={embedded ? undefined : true}
+      aria-label={title}
+      onClick={(e) => e.stopPropagation()}
+      onFocusCapture={(event) => scrollFieldIntoSheet(event.target)}
+    >
       {embedded ? null : <div className="sheet-handle" aria-hidden />}
       <div className="sheet-head">
         <h2>{title}</h2>
         <button type="button" className="sheet-close" onClick={onClose} aria-label="Close">{embedded ? "Back" : "Close"}</button>
       </div>
-      <div className="field">
+      <div className="sheet-search field">
         <label htmlFor="people-search">Search people</label>
-        <input id="people-search" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name" autoFocus />
+        <input
+          id="people-search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Name"
+          enterKeyHint="search"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="words"
+          autoFocus={autoFocus}
+        />
       </div>
       <ul className="people-list">
         {people.map((person) => (
