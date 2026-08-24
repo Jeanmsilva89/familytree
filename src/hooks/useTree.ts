@@ -17,6 +17,7 @@ import {
   setUnionKind,
   startWithName,
   unlinkExisting,
+  updateParentLink,
   updatePerson,
 } from "@/lib/tree";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
@@ -83,13 +84,14 @@ export function useTree() {
   );
 
   const child = useCallback(
-    async (parentIds: string[], name: string, unionId?: string) =>
-      mutate((current) => addChild(current, parentIds, name, unionId)),
+    async (parentIds: string[], name: string, unionId?: string, kin?: Partial<Record<string, KinKind>>) =>
+      mutate((current) => addChild(current, parentIds, name, unionId, kin)),
     [mutate],
   );
 
   const parent = useCallback(
-    async (childId: string, name: string) => mutate((current) => addParent(current, childId, name)),
+    async (childId: string, name: string, role?: ParentRole, kin?: KinKind) =>
+      mutate((current) => addParent(current, childId, name, role, kin)),
     [mutate],
   );
 
@@ -104,8 +106,13 @@ export function useTree() {
   );
 
   const unlinked = useCallback(
-    async (name: string) => mutate((current) => addUnlinkedPerson(current, name)),
-    [mutate],
+    async (name: string) => {
+      const before = new Set(treeRef.current.people.map((p) => p.id));
+      const next = addUnlinkedPerson(treeRef.current, name);
+      await persist(next);
+      return next.people.find((p) => !before.has(p.id));
+    },
+    [persist],
   );
 
   const link = useCallback(
@@ -122,6 +129,12 @@ export function useTree() {
 
   const unionKind = useCallback(
     async (unionId: string, kind: UnionKind) => mutate((current) => setUnionKind(current, unionId, kind)),
+    [mutate],
+  );
+
+  const updateLink = useCallback(
+    async (childId: string, parentId: string, patch: { role?: ParentRole | ""; kin?: KinKind }) =>
+      mutate((current) => updateParentLink(current, childId, parentId, patch)),
     [mutate],
   );
 
@@ -171,6 +184,7 @@ export function useTree() {
     link,
     unlink,
     unionKind,
+    updateLink,
     focus,
     edit,
     remove,

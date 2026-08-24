@@ -18,6 +18,7 @@ import {
   serializeTreeJson,
   setFocus,
   setUnionKind,
+  updateParentLink,
 } from "./tree";
 
 describe("tree mutations", () => {
@@ -238,6 +239,19 @@ describe("self-serve mutations", () => {
     const adopted = tree.childLinks.find((l) => l.childId === sam);
     assert.ok(adopted);
     assert.equal(adopted?.kin?.[andressa], "adopted");
+  });
+
+  it("can change a parent to stepfather or adoptive", () => {
+    let tree = startWithName("Andressa");
+    const andressa = tree.people[0].id;
+    tree = addParent(tree, andressa, "Edson", "father");
+    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
+    assert.equal(tree.childLinks[0].roles?.[edson], "father");
+    tree = updateParentLink(tree, andressa, edson, { kin: "step" });
+    assert.equal(tree.childLinks[0].kin?.[edson], "step");
+    tree = updateParentLink(tree, andressa, edson, { kin: "blood", role: "" });
+    assert.equal(tree.childLinks[0].kin?.[edson], undefined);
+    assert.equal(tree.childLinks[0].roles?.[edson], undefined);
   });
 });
 

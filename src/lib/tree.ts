@@ -59,6 +59,43 @@ export function kinBetween(tree: TreeData, childId: string, parentId: string): K
   return "blood";
 }
 
+export function childrenOfPerson(tree: TreeData, parentId: string): Person[] {
+  const ids = new Set(
+    tree.childLinks.filter((link) => link.parentIds.includes(parentId)).map((link) => link.childId),
+  );
+  return tree.people.filter((p) => ids.has(p.id));
+}
+
+export function parentRoleOf(tree: TreeData, childId: string, parentId: string): ParentRole | undefined {
+  const link = tree.childLinks.find((item) => item.childId === childId && item.parentIds.includes(parentId));
+  return link?.roles?.[parentId];
+}
+
+export function updateParentLink(
+  tree: TreeData,
+  childId: string,
+  parentId: string,
+  patch: { role?: ParentRole | ""; kin?: KinKind },
+): TreeData {
+  return {
+    ...tree,
+    childLinks: tree.childLinks.map((link) => {
+      if (link.childId !== childId || !link.parentIds.includes(parentId)) return link;
+      const roles = { ...link.roles };
+      if (patch.role === "") delete roles[parentId];
+      else if (patch.role) roles[parentId] = patch.role;
+      const kin = { ...link.kin };
+      if (patch.kin === "blood") delete kin[parentId];
+      else if (patch.kin) kin[parentId] = patch.kin;
+      return {
+        ...link,
+        roles: Object.keys(roles).length ? roles : undefined,
+        kin: Object.keys(kin).length ? kin : undefined,
+      };
+    }),
+  };
+}
+
 export function kidsOfParents(tree: TreeData, parentIds: string[]): Person[] {
   const want = [...parentIds].sort().join("|");
   const ids = new Set<string>();
@@ -108,29 +145,46 @@ export function addChild(
   parentIds: string[],
   givenName: string,
   unionId?: string,
+  kin?: Partial<Record<string, KinKind>>,
 ): TreeData {
   if (parentIds.length < 1) throw new Error("A child needs at least one parent.");
   const child = createPerson(givenName);
   const resolvedUnion =
     unionId ??
     tree.unions.find((u) => parentIds.every((id) => u.partnerIds.includes(id)))?.id;
+  const kinMap = kin
+    ? Object.fromEntries(Object.entries(kin).filter(([, value]) => value && value !== "blood"))
+    : undefined;
   const link: ChildLink = {
     id: newId("c"),
     childId: child.id,
     parentIds: [...new Set(parentIds)],
     unionId: resolvedUnion,
+    kin: kinMap && Object.keys(kinMap).length ? kinMap : undefined,
   };
   return { ...withPerson(tree, child), childLinks: [...tree.childLinks, link] };
 }
 
-export function addParent(tree: TreeData, childId: string, givenName: string): TreeData {
+export function addParent(
+  tree: TreeData,
+  childId: string,
+  givenName: string,
+  parentRole?: ParentRole,
+  kinKind: KinKind = "blood",
+): TreeData {
   const child = getPerson(tree, childId);
   if (!child) throw new Error("Person not found.");
   const parent = createPerson(givenName);
+  const withMeta = (link: ChildLink, parentId: string): ChildLink => {
+    const next: ChildLink = { ...link };
+    if (parentRole) next.roles = { ...link.roles, [parentId]: parentRole };
+    if (kinKind !== "blood") next.kin = { ...link.kin, [parentId]: kinKind };
+    return next;
+  };
   const existing = tree.childLinks.find((link) => link.childId === childId);
 
   if (!existing) {
-    const link: ChildLink = { id: newId("c"), childId, parentIds: [parent.id] };
+    const link = withMeta({ id: newId("c"), childId, parentIds: [parent.id] }, parent.id);
     return { ...withPerson(tree, parent), childLinks: [...tree.childLinks, link] };
   }
 
@@ -147,11 +201,7 @@ export function addParent(tree: TreeData, childId: string, givenName: string): T
       unions = [...unions, union];
       unionId = union.id;
     }
-    const updated: ChildLink = {
-      ...existing,
-      parentIds: [otherParentId, parent.id],
-      unionId,
-    };
+    const updated = withMeta({ ...existing, parentIds: [otherParentId, parent.id], unionId }, parent.id);
     return {
       ...withPerson(tree, parent),
       unions,
@@ -159,7 +209,7 @@ export function addParent(tree: TreeData, childId: string, givenName: string): T
     };
   }
 
-  const link: ChildLink = { id: newId("c"), childId, parentIds: [parent.id] };
+  const link = withMeta({ id: newId("c"), childId, parentIds: [parent.id] }, parent.id);
   return { ...withPerson(tree, parent), childLinks: [...tree.childLinks, link] };
 }
 

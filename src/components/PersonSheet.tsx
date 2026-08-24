@@ -2,26 +2,32 @@
 
 import { FormEvent, useEffect, useId, useRef, useState, type ChangeEvent, type TouchEvent } from "react";
 import type { ExtraField, KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
-import { UNION_KIND_OPTIONS, cleanExtras, displayName, unionKindLabel } from "@/lib/types";
-import { parentsOf, unionsFor } from "@/lib/tree";
+import {
+  KIN_KIND_OPTIONS,
+  PARENT_ROLE_OPTIONS,
+  UNION_KIND_OPTIONS,
+  cleanExtras,
+  displayName,
+  kinKindLabel,
+  unionKindLabel,
+} from "@/lib/types";
+import { childrenOfPerson, kinBetween, parentRoleOf, parentsOf, unionsFor } from "@/lib/tree";
 import { personToVCard, vcardFilename } from "@/lib/vcard";
-import { PeopleList } from "./PeopleList";
 import { NameAutocomplete } from "./AddNameRow";
-import { LinkRolePicker } from "./LinkRolePicker";
 
-type Mode = "closed" | "actions" | "add" | "more" | "link";
 type Rel = "parent" | "partner" | "child" | "sibling";
 
 type Props = {
   tree: TreeData;
   person?: Person;
   onClose: () => void;
-  onAddParent: (childId: string, name: string) => Promise<void>;
+  onAddParent: (childId: string, name: string, role?: ParentRole, kin?: KinKind) => Promise<void>;
   onAddPartner: (personId: string, name: string, kind: UnionKind) => Promise<void>;
-  onAddChild: (parentIds: string[], name: string, unionId?: string) => Promise<void>;
+  onAddChild: (parentIds: string[], name: string, unionId?: string, kin?: Partial<Record<string, KinKind>>) => Promise<void>;
   onAddSibling: (personId: string, name: string) => Promise<string | void>;
   onLinkExisting: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole, kin?: KinKind) => Promise<void>;
   onSetUnionKind: (unionId: string, kind: UnionKind) => Promise<void>;
+  onUpdateLink: (childId: string, parentId: string, patch: { role?: ParentRole | ""; kin?: KinKind }) => Promise<void>;
   onUnlink: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => Promise<void>;
   onEdit: (id: string, patch: Partial<Person>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
@@ -58,15 +64,17 @@ export function PersonSheet({
   onAddSibling,
   onLinkExisting,
   onSetUnionKind,
+  onUpdateLink,
   onUnlink,
   onEdit,
   onRemove,
 }: Props) {
   const titleId = useId();
-  const [mode, setMode] = useState<Mode>("closed");
-  const [rel, setRel] = useState<Rel>("child");
+  const [rel, setRel] = useState<Rel>("parent");
   const [name, setName] = useState("");
   const [kind, setKind] = useState<UnionKind>("partnered");
+  const [addRole, setAddRole] = useState<ParentRole | "">("");
+  const [addKin, setAddKin] = useState<KinKind>("blood");
   const [givenName, setGivenName] = useState("");
   const [familyName, setFamilyName] = useState("");
   const [bio, setBio] = useState("");
@@ -77,27 +85,23 @@ export function PersonSheet({
   const [otherDate, setOtherDate] = useState("");
   const [extras, setExtras] = useState<ExtraField[]>([{ key: "", value: "" }]);
   const [hint, setHint] = useState<string | null>(null);
-  const [linkOther, setLinkOther] = useState<Person | null>(null);
   const swipeStart = useRef<number | null>(null);
 
   useEffect(() => {
-    if (person) {
-      setMode("actions");
-      setGivenName(person.givenName);
-      setFamilyName(person.familyName ?? "");
-      setBio(person.bio ?? "");
-      setBirthDate(person.birthDate ?? "");
-      setEmail(person.emails?.[0] ?? "");
-      setPhone(person.phones?.[0] ?? "");
-      setOtherLabel(person.otherDates?.[0]?.label ?? "");
-      setOtherDate(person.otherDates?.[0]?.date ?? "");
-      setExtras(person.extras?.length ? [...person.extras, { key: "", value: "" }] : [{ key: "", value: "" }]);
-      setName("");
-      setHint(null);
-      setLinkOther(null);
-    } else {
-      setMode("closed");
-    }
+    if (!person) return;
+    setGivenName(person.givenName);
+    setFamilyName(person.familyName ?? "");
+    setBio(person.bio ?? "");
+    setBirthDate(person.birthDate ?? "");
+    setEmail(person.emails?.[0] ?? "");
+    setPhone(person.phones?.[0] ?? "");
+    setOtherLabel(person.otherDates?.[0]?.label ?? "");
+    setOtherDate(person.otherDates?.[0]?.date ?? "");
+    setExtras(person.extras?.length ? [...person.extras, { key: "", value: "" }] : [{ key: "", value: "" }]);
+    setName("");
+    setHint(null);
+    setAddKin("blood");
+    setAddRole("");
   }, [person]);
 
   function onSheetTouchStart(event: TouchEvent) {
@@ -112,10 +116,11 @@ export function PersonSheet({
     if (dy > 72) onClose();
   }
 
-  if (!person || mode === "closed") return null;
+  if (!person) return null;
 
   const unions = unionsFor(tree, person.id);
   const parents = parentsOf(tree, person.id);
+  const kids = childrenOfPerson(tree, person.id);
   const defaultParents =
     unions[0]?.partnerIds.filter((id) => tree.people.some((p) => p.id === id)) ?? [person.id];
   const hasParents = parents.length > 0;
@@ -132,13 +137,10 @@ export function PersonSheet({
     await onUnlink(person.id, parent.id, "parent");
   }
 
-  function startAdd(next: Rel) {
-    if (next === "sibling" && !hasParents) {
-      setHint("Add a parent first");
-      return;
-    }
-    setRel(next);
-    setMode("add");
+  async function unlinkChild(child: Person) {
+    if (!person) return;
+    if (!confirm(`Remove ${displayName(person)} as a parent of ${displayName(child)}?`)) return;
+    await onUnlink(person.id, child.id, "child");
   }
 
   async function saveNames() {
@@ -154,22 +156,41 @@ export function PersonSheet({
     }
   }
 
+  function childKinMap(): Partial<Record<string, KinKind>> | undefined {
+    if (!person || addKin === "blood") return undefined;
+    if (addKin === "adopted" || addKin === "foster") {
+      return Object.fromEntries(defaultParents.map((id) => [id, addKin]));
+    }
+    return { [person.id]: addKin };
+  }
+
   async function submitAdd(event: FormEvent) {
     event.preventDefault();
     if (!name.trim() || !person) return;
-    if (rel === "parent") await onAddParent(person.id, name);
+    if (rel === "sibling" && !hasParents) {
+      setHint("Add a parent first");
+      return;
+    }
+    if (rel === "parent") await onAddParent(person.id, name, addRole || undefined, addKin);
     if (rel === "partner") await onAddPartner(person.id, name, kind);
-    if (rel === "child") await onAddChild(defaultParents, name, unions[0]?.id);
+    if (rel === "child") await onAddChild(defaultParents, name, unions[0]?.id, childKinMap());
     if (rel === "sibling") await onAddSibling(person.id, name);
     setName("");
-    onClose();
+    setHint(null);
   }
 
   async function pickExisting(other: Person) {
     if (!person) return;
-    await onLinkExisting(person.id, other.id, rel, rel === "partner" ? kind : undefined);
+    if (rel === "sibling" && !hasParents) {
+      setHint("Add a parent first");
+      return;
+    }
+    if (rel === "parent") await onLinkExisting(person.id, other.id, "parent", undefined, addRole || undefined, addKin);
+    if (rel === "partner") await onLinkExisting(person.id, other.id, "partner", kind);
+    if (rel === "child") await onLinkExisting(person.id, other.id, "child", undefined, undefined, addKin);
+    if (rel === "sibling") await onLinkExisting(person.id, other.id, "sibling");
     setName("");
-    onClose();
+    setHint(null);
   }
 
   async function submitMore(event: FormEvent) {
@@ -188,7 +209,6 @@ export function PersonSheet({
           ? [{ id: person.otherDates?.[0]?.id ?? "d1", label: otherLabel, date: otherDate }]
           : undefined,
     });
-    onClose();
   }
 
   async function onPhoto(event: ChangeEvent<HTMLInputElement>) {
@@ -202,6 +222,9 @@ export function PersonSheet({
       setHint(err instanceof Error ? err.message : "Could not save photo.");
     }
   }
+
+  const addLabel =
+    rel === "parent" ? "Parent's name" : rel === "partner" ? "Partner's name" : rel === "sibling" ? "Sibling's name" : "Child's name";
 
   return (
     <div className="sheet-backdrop" role="presentation" onClick={onClose}>
@@ -222,137 +245,197 @@ export function PersonSheet({
           </button>
         </div>
         {hint ? <p className="error">{hint}</p> : null}
-        {mode === "actions" ? (
-          <>
-            <form className="name-front" onSubmit={async (e) => { e.preventDefault(); await saveNames(); }}>
-              <div className="field">
-                <label htmlFor="front-given">Given name</label>
-                <input id="front-given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required />
-              </div>
-              <div className="field">
-                <label htmlFor="front-family">Family name</label>
-                <input id="front-family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
-              </div>
-              <button className="btn" type="submit">Save</button>
-            </form>
-            <div className="actions">
-              <button type="button" className="btn" onClick={() => startAdd("parent")}>Add parent</button>
-              <button type="button" className="btn" onClick={() => startAdd("partner")}>Add partner</button>
-              <button type="button" className="btn" onClick={() => startAdd("child")}>Add child</button>
-              <button type="button" className="btn" onClick={() => startAdd("sibling")}>Add sibling</button>
-              <button type="button" className="btn" onClick={() => { setLinkOther(null); setMode("link"); }}>Link someone on the tree</button>
-              <button type="button" className="btn primary" onClick={() => setMode("more")}>More</button>
-              <button type="button" className="btn danger" onClick={() => void deletePerson()}>Delete</button>
-            </div>
-            {unions.map((u) => {
-              const others = u.partnerIds
-                .filter((id) => id !== person.id)
-                .map((id) => tree.people.find((p) => p.id === id))
-                .filter(Boolean) as Person[];
-              const withNames = others.map(displayName).join(", ") || "someone";
-              return (
-                <div className="couple-row" key={u.id}>
-                  <p className="couple-row-title">With {withNames}</p>
-                  <p className="hint">{unionKindLabel(u.kind)}</p>
-                  <div className="field">
-                    <label htmlFor={`union-${u.id}`}>Couple type</label>
+
+        <form className="name-front" onSubmit={async (e) => { e.preventDefault(); await saveNames(); }}>
+          <div className="field">
+            <label htmlFor="front-given">Given name</label>
+            <input id="front-given" value={givenName} onChange={(e) => setGivenName(e.target.value)} required />
+          </div>
+          <div className="field">
+            <label htmlFor="front-family">Family name</label>
+            <input id="front-family" value={familyName} onChange={(e) => setFamilyName(e.target.value)} />
+          </div>
+          <button className="btn" type="submit">Save name</button>
+        </form>
+
+        <section className="rel-block">
+          <h3>Family</h3>
+          {parents.length === 0 && unions.length === 0 && kids.length === 0 ? (
+            <p className="hint">No links yet. Add someone below.</p>
+          ) : null}
+          {parents.map((parent) => {
+            const role = parentRoleOf(tree, person.id, parent.id) ?? "";
+            const kin = kinBetween(tree, person.id, parent.id);
+            return (
+              <article className="rel-row" key={`par-${parent.id}`}>
+                <header>
+                  <strong>{displayName(parent)}</strong>
+                  <span>{role ? (role === "mother" ? "Mother" : "Father") : "Parent"} · {kinKindLabel(kin)}</span>
+                </header>
+                <div className="rel-fields">
+                  <label>
+                    Role
                     <select
-                      id={`union-${u.id}`}
-                      value={u.kind}
-                      onChange={(e) => onSetUnionKind(u.id, e.target.value as UnionKind)}
+                      value={role}
+                      onChange={(e) => void onUpdateLink(person.id, parent.id, { role: e.target.value as ParentRole | "" })}
                     >
-                      {UNION_KIND_OPTIONS.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
+                      {PARENT_ROLE_OPTIONS.map((option) => (
+                        <option key={option.label} value={option.value}>{option.label}</option>
                       ))}
                     </select>
-                  </div>
-                  {others[0] ? (
-                    <button
-                      type="button"
-                      className="btn danger"
-                      onClick={() => void unlinkCouple(others[0].id, withNames)}
+                  </label>
+                  <label>
+                    Related
+                    <select
+                      value={kin}
+                      onChange={(e) => void onUpdateLink(person.id, parent.id, { kin: e.target.value as KinKind })}
                     >
-                      Unlink {withNames}
-                    </button>
-                  ) : null}
+                      {KIN_KIND_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
                 </div>
-              );
-            })}
-            {parents.map((parent) => (
-              <div className="couple-row" key={parent.id}>
-                <p className="couple-row-title">Parent: {displayName(parent)}</p>
-                <button type="button" className="btn danger" onClick={() => void unlinkParent(parent)}>
-                  Unlink parent
+                <button type="button" className="btn ghost danger-text" onClick={() => void unlinkParent(parent)}>
+                  Unlink
                 </button>
-              </div>
+              </article>
+            );
+          })}
+          {unions.map((u) => {
+            const others = u.partnerIds
+              .filter((id) => id !== person.id)
+              .map((id) => tree.people.find((p) => p.id === id))
+              .filter(Boolean) as Person[];
+            const withNames = others.map(displayName).join(", ") || "someone";
+            return (
+              <article className="rel-row" key={u.id}>
+                <header>
+                  <strong>{withNames}</strong>
+                  <span>Partner · {unionKindLabel(u.kind)}</span>
+                </header>
+                <div className="rel-fields">
+                  <label>
+                    Couple
+                    <select value={u.kind} onChange={(e) => onSetUnionKind(u.id, e.target.value as UnionKind)}>
+                      {UNION_KIND_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                {others[0] ? (
+                  <button type="button" className="btn ghost danger-text" onClick={() => void unlinkCouple(others[0].id, withNames)}>
+                    Unlink
+                  </button>
+                ) : null}
+              </article>
+            );
+          })}
+          {kids.map((child) => {
+            const kin = kinBetween(tree, child.id, person.id);
+            return (
+              <article className="rel-row" key={`kid-${child.id}`}>
+                <header>
+                  <strong>{displayName(child)}</strong>
+                  <span>Child · {kinKindLabel(kin)}</span>
+                </header>
+                <div className="rel-fields">
+                  <label>
+                    Related
+                    <select
+                      value={kin}
+                      onChange={(e) => void onUpdateLink(child.id, person.id, { kin: e.target.value as KinKind })}
+                    >
+                      {KIN_KIND_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>{option.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+                <button type="button" className="btn ghost danger-text" onClick={() => void unlinkChild(child)}>
+                  Unlink
+                </button>
+              </article>
+            );
+          })}
+        </section>
+
+        <form className="rel-add" onSubmit={submitAdd}>
+          <h3>Add someone</h3>
+          <div className="seg" role="tablist" aria-label="Who to add">
+            {(["parent", "partner", "child", "sibling"] as Rel[]).map((item) => (
+              <button
+                key={item}
+                type="button"
+                role="tab"
+                aria-selected={rel === item}
+                className={rel === item ? "is-on" : undefined}
+                onClick={() => { setRel(item); setHint(null); }}
+              >
+                {item === "parent" ? "Parent" : item === "partner" ? "Partner" : item === "sibling" ? "Sibling" : "Child"}
+              </button>
             ))}
-          </>
-        ) : null}
-        {mode === "add" ? (
-          <form onSubmit={submitAdd}>
-            <div className="field">
-              <label htmlFor="rel-name">
-                {rel === "parent" ? "Parent's name" : rel === "partner" ? "Partner's name" : rel === "sibling" ? "Sibling's name" : "Child's name"}
-              </label>
-              <NameAutocomplete
-                id="rel-name"
-                label={rel === "parent" ? "Parent's name" : rel === "partner" ? "Partner's name" : rel === "sibling" ? "Sibling's name" : "Child's name"}
-                value={name}
-                onChange={setName}
-                people={tree.people}
-                excludeId={person.id}
-                onPick={pickExisting}
-                autoFocus
-                required
-              />
-            </div>
-            {rel === "partner" ? (
-              <div className="field">
-                <label htmlFor="union-kind">How they fit</label>
-                <select id="union-kind" value={kind} onChange={(e) => setKind(e.target.value as UnionKind)}>
-                  {UNION_KIND_OPTIONS.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+          </div>
+          <div className="field">
+            <label htmlFor="rel-name">{addLabel}</label>
+            <NameAutocomplete
+              id="rel-name"
+              label={addLabel}
+              value={name}
+              onChange={setName}
+              people={tree.people}
+              excludeId={person.id}
+              onPick={pickExisting}
+              required
+            />
+            <p className="hint">Type a new name, or pick someone already on the tree.</p>
+          </div>
+          {rel === "parent" ? (
+            <div className="rel-fields">
+              <label>
+                Role
+                <select value={addRole} onChange={(e) => setAddRole(e.target.value as ParentRole | "")}>
+                  {PARENT_ROLE_OPTIONS.map((option) => (
+                    <option key={option.label} value={option.value}>{option.label}</option>
                   ))}
                 </select>
-              </div>
-            ) : null}
-            {rel === "child" && defaultParents.length > 1 ? <p className="hint">This child will sit under the couple.</p> : null}
-            <div className="actions">
-              <button className="btn primary" type="submit">Add</button>
-              <button className="btn ghost" type="button" onClick={() => setMode("actions")}>Back</button>
+              </label>
+              <label>
+                Related
+                <select value={addKin} onChange={(e) => setAddKin(e.target.value as KinKind)}>
+                  {KIN_KIND_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </label>
             </div>
-          </form>
-        ) : null}
-        {mode === "link" ? (
-          linkOther ? (
-            <div className="link-roles">
-              <LinkRolePicker
-                from={person}
-                to={linkOther}
-                showSibling={hasParents}
-                onPick={async (role, nextKind, parentRole, kin) => {
-                  await onLinkExisting(person.id, linkOther.id, role, nextKind, parentRole, kin);
-                  onClose();
-                }}
-                onCancel={() => setLinkOther(null)}
-              />
+          ) : null}
+          {rel === "partner" ? (
+            <div className="field">
+              <label htmlFor="union-kind">Couple type</label>
+              <select id="union-kind" value={kind} onChange={(e) => setKind(e.target.value as UnionKind)}>
+                {UNION_KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
             </div>
-          ) : (
-            <PeopleList
-              tree={tree}
-              title="Link someone already on the tree"
-              excludeId={person.id}
-              embedded
-              onClose={() => setMode("actions")}
-              onPick={(other) => setLinkOther(other)}
-            />
-          )
-        ) : null}
-        {mode === "more" ? (
+          ) : null}
+          {rel === "child" ? (
+            <div className="field">
+              <label htmlFor="child-kin">Related to {person.givenName}</label>
+              <select id="child-kin" value={addKin} onChange={(e) => setAddKin(e.target.value as KinKind)}>
+                {KIN_KIND_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+          ) : null}
+          <button className="btn primary" type="submit">Add</button>
+        </form>
+
+        <details className="profile-fold">
+          <summary>Profile details</summary>
           <form className="more" onSubmit={submitMore}>
             <div className="field">
               <label htmlFor="photo">Photo (optional, stays on this device)</label>
@@ -408,13 +491,13 @@ export function PersonSheet({
               ))}
             </fieldset>
             <div className="actions">
-              <button className="btn primary" type="submit">Save</button>
+              <button className="btn primary" type="submit">Save details</button>
               <button className="btn" type="button" onClick={() => downloadVCard(person)}>Download vCard</button>
-              <button className="btn ghost" type="button" onClick={() => setMode("actions")}>Back</button>
-              <button className="btn danger" type="button" onClick={() => void deletePerson()}>Delete</button>
             </div>
           </form>
-        ) : null}
+        </details>
+
+        <button type="button" className="btn danger" onClick={() => void deletePerson()}>Delete</button>
       </div>
     </div>
   );
