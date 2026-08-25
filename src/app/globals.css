@@ -454,6 +454,27 @@ select {
   border-radius: 0;
   box-shadow: none;
 }
+.related-overlay {
+  z-index: 18;
+}
+.related-title {
+  pointer-events: auto;
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  background: color-mix(in srgb, var(--paper) 90%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  max-width: min(52vw, 16rem);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.view-tree-btn {
+  width: 100%;
+  margin: 0 0 14px;
+}
 .graph-close {
   position: absolute;
   top: calc(10px + var(--safe-top));

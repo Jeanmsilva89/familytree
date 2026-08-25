@@ -15,6 +15,7 @@ import {
   linkExisting,
   unlinkExisting,
   dropUnion,
+  relatedTree,
   parseTreeJson,
   serializeTreeJson,
   setFocus,
@@ -226,6 +227,30 @@ describe("self-serve mutations", () => {
     };
     tree = dropUnion(tree, "u-ghost");
     assert.equal(tree.unions.length, 0);
+  });
+
+  it("builds a related tree from one person without copying master data", () => {
+    let tree = startWithName("Jean");
+    const jean = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Stranger");
+    tree = addParent(tree, jean, "Andreia");
+    tree = addPartner(tree, jean, "Leah");
+    const andreia = tree.people.find((p) => p.givenName === "Andreia")!;
+    const leah = tree.people.find((p) => p.givenName === "Leah")!;
+    tree = addParent(tree, andreia.id, "Eunice");
+    tree = addChild(tree, [andreia.id], "Jack");
+    const view = relatedTree(tree, leah.id);
+    assert.equal(view.focusPersonId, leah.id);
+    assert.equal(tree.focusPersonId, jean);
+    assert.ok(!view.people.some((p) => p.givenName === "Stranger"));
+    assert.deepEqual(
+      view.people.map((p) => p.givenName).sort(),
+      ["Andreia", "Eunice", "Jack", "Jean", "Leah"].sort(),
+    );
+    assert.equal(
+      view.people.find((p) => p.id === jean),
+      tree.people.find((p) => p.id === jean),
+    );
   });
 
   it("links a named father or mother", () => {
