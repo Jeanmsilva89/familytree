@@ -384,8 +384,8 @@ export function TreeApp() {
       ) : null}
 
       {relatedView && relatedRoot ? (
-        <div className="graph-overlay related-overlay" role="dialog" aria-modal="true" aria-label={`${relatedName}'s tree`}>
-          <div className="graph-toolbar">
+        <div className="graph-overlay related-overlay" role="dialog" aria-modal="true" aria-labelledby="related-tree-title">
+          <header className="related-chrome">
             <button
               type="button"
               className="btn"
@@ -397,7 +397,10 @@ export function TreeApp() {
             >
               Close
             </button>
-            <p className="related-title">{`${relatedName}'s tree`}</p>
+            <div className="related-heading">
+              <p className="related-kicker">Their tree</p>
+              <h2 id="related-tree-title">{relatedName}</h2>
+            </div>
             <button
               type="button"
               className={relatedEdit ? "btn primary" : "btn"}
@@ -407,13 +410,13 @@ export function TreeApp() {
               {relatedEdit ? "Done" : "Edit"}
             </button>
             <GraphLineFilter value={lineFilter} onChange={setLineFilter} />
-          </div>
+          </header>
           <TreeCanvas
             tree={relatedView}
             highlightedId={relatedHighlight?.id ?? relatedRoot.id}
             onHighlight={(person) => setRelatedHighlight(person)}
             onOpen={setSheetPerson}
-            fitKey={relatedRoot.id}
+            fitKey={`related-${relatedRoot.id}`}
             editMode={relatedEdit}
             onLink={treeState.link}
             onUnlink={treeState.unlink}

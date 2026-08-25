@@ -473,36 +473,50 @@ export function dropUnion(tree: TreeData, unionId: string): TreeData {
 export function relatedIds(tree: TreeData, seed: string): Set<string> {
   if (!tree.people.some((person) => person.id === seed)) return new Set();
   const known = new Set(tree.people.map((person) => person.id));
-  const adj = new Map<string, string[]>();
-  const link = (a: string, b: string) => {
-    if (!a || !b || a === b) return;
-    const fromA = adj.get(a);
-    if (fromA) fromA.push(b);
-    else adj.set(a, [b]);
-    const fromB = adj.get(b);
-    if (fromB) fromB.push(a);
-    else adj.set(b, [a]);
-  };
-  for (const row of tree.childLinks) {
-    for (const parentId of row.parentIds) link(row.childId, parentId);
+  const ids = new Set<string>([seed]);
+  for (const union of unionsFor(tree, seed)) {
+    for (const pid of union.partnerIds) {
+      if (known.has(pid)) ids.add(pid);
+    }
   }
-  for (const union of tree.unions) {
-    for (let i = 0; i < union.partnerIds.length; i++) {
-      for (let j = i + 1; j < union.partnerIds.length; j++) {
-        link(union.partnerIds[i], union.partnerIds[j]);
+  const household = [...ids];
+
+  const walkUp = (personId: string) => {
+    for (const parent of parentsOf(tree, personId)) {
+      if (ids.has(parent.id)) continue;
+      ids.add(parent.id);
+      walkUp(parent.id);
+    }
+  };
+  const walkDown = (personId: string) => {
+    for (const link of tree.childLinks) {
+      if (!link.parentIds.includes(personId) || !known.has(link.childId) || ids.has(link.childId)) continue;
+      ids.add(link.childId);
+      walkDown(link.childId);
+    }
+  };
+  for (const id of household) {
+    walkUp(id);
+    walkDown(id);
+  }
+
+  for (const id of household) {
+    const parentIds = parentsOf(tree, id).map((person) => person.id);
+    if (!parentIds.length) continue;
+    for (const link of tree.childLinks) {
+      if (link.childId === id || !known.has(link.childId)) continue;
+      if (link.parentIds.some((parentId) => parentIds.includes(parentId))) ids.add(link.childId);
+    }
+  }
+
+  for (const id of [...ids]) {
+    for (const union of unionsFor(tree, id)) {
+      for (const pid of union.partnerIds) {
+        if (known.has(pid)) ids.add(pid);
       }
     }
   }
-  const seen = new Set<string>([seed]);
-  const queue = [seed];
-  for (let i = 0; i < queue.length; i++) {
-    for (const next of adj.get(queue[i]) ?? []) {
-      if (seen.has(next) || !known.has(next)) continue;
-      seen.add(next);
-      queue.push(next);
-    }
-  }
-  return seen;
+  return ids;
 }
 
 export function relatedTree(tree: TreeData, seed: string): TreeData {
@@ -515,9 +529,7 @@ export function relatedTree(tree: TreeData, seed: string): TreeData {
     focusPersonId: seed,
     people: tree.people.filter((person) => ids.has(person.id)),
     unions: tree.unions.filter((union) => union.partnerIds.some((id) => ids.has(id))),
-    childLinks: tree.childLinks.filter(
-      (row) => ids.has(row.childId) || row.parentIds.some((id) => ids.has(id)),
-    ),
+    childLinks: tree.childLinks.filter((row) => ids.has(row.childId)),
   };
 }
 
