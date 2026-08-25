@@ -7,6 +7,7 @@ import { useTree } from "@/hooks/useTree";
 import { parseGedcom, serializeGedcom } from "@/lib/gedcom";
 import type { Person } from "@/lib/types";
 import { displayName } from "@/lib/types";
+import { relatedTree } from "@/lib/tree";
 import { DEFAULT_LINE_FILTER, type LineFilter } from "@/lib/kinFilter";
 import { BrandMark } from "./BrandMark";
 import { AppMenu } from "./AppMenu";
@@ -35,6 +36,9 @@ export function TreeApp() {
   const [graphEdit, setGraphEdit] = useState(false);
   const [lineFilter, setLineFilter] = useState<LineFilter>(DEFAULT_LINE_FILTER);
   const [graphAddName, setGraphAddName] = useState<string | null>(null);
+  const [relatedRootId, setRelatedRootId] = useState<string | undefined>();
+  const [relatedHighlight, setRelatedHighlight] = useState<Person | undefined>();
+  const [relatedEdit, setRelatedEdit] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
 
@@ -100,6 +104,12 @@ export function TreeApp() {
         setSheetPerson(undefined);
         return;
       }
+      if (relatedRootId) {
+        setRelatedRootId(undefined);
+        setRelatedHighlight(undefined);
+        setRelatedEdit(false);
+        return;
+      }
       if (graphOpen) {
         setGraphOpen(false);
         setGraphEdit(false);
@@ -114,7 +124,15 @@ export function TreeApp() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sheetPerson, graphOpen, familyOpen]);
+  }, [sheetPerson, relatedRootId, graphOpen, familyOpen]);
+
+  useEffect(() => {
+    if (!relatedRootId) return;
+    if (treeState.tree.people.some((person) => person.id === relatedRootId)) return;
+    setRelatedRootId(undefined);
+    setRelatedHighlight(undefined);
+    setRelatedEdit(false);
+  }, [treeState.tree, relatedRootId]);
 
   const chooseView = (next: "family" | "graph") => {
     setMobileView(next);
@@ -130,9 +148,20 @@ export function TreeApp() {
   };
 
   const closeVisualize = () => {
+    setRelatedRootId(undefined);
+    setRelatedHighlight(undefined);
+    setRelatedEdit(false);
     setGraphOpen(false);
     setGraphEdit(false);
     chooseView("family");
+  };
+
+  const openRelatedTree = (person: Person) => {
+    setRelatedRootId(person.id);
+    setRelatedHighlight(person);
+    setRelatedEdit(false);
+    setSheetPerson(undefined);
+    setPeopleOpen(false);
   };
 
   const exportGedcom = useCallback(() => {
@@ -170,6 +199,13 @@ export function TreeApp() {
   const lookingId = highlighted?.id ?? treeState.tree.focusPersonId;
   const looking = treeState.tree.people.find((p) => p.id === lookingId);
   const lookingName = looking?.givenName?.trim() || (looking ? displayName(looking) : "");
+  const relatedRoot = relatedRootId
+    ? treeState.tree.people.find((person) => person.id === relatedRootId)
+    : undefined;
+  const relatedView = relatedRoot ? relatedTree(treeState.tree, relatedRoot.id) : undefined;
+  const relatedName = relatedRoot
+    ? relatedRoot.givenName.trim() || displayName(relatedRoot)
+    : "";
 
   return (
     <div className={narrow ? "app-shell tree-shell is-narrow" : "app-shell tree-shell is-wide"}>
@@ -225,7 +261,7 @@ export function TreeApp() {
       )}
 
       {treeState.started && familyOpen && !graphOpen ? (
-        <div className="family-overlay">
+        <div className="family-overlay" aria-hidden={Boolean(relatedView)}>
           <div className="graph-toolbar">
             <button type="button" className="btn" onClick={() => setFamilyOpen(false)}>
               Close
@@ -255,7 +291,7 @@ export function TreeApp() {
       ) : null}
 
       {graphOpen ? (
-        <div className="graph-overlay">
+        <div className="graph-overlay" aria-hidden={Boolean(relatedView)}>
           <div className="graph-toolbar">
             <button
               type="button"
@@ -296,6 +332,11 @@ export function TreeApp() {
               </button>
             ) : null}
             <GraphLineFilter value={lineFilter} onChange={setLineFilter} />
+            {highlighted ? (
+              <button type="button" className="btn primary" onClick={() => openRelatedTree(highlighted)}>
+                Their tree
+              </button>
+            ) : null}
           </div>
           <TreeCanvas
             tree={treeState.tree}
@@ -342,6 +383,45 @@ export function TreeApp() {
         </div>
       ) : null}
 
+      {relatedView && relatedRoot ? (
+        <div className="graph-overlay related-overlay" role="dialog" aria-modal="true" aria-label={`${relatedName}'s tree`}>
+          <div className="graph-toolbar">
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                setRelatedRootId(undefined);
+                setRelatedHighlight(undefined);
+                setRelatedEdit(false);
+              }}
+            >
+              Close
+            </button>
+            <p className="related-title">{relatedName}'s tree</p>
+            <button
+              type="button"
+              className={relatedEdit ? "btn primary" : "btn"}
+              aria-pressed={relatedEdit}
+              onClick={() => setRelatedEdit((v) => !v)}
+            >
+              {relatedEdit ? "Done" : "Edit"}
+            </button>
+            <GraphLineFilter value={lineFilter} onChange={setLineFilter} />
+          </div>
+          <TreeCanvas
+            tree={relatedView}
+            highlightedId={relatedHighlight?.id ?? relatedRoot.id}
+            onHighlight={(person) => setRelatedHighlight(person)}
+            onOpen={setSheetPerson}
+            fitKey={relatedRoot.id}
+            editMode={relatedEdit}
+            onLink={treeState.link}
+            onUnlink={treeState.unlink}
+            lineFilter={lineFilter}
+          />
+        </div>
+      ) : null}
+
       {peopleOpen ? (
         <PeopleList
           tree={treeState.tree}
@@ -365,6 +445,7 @@ export function TreeApp() {
         onDropUnion={treeState.dropUnion}
         onEdit={treeState.edit}
         onRemove={treeState.remove}
+        onViewTree={openRelatedTree}
       />
 
       <input ref={fileRef} className="sr-only" type="file" accept=".ged,.gedcom,text/plain" aria-label="Import GEDCOM file" onChange={async (event) => {

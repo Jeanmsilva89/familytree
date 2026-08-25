@@ -33,6 +33,7 @@ type Props = {
   onDropUnion: (unionId: string) => Promise<void>;
   onEdit: (id: string, patch: Partial<Person>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
+  onViewTree: (person: Person) => void;
 };
 
 function downloadVCard(person: Person) {
@@ -71,6 +72,7 @@ export function PersonSheet({
   onDropUnion,
   onEdit,
   onRemove,
+  onViewTree,
 }: Props) {
   const titleId = useId();
   const [rel, setRel] = useState<Rel>("parent");
@@ -259,6 +261,13 @@ export function PersonSheet({
             Close
           </button>
         </div>
+        <button
+          type="button"
+          className="btn primary view-tree-btn"
+          onClick={() => onViewTree(person)}
+        >
+          View {person.givenName.trim() || "their"} tree
+        </button>
         {hint ? <p className="error">{hint}</p> : null}
 
         <form className="name-front" onSubmit={async (e) => { e.preventDefault(); await saveNames(); }}>
