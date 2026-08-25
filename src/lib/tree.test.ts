@@ -239,13 +239,20 @@ describe("self-serve mutations", () => {
     const leah = tree.people.find((p) => p.givenName === "Leah")!;
     tree = addParent(tree, andreia.id, "Eunice");
     tree = addChild(tree, [andreia.id], "Jack");
+    const eunice = tree.people.find((p) => p.givenName === "Eunice")!;
+    tree = addParent(tree, eunice.id, "Nana");
+    tree = addSibling(tree, eunice.id, "Tia");
+    const tia = tree.people.find((p) => p.givenName === "Tia")!;
+    tree = addChild(tree, [tia.id], "Cousin");
     const view = relatedTree(tree, leah.id);
     assert.equal(view.focusPersonId, leah.id);
     assert.equal(tree.focusPersonId, jean);
     assert.ok(!view.people.some((p) => p.givenName === "Stranger"));
+    assert.ok(!view.people.some((p) => p.givenName === "Tia" || p.givenName === "Cousin"));
+    assert.ok(view.people.some((p) => p.givenName === "Nana"));
     assert.deepEqual(
       view.people.map((p) => p.givenName).sort(),
-      ["Andreia", "Eunice", "Jack", "Jean", "Leah"].sort(),
+      ["Andreia", "Eunice", "Jack", "Jean", "Leah", "Nana"].sort(),
     );
     assert.equal(
       view.people.find((p) => p.id === jean),
