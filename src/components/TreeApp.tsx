@@ -397,7 +397,7 @@ export function TreeApp() {
             >
               Close
             </button>
-            <p className="related-title">{relatedName}'s tree</p>
+            <p className="related-title">{`${relatedName}'s tree`}</p>
             <button
               type="button"
               className={relatedEdit ? "btn primary" : "btn"}
