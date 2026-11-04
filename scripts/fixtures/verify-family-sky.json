@@ -1,0 +1,78 @@
+{
+  "note": "FIXTURE. Invented people for the Families lens check. Not a real family. Never replace these names with real relatives.",
+  "focusPersonId": "fx-ada",
+  "people": [
+    {
+      "id": "fx-ada",
+      "givenName": "Ada",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-ben",
+      "givenName": "Ben",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-cora",
+      "givenName": "Cora",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-eli",
+      "givenName": "Eli",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-dee",
+      "givenName": "Dee",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-fay",
+      "givenName": "Fay",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "unions": [
+    { "id": "fx-u-ab", "partnerIds": ["fx-ada", "fx-ben"], "kind": "married" },
+    { "id": "fx-u-de", "partnerIds": ["fx-dee", "fx-eli"], "kind": "married" }
+  ],
+  "childLinks": [
+    {
+      "id": "fx-c-cora",
+      "childId": "fx-cora",
+      "parentIds": ["fx-ada", "fx-ben"],
+      "roles": { "fx-ada": "mother", "fx-ben": "father" }
+    },
+    {
+      "id": "fx-c-eli",
+      "childId": "fx-eli",
+      "parentIds": ["fx-ada", "fx-ben"],
+      "roles": { "fx-ada": "mother", "fx-ben": "father" }
+    },
+    {
+      "id": "fx-c-fay",
+      "childId": "fx-fay",
+      "parentIds": ["fx-dee", "fx-eli"],
+      "roles": { "fx-dee": "mother", "fx-eli": "father" }
+    }
+  ]
+}
