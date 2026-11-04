@@ -290,6 +290,94 @@ export const FIXTURE_CYCLE: TreeData = {
   childLinks: [kid("ouro", [["boros", "mother"]]), kid("boros", [["ouro", "mother"]])],
 };
 
+/**
+ * FIXTURE: every shape the bucket rule has to get right.
+ *
+ * Gran is Mae's mother. Mae and Stu are married. Bio is their blood child,
+ * Half is Mae's child and Stu's step-child, Foster and Adopted belong to Mae
+ * by those relationships. Nia’s only recorded parent is Stu, as step; Pal,
+ * Nia's spouse, has no parents on the tree. Orphan's only parent is Stu, as
+ * step, and Orphan has no partner. Lone has no relatives.
+ *
+ * Ann and Ben are divorced. Each still lives with their own parents. Cy is
+ * their child. Mia and Noa are married mothers; only Mia's parent is on the
+ * tree; Tot is theirs. Kip's link names a parent who is not on the tree.
+ */
+export const FIXTURE_BUCKET_RULE: TreeData = {
+  focusPersonId: fuId("mae"),
+  people: [
+    fx("gran", "Gran"),
+    fx("mae", "Mae"),
+    fx("stu", "Stu"),
+    fx("bio", "Bio"),
+    fx("half", "Half"),
+    fx("foster", "Foster"),
+    fx("adopted", "Adopted"),
+    fx("nia", "Nia"),
+    fx("pal", "Pal"),
+    fx("orphan", "Orphan"),
+    fx("lone", "Lone"),
+    fx("annmom", "Ann's mom"),
+    fx("anndad", "Ann's dad"),
+    fx("ann", "Ann"),
+    fx("benmom", "Ben's mom"),
+    fx("bendad", "Ben's dad"),
+    fx("ben", "Ben"),
+    fx("cy", "Cy"),
+    fx("miamom", "Mia's mom"),
+    fx("mia", "Mia"),
+    fx("noa", "Noa"),
+    fx("tot", "Tot"),
+    fx("kip", "Kip"),
+    fx("kipparent", "Kip's parent"),
+  ],
+  unions: [
+    couple("mae", "stu", "married"),
+    couple("nia", "pal", "married"),
+    couple("anndad", "annmom", "married"),
+    couple("bendad", "benmom", "married"),
+    couple("ann", "ben", "separated"),
+    couple("mia", "noa", "married"),
+  ],
+  childLinks: [
+    kid("mae", [["gran", "mother"]]),
+    kid("bio", [["mae", "mother"], ["stu", "father"]]),
+    kid("half", [["mae", "mother"], ["stu", "father", "step"]]),
+    kid("foster", [["mae", "mother", "foster"]]),
+    kid("adopted", [["mae", "mother", "adopted"]]),
+    kid("nia", [["stu", "father", "step"]]),
+    kid("orphan", [["stu", "father", "step"]]),
+    kid("ann", [["anndad", "father"], ["annmom", "mother"]]),
+    kid("ben", [["bendad", "father"], ["benmom", "mother"]]),
+    kid("cy", [["ben", "father"], ["ann", "mother"]]),
+    kid("mia", [["miamom", "mother"]]),
+    kid("tot", [["mia", "mother"], ["noa", "mother"]]),
+    kid("kip", [["kipparent", "mother"], ["!fu-fx-missing", "father"]]),
+  ],
+};
+
+/**
+ * FIXTURE: Parent has no partner. Their child Adult married Spouse, so Adult
+ * lives in Spouse's family. Moving Parent there should seat Parent on
+ * Spouse's row. Elder is Parent's partnerless parent.
+ */
+export const FIXTURE_MOVED_PARENT: TreeData = {
+  focusPersonId: fuId("spouse"),
+  people: [
+    fx("elder", "Elder"),
+    fx("parent", "Parent"),
+    fx("adult", "Adult"),
+    fx("spouse", "Spouse"),
+    fx("baby", "Baby"),
+  ],
+  unions: [couple("adult", "spouse", "married")],
+  childLinks: [
+    kid("parent", [["elder", "mother"]]),
+    kid("adult", [["parent", "mother"]]),
+    kid("baby", [["adult", "father"], ["spouse", "mother"]]),
+  ],
+};
+
 export const ALL_FAMILY_UNIT_FIXTURES: Record<string, TreeData> = {
   FIXTURE_MATERNAL_FAMILY,
   FIXTURE_REMARRIAGE,
@@ -300,4 +388,6 @@ export const ALL_FAMILY_UNIT_FIXTURES: Record<string, TreeData> = {
   FIXTURE_SAME_SEX,
   FIXTURE_NO_DAUGHTERS,
   FIXTURE_CYCLE,
+  FIXTURE_BUCKET_RULE,
+  FIXTURE_MOVED_PARENT,
 };

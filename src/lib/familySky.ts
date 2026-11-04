@@ -1,7 +1,7 @@
 import type { TreeData } from "./types";
-import { CARD, computeGenerations, type LaidCard, type LaidCouple, type LaidFork } from "./layout";
+import { CARD, type LaidCard, type LaidCouple, type LaidFork } from "./layout";
 import { buildGraph } from "./layoutGraph";
-import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type UnitLinkKind } from "./familyUnits";
+import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type JoinReason, type UnitLinkKind } from "./familyUnits";
 import type { Camera } from "./graphView";
 
 /**
@@ -76,10 +76,7 @@ export type FamilySky = {
   links: SkyLink[];
   unitEdges: SkyUnitEdge[];
   units: FamilyUnits;
-  /**
-   * When laid out from a previous sky: how far that sky's world was shifted
-   * to keep everything on the page (add it to an old position to compare).
-   */
+  /** Kept for morphing. A fresh layout is already in page coordinates, so this is zero. */
   shift: { x: number; y: number };
 };
 
@@ -118,9 +115,38 @@ function bucketShape(halfW: number, halfH: number) {
   return { rx: rx0 * k, ry: ry0 * k, n };
 }
 
+/**
+ * People who are in this unit because of an override (themselves, or anyone
+ * whose membership runs through that person). Row placement ignores a parent
+ * link from one of them to someone who is in the unit for another reason, so
+ * a partnerless person moved onto a descendant's family sits on that family's
+ * row instead of staying a generation above them.
+ */
+function broughtByOverride(unit: FamilyUnit, via: Record<string, JoinReason>): Set<string> {
+  const members = new Set(unit.memberIds);
+  const brought = new Set<string>();
+  for (const id of unit.memberIds) {
+    const seen = new Set<string>();
+    let cur: string | undefined = id;
+    while (cur && members.has(cur) && !seen.has(cur)) {
+      seen.add(cur);
+      const reason: JoinReason | undefined = via[cur];
+      if (!reason || reason.kind === "root") break;
+      if (reason.kind === "override" || reason.kind === "own") {
+        brought.add(id);
+        break;
+      }
+      if (!("personId" in reason)) break;
+      cur = reason.personId;
+    }
+  }
+  return brought;
+}
+
 /** The part of the tree inside one unit: its people and the ties among them. */
-function unitTree(tree: TreeData, unit: FamilyUnit): TreeData {
+function unitTree(tree: TreeData, unit: FamilyUnit, via: Record<string, JoinReason>): TreeData {
   const inside = new Set(unit.memberIds);
+  const brought = broughtByOverride(unit, via);
   const people = tree.people
     .filter((p) => inside.has(p.id))
     .map((p) => ({ ...p, graphX: undefined }));
@@ -129,7 +155,10 @@ function unitTree(tree: TreeData, unit: FamilyUnit): TreeData {
     .filter((u) => u.partnerIds.length >= 2);
   const childLinks = tree.childLinks
     .filter((l) => inside.has(l.childId))
-    .map((l) => ({ ...l, parentIds: l.parentIds.filter((id) => inside.has(id)) }))
+    .map((l) => ({
+      ...l,
+      parentIds: l.parentIds.filter((id) => inside.has(id) && !(brought.has(id) && !brought.has(l.childId))),
+    }))
     .filter((l) => l.parentIds.length > 0)
     .map((l) => (l.unionId && !unions.some((u) => u.id === l.unionId) ? { ...l, unionId: undefined } : l));
   return { people, unions, childLinks, focusPersonId: unit.rootId };
@@ -152,12 +181,51 @@ function shiftFork(fork: LaidFork, dx: number, dy: number, unitId: string): SkyF
   };
 }
 
-/** Generation of every person, for people in any connected part of the tree. */
-function generations(tree: TreeData, focusId?: string): Map<string, number> {
-  const gen = focusId ? computeGenerations(tree, [focusId]) : new Map<string, number>();
-  for (const person of tree.people) {
-    if (gen.has(person.id)) continue;
-    for (const [id, g] of computeGenerations(tree, [person.id])) if (!gen.has(id)) gen.set(id, g);
+/**
+ * Generation of every person, counted down from people with no parents.
+ * A parentless partner takes the generation of the partner who has parents.
+ * The same tree always yields the same numbers: focus is not a seed.
+ */
+function stableGenerations(tree: TreeData): Map<string, number> {
+  const known = new Set(tree.people.map((p) => p.id));
+  const parents = new Map<string, string[]>();
+  for (const link of tree.childLinks) {
+    if (!known.has(link.childId)) continue;
+    for (const parentId of link.parentIds) {
+      if (!known.has(parentId) || parentId === link.childId) continue;
+      const list = parents.get(link.childId) ?? [];
+      if (!list.includes(parentId)) list.push(parentId);
+      parents.set(link.childId, list);
+    }
+  }
+  const gen = new Map(tree.people.map((p) => [p.id, 0]));
+  const cap = Math.max(1, tree.people.length);
+  let changed = true;
+  for (let guard = 0; changed && guard < cap * 3; guard++) {
+    changed = false;
+    for (const person of tree.people) {
+      const ps = parents.get(person.id);
+      if (!ps?.length) continue;
+      const g = Math.min(cap, Math.max(...ps.map((id) => gen.get(id) ?? 0)) + 1);
+      if (g > (gen.get(person.id) ?? 0)) {
+        gen.set(person.id, g);
+        changed = true;
+      }
+    }
+    for (const union of tree.unions) {
+      if (union.kind !== "married" && union.kind !== "partnered") continue;
+      const ids = [...new Set(union.partnerIds.filter((id) => known.has(id)))];
+      const anchored = ids.filter((id) => (parents.get(id) ?? []).length > 0);
+      if (!anchored.length) continue;
+      const target = Math.min(...anchored.map((id) => gen.get(id) ?? 0));
+      for (const id of ids) {
+        if ((parents.get(id) ?? []).length) continue;
+        if ((gen.get(id) ?? 0) !== target) {
+          gen.set(id, target);
+          changed = true;
+        }
+      }
+    }
   }
   return gen;
 }
@@ -257,12 +325,8 @@ function placeBuckets(nodes: Node[], edges: { a: number; b: number; weight: numb
   removeOverlaps(nodes);
 }
 
-/**
- * Push overlapping bucket boxes (plus a gap) apart along the shorter axis.
- * Each pair splits the push by weight, so light buckets move and heavy ones
- * (buckets that were already settled) mostly stay put.
- */
-function removeOverlaps(nodes: Node[], weight: (i: number) => number = () => 1) {
+/** Push overlapping bucket boxes (plus a gap) apart along the shorter axis. */
+function removeOverlaps(nodes: Node[]) {
   const n = nodes.length;
   for (let pass = 0; pass < 600; pass++) {
     let moved = false;
@@ -276,74 +340,19 @@ function removeOverlaps(nodes: Node[], weight: (i: number) => number = () => 1) 
         const oy = (a.h + b.h) / 2 + BUCKET.gap * 0.5 - Math.abs(dy);
         if (ox <= 0 || oy <= 0) continue;
         moved = true;
-        const wa = weight(i);
-        const wb = weight(j);
-        const ka = wa / (wa + wb);
-        const kb = wb / (wa + wb);
         if (ox < oy) {
           const sg = dx === 0 ? (i < j ? 1 : -1) : Math.sign(dx);
-          a.x -= sg * ox * ka;
-          b.x += sg * ox * kb;
+          a.x -= sg * ox * 0.5;
+          b.x += sg * ox * 0.5;
         } else {
           const sg = dy === 0 ? 1 : Math.sign(dy);
-          a.y -= sg * oy * ka;
-          b.y += sg * oy * kb;
+          a.y -= sg * oy * 0.5;
+          b.y += sg * oy * 0.5;
         }
       }
     }
     if (!moved) break;
   }
-}
-
-/**
- * Seed buckets where they were in `previous`: a bucket that already existed
- * keeps its centre; a new one starts where most of its people were (or next
- * to a linked bucket). Returns false when too little carries over to be worth
- * keeping, so the caller lays the sky out from scratch.
- */
-function placeFromPrevious(
-  nodes: Node[],
-  ids: string[],
-  memberIds: string[][],
-  edges: { a: number; b: number }[],
-  previous: FamilySky,
-): boolean {
-  const prevBucket = new Map(previous.buckets.map((b) => [b.id, b]));
-  const prevCard = new Map(previous.cards.map((c) => [c.id, c]));
-  const kept = ids.filter((id) => prevBucket.has(id)).length;
-  if (!nodes.length || kept < Math.ceil(nodes.length / 2)) return false;
-  const heavy = new Set<number>();
-  const placed = new Set<number>();
-  nodes.forEach((node, i) => {
-    const b = prevBucket.get(ids[i]);
-    if (b) {
-      node.x = b.cx;
-      node.y = b.cy;
-      placed.add(i);
-      // Unchanged buckets are heavy; ones that grew or shrank give way.
-      const same = b.memberIds.length === memberIds[i].length && memberIds[i].every((id) => b.memberIds.includes(id));
-      if (same) heavy.add(i);
-      return;
-    }
-    const was = memberIds[i].map((id) => prevCard.get(id)).filter((c) => c !== undefined);
-    if (was.length) {
-      node.x = was.reduce((sum, c) => sum + c.x, 0) / was.length;
-      node.y = was.reduce((sum, c) => sum + c.y + CARD.h / 2, 0) / was.length;
-      placed.add(i);
-    }
-  });
-  // Anything still unplaced goes beside a placed neighbour, or below the sky.
-  const bottom = Math.max(...previous.buckets.map((b) => b.cy + b.ry), 0);
-  nodes.forEach((node, i) => {
-    if (placed.has(i)) return;
-    const e = edges.find((e) => (e.a === i && placed.has(e.b)) || (e.b === i && placed.has(e.a)));
-    const other = e ? nodes[e.a === i ? e.b : e.a] : undefined;
-    node.x = other ? other.x + other.w / 2 + node.w / 2 + BUCKET.gap : i * (node.w + BUCKET.gap);
-    node.y = other ? other.y : bottom + node.h / 2 + BUCKET.gap;
-    placed.add(i);
-  });
-  removeOverlaps(nodes, (i) => (heavy.has(i) ? 0.02 : 1));
-  return true;
 }
 
 type Rect = { x0: number; y0: number; x1: number; y1: number };
@@ -515,18 +524,17 @@ export function curveHitsCards(q: Curve, cards: { x: number; y: number }[], samp
 }
 
 /**
- * Lay out the sky. Pass the `previous` layout of the same tree (for example
- * just before a family-unit reassignment) to keep every bucket where it was
- * as far as possible instead of laying the whole sky out again.
+ * Lay out the sky. The result is a pure function of the tree: the same people,
+ * links, and overrides always land in the same places. Focus and any earlier
+ * sky are not inputs.
  */
-export function layoutFamilySky(tree: TreeData, focusHint?: string, previous?: FamilySky): FamilySky {
+export function layoutFamilySky(tree: TreeData): FamilySky {
   const units = deriveFamilyUnits(tree);
-  const focusId = focusHint ?? tree.focusPersonId ?? tree.people[0]?.id;
-  const gen = generations(tree, focusId && tree.people.some((p) => p.id === focusId) ? focusId : undefined);
+  const gen = stableGenerations(tree);
 
   // 1. Each unit's own generation-row layout, in local coordinates.
   const local = units.units.map((unit) => {
-    const graph = buildGraph(unitTree(tree, unit), unit.rootId);
+    const graph = buildGraph(unitTree(tree, unit, units.via), unit.rootId);
     const cards = graph.cards;
     const minX = Math.min(...cards.map((c) => c.x - CARD.w / 2));
     const maxX = Math.max(...cards.map((c) => c.x + CARD.w / 2));
@@ -534,8 +542,8 @@ export function layoutFamilySky(tree: TreeData, focusHint?: string, previous?: F
     const maxY = Math.max(...cards.map((c) => c.y + CARD.h));
     // Room for the label on top: the shape wraps the content plus a strip above it.
     const shape = bucketShape((maxX - minX) / 2, (maxY - minY) / 2 + LABEL_ROOM / 2);
-    const level = Math.max(...unit.memberIds.map((id) => gen.get(id) ?? 0));
-    return { unit, graph, minX, maxX, minY, maxY, shape, level };
+    const oldest = Math.min(...unit.memberIds.map((id) => gen.get(id) ?? 0));
+    return { unit, graph, minX, maxX, minY, maxY, shape, level: -oldest };
   });
 
   // 2. Place the buckets.
@@ -556,24 +564,14 @@ export function layoutFamilySky(tree: TreeData, focusHint?: string, previous?: F
     x: 0,
     y: 0,
   }));
-  const startUnit = focusId ? indexOf.get(units.unitOf[focusId] ?? "") ?? 0 : 0;
+  // Always seed from the first unit. Which person is in focus does not move the sky.
   const edgeList = [...edgeMap.values()];
-  const kept =
-    previous !== undefined &&
-    placeFromPrevious(
-      nodes,
-      units.units.map((u) => u.id),
-      units.units.map((u) => u.memberIds),
-      edgeList,
-      previous,
-    );
-  if (!kept) placeBuckets(nodes, edgeList, startUnit);
+  placeBuckets(nodes, edgeList, 0);
 
-  // 3. Shift into positive world coordinates. A kept layout only shifts when
-  // something would fall off the top or left, so nothing else appears to move.
+  // 3. Shift into positive world coordinates.
   const pad = 80;
-  const minWX = Math.min(...nodes.map((b) => b.x - b.w / 2 - pad), kept ? 0 : Infinity);
-  const minWY = Math.min(...nodes.map((b) => b.y - b.h / 2 - pad), kept ? 0 : Infinity);
+  const minWX = nodes.length ? Math.min(...nodes.map((b) => b.x - b.w / 2 - pad)) : 0;
+  const minWY = nodes.length ? Math.min(...nodes.map((b) => b.y - b.h / 2 - pad)) : 0;
   for (const node of nodes) {
     node.x -= minWX;
     node.y -= minWY;
@@ -635,8 +633,7 @@ export function layoutFamilySky(tree: TreeData, focusHint?: string, previous?: F
 
   const width = Math.max(320, ...buckets.map((b) => b.cx + b.rx + pad));
   const height = Math.max(280, ...buckets.map((b) => b.cy + b.ry + pad));
-  const shift = kept ? { x: -minWX, y: -minWY } : { x: 0, y: 0 };
-  return { width, height, cards, couples, forks, buckets, links, unitEdges: [...edges.values()], units, shift };
+  return { width, height, cards, couples, forks, buckets, links, unitEdges: [...edges.values()], units, shift: { x: 0, y: 0 } };
 }
 
 export type Box = { minX: number; minY: number; maxX: number; maxY: number };

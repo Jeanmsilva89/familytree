@@ -15,7 +15,7 @@ import {
   zoomLevel,
   type FamilySky,
 } from "./familySky";
-import { ALL_FAMILY_UNIT_FIXTURES, FIXTURE_MATERNAL_FAMILY, fuId } from "./familyUnits.fixtures";
+import { ALL_FAMILY_UNIT_FIXTURES, FIXTURE_MATERNAL_FAMILY, FIXTURE_MOVED_PARENT, fuId } from "./familyUnits.fixtures";
 import { CARD } from "./layout";
 import type { ChildLink, Person, TreeData, Union } from "./types";
 
@@ -82,6 +82,36 @@ describe("family sky layout (FIXTURE trees)", () => {
 
   it("is deterministic", () => {
     assert.deepEqual(layoutFamilySky(FIXTURE_MATERNAL_FAMILY), layoutFamilySky(structuredClone(FIXTURE_MATERNAL_FAMILY)));
+  });
+
+  it("lays the same sky out for the same people no matter who is focused", () => {
+    const positions = (tree: TreeData) =>
+      layoutFamilySky(tree).buckets.map((b) => [b.id, b.cx, b.cy]);
+    const cards = (tree: TreeData) => layoutFamilySky(tree).cards.map((c) => [c.id, c.x, c.y]);
+    const base = FIXTURE_MATERNAL_FAMILY;
+    const focused = { ...base, focusPersonId: fuId("tess") };
+    assert.deepEqual(positions(focused), positions(base));
+    assert.deepEqual(cards(focused), cards(base));
+  });
+
+  it("a partnerless person moved into a descendant's family joins that family's row", () => {
+    const tree: TreeData = {
+      ...FIXTURE_MOVED_PARENT,
+      familyUnitOverrides: [{ personId: fuId("parent"), unitOf: fuId("spouse") }],
+    };
+    const sky = layoutFamilySky(tree);
+    const card = (id: string) => sky.cards.find((c) => c.id === fuId(id))!;
+    assert.equal(card("parent").unitId, card("spouse").unitId);
+    assert.equal(card("parent").y, card("spouse").y);
+    const elderTree: TreeData = {
+      ...FIXTURE_MOVED_PARENT,
+      familyUnitOverrides: [{ personId: fuId("elder"), unitOf: fuId("spouse") }],
+    };
+    const elderSky = layoutFamilySky(elderTree);
+    const at = (id: string) => elderSky.cards.find((c) => c.id === fuId(id))!;
+    assert.equal(at("elder").unitId, at("spouse").unitId);
+    assert.equal(at("elder").y, at("spouse").y);
+    assert.ok(at("parent").y >= at("spouse").y, "the people who come along are not left on a row above the family");
   });
 
   it("draws person-to-person links between buckets, and one thin bucket edge per pair", () => {
@@ -243,47 +273,38 @@ describe("family sky stability (FIXTURE trees)", () => {
     familyUnitOverrides: [{ personId: fuId("joe"), unitOf: fuId("cora") }],
   });
 
-  it("after a reassignment, untouched buckets keep their places", () => {
-    const before = layoutFamilySky(FIXTURE_MATERNAL_FAMILY);
-    const after = layoutFamilySky(moveJoe(FIXTURE_MATERNAL_FAMILY), undefined, before);
-    assertNoOverlap(after);
-    const centre = (sky: FamilySky, id: string) => sky.buckets.find((b) => b.id === sky.units.unitOf[fuId(id)])!;
-    for (const id of ["grandma", "mom"]) {
-      const [a, b] = [centre(before, id), centre(after, id)];
-      const [ax, ay] = [a.cx + after.shift.x, a.cy + after.shift.y];
-      assert.ok(Math.hypot(ax - b.cx, ay - b.cy) < 120, `${id} moved ${Math.hypot(a.cx - b.cx, a.cy - b.cy).toFixed(0)}`);
-    }
-    const fresh = layoutFamilySky(moveJoe(FIXTURE_MATERNAL_FAMILY));
-    assert.equal(after.cards.length, fresh.cards.length);
+  it("an edited tree lays out the same on a fresh call as it would after a reload", () => {
+    const edited = moveJoe(FIXTURE_MATERNAL_FAMILY);
+    const a = layoutFamilySky(edited);
+    const b = layoutFamilySky(structuredClone(edited));
+    assertNoOverlap(a);
+    assert.deepEqual(
+      a.buckets.map((bucket) => [bucket.id, bucket.cx, bucket.cy]),
+      b.buckets.map((bucket) => [bucket.id, bucket.cx, bucket.cy]),
+    );
+    assert.deepEqual(
+      a.cards.map((card) => [card.id, card.x, card.y]),
+      b.cards.map((card) => [card.id, card.x, card.y]),
+    );
   });
 
-  it("keeps a big sky in place too: most buckets do not move at all", () => {
+  it("a big edited sky is deterministic too", () => {
     const tree = bigFixture(30);
     const before = layoutFamilySky(tree);
     const someone = before.buckets[3].memberIds.at(-1)!;
     const target = before.buckets[0].headIds[0];
-    const after = layoutFamilySky({ ...tree, familyUnitOverrides: [{ personId: someone, unitOf: target }] }, undefined, before);
+    const edited = { ...tree, familyUnitOverrides: [{ personId: someone, unitOf: target }] };
+    const after = layoutFamilySky(edited);
     assertNoOverlap(after);
-    const was = new Map(before.buckets.map((b) => [b.id, b]));
-    const still = after.buckets.filter((b) => {
-      const old = was.get(b.id);
-      return old && Math.hypot(old.cx + after.shift.x - b.cx, old.cy + after.shift.y - b.cy) < 1;
-    });
-    assert.ok(still.length >= after.buckets.length * 0.8, `${still.length} of ${after.buckets.length} stayed`);
-  });
-
-  it("lays out from scratch when the previous sky is a different tree", () => {
-    const other = layoutFamilySky(bigFixture(5));
-    const sky = layoutFamilySky(FIXTURE_MATERNAL_FAMILY, undefined, other);
     assert.deepEqual(
-      sky.buckets.map((b) => [b.cx, b.cy]),
-      layoutFamilySky(FIXTURE_MATERNAL_FAMILY).buckets.map((b) => [b.cx, b.cy]),
+      after.buckets.map((bucket) => [bucket.cx, bucket.cy]),
+      layoutFamilySky(structuredClone(edited)).buckets.map((bucket) => [bucket.cx, bucket.cy]),
     );
   });
 
   it("morphSky glides people and buckets from the old layout to the new", () => {
     const before = layoutFamilySky(FIXTURE_MATERNAL_FAMILY);
-    const after = layoutFamilySky(moveJoe(FIXTURE_MATERNAL_FAMILY), undefined, before);
+    const after = layoutFamilySky(moveJoe(FIXTURE_MATERNAL_FAMILY));
     const joe = (sky: FamilySky) => sky.cards.find((c) => c.id === fuId("joe"))!;
     const start = morphSky(before, after, 0);
     const { x: sx, y: sy } = after.shift;

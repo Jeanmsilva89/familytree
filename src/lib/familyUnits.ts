@@ -17,14 +17,19 @@ import { kinOf } from "./types";
  *    mother. When that does not decide it (two women, two men, or no roles
  *    recorded), the partner whose own parent is on the tree anchors, and if
  *    both or neither have one, the partner listed first in the union does.
- * 3. Parents. Someone who is not joining a partner joins their line parent:
- *    a blood or adopted parent before a step or foster parent, then the
- *    mother before a parent with no role before the father, then the parent
- *    listed first. So children follow their mother, daughters stay with
- *    their family, a son who marries out goes with his wife, and a single
- *    son stays with his parents.
- * 4. Root. Someone with no anchoring partner and no parent on the tree heads
- *    a unit. The unit is named after them and their couple partner.
+ * 3. Parents. Someone who is not joining a partner joins their line parent.
+ *    A line parent is a blood, adopted, or foster parent on the tree: blood
+ *    and adopted before foster, then the mother before a parent with no role
+ *    before the father, then the parent listed first. A step relationship is
+ *    not a line parent. Step alone never places someone in a bucket, and it
+ *    never makes their partner count as having family on the tree. Children
+ *    follow their mother, daughters stay with their family, a son who marries
+ *    out goes with his wife, and a single son stays with his parents.
+ * 4. Root. Someone with no anchoring partner and no line parent heads a unit.
+ *    That is a person whose parents are not on the tree, including someone
+ *    whose only recorded parent is a step-parent: they belong with their own
+ *    partner, or alone when they have none. The unit is named after them and
+ *    their couple partner.
  *
  * Overrides then point a person at another person's unit (or at a unit of
  * their own). Everyone who belongs through that person moves with them, and
@@ -107,10 +112,14 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
     const roles = roleSeen.get(id);
     return Boolean(roles?.has("mother") && !roles.has("father"));
   };
+  // Step is recorded on the link, and drawn when it crosses units, but it is
+  // not membership. Blood and adopted outrank foster; role breaks the rest.
   const lineParent = (id: string): string | undefined =>
-    [...(parentsOf.get(id) ?? [])].sort(
-      (a, b) => KIN_RANK[a.kin] - KIN_RANK[b.kin] || ROLE_RANK(a.role) - ROLE_RANK(b.role) || a.order - b.order,
-    )[0]?.id;
+    [...(parentsOf.get(id) ?? [])]
+      .filter((parent) => parent.kin !== "step")
+      .sort(
+        (a, b) => KIN_RANK[a.kin] - KIN_RANK[b.kin] || ROLE_RANK(a.role) - ROLE_RANK(b.role) || a.order - b.order,
+      )[0]?.id;
 
   // 1. Each person's couple.
   const unionIndex = new Map(tree.unions.map((u, i) => [u.id, i]));
