@@ -96,11 +96,11 @@ export function FamilySky({
   onLink,
   onMoveToUnit,
 }: Props) {
-  // Each new layout starts from the last one, so a change (such as moving
-  // someone to another family) keeps the other buckets where they were.
+  // The sky is a pure function of the tree, so a reload draws the same places.
+  // `from` is only the previous picture, used to glide from it.
   const [laid, setLaid] = useState<{ tree: TreeData; sky: FamilySkyLayout; from?: FamilySkyLayout } | null>(null);
   const fresh = !laid || (laid.tree !== tree && !hold);
-  const sky = fresh ? layoutFamilySky(tree, undefined, laid?.sky) : laid.sky;
+  const sky = fresh ? layoutFamilySky(tree) : laid.sky;
   if (fresh) setLaid({ tree, sky, from: laid?.sky });
   // 0 → 1 while the sky glides from the previous layout to this one.
   const [morphK, setMorphK] = useState(1);
@@ -323,8 +323,8 @@ export function FamilySky({
       firstSky.current = false;
       return;
     }
-    // While editing, stay at this zoom: the buckets keep their places and the
-    // change glides in; just keep a person who was dropped into a family in view.
+    // While editing, stay at this zoom and let the change glide; keep a person
+    // who was dropped into a family in view.
     if (editMode) {
       const dropped = followAfterDrop.current;
       followAfterDrop.current = null;
@@ -650,6 +650,7 @@ export function FamilySky({
                   <path
                     key={bucket.id}
                     data-unit-id={bucket.id}
+                    data-members={bucket.memberIds.join(" ")}
                     className={`sky-bucket${lit ? " is-lit" : ""}${drop ? " is-drop" : ""}`}
                     d={superellipsePath(bucket, 120)}
                     vectorEffect="non-scaling-stroke"
@@ -685,7 +686,7 @@ export function FamilySky({
 
           {far
             ? view.buckets.map((bucket) => (
-                <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}`}>
+                <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} data-members={bucket.memberIds.join(" ")} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}`}>
                   <circle cx={bucket.cx} cy={bucket.cy} r={bucket.glow} fill="url(#sky-glow)" />
                   <circle className="sky-star-core" cx={bucket.cx} cy={bucket.cy} r={bucket.glow * 0.16} />
                 </g>

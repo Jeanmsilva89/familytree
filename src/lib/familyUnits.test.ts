@@ -9,6 +9,7 @@ import {
 } from "./familyUnits";
 import {
   ALL_FAMILY_UNIT_FIXTURES,
+  FIXTURE_BUCKET_RULE,
   FIXTURE_COPARENTS,
   FIXTURE_CYCLE,
   FIXTURE_MATERNAL_FAMILY,
@@ -194,6 +195,63 @@ describe("edge cases (FIXTURE trees)", () => {
   it("broken data with a parent cycle still gives one unit per person", () => {
     const result = deriveFamilyUnits(FIXTURE_CYCLE);
     sameUnit(result, "ouro", "boros");
+  });
+});
+
+describe("bucket rule (FIXTURE_BUCKET_RULE)", () => {
+  const result = deriveFamilyUnits(FIXTURE_BUCKET_RULE);
+
+  it("biological: a blood child follows the mother, and a blood father stays with his partner", () => {
+    sameUnit(result, "gran", "mae", "stu", "bio", "half", "foster", "adopted");
+    assert.deepEqual(result.via[fuId("bio")], { kind: "parent", personId: fuId("mae") });
+  });
+
+  it("adopted and foster follow that parent; a step parent does not outrank them", () => {
+    assert.deepEqual(result.via[fuId("adopted")], { kind: "parent", personId: fuId("mae") });
+    assert.deepEqual(result.via[fuId("foster")], { kind: "parent", personId: fuId("mae") });
+    assert.deepEqual(result.via[fuId("half")], { kind: "parent", personId: fuId("mae") });
+  });
+
+  it("step alone never pulls someone into a bucket", () => {
+    sameUnit(result, "orphan");
+    assert.notEqual(result.unitOf[fuId("orphan")], result.unitOf[fuId("stu")]);
+    const step = result.links.find((l) => l.fromPersonId === fuId("stu") && l.toPersonId === fuId("orphan"));
+    assert.equal(step?.kind, "step");
+    assert.notEqual(step?.fromUnitId, step?.toUnitId);
+  });
+
+  it("a person with no parents on the tree stays with their partner, not a step-parent", () => {
+    sameUnit(result, "nia", "pal");
+    assert.notEqual(result.unitOf[fuId("pal")], result.unitOf[fuId("stu")]);
+    assert.notEqual(result.unitOf[fuId("nia")], result.unitOf[fuId("stu")]);
+    assert.equal(unitOfPerson(result, fuId("nia"))!.label, "Nia & Pal");
+  });
+
+  it("someone with no parents and no partner is a unit of one", () => {
+    sameUnit(result, "lone");
+  });
+
+  it("divorce: each parent stays with their own parents; the child follows the mother", () => {
+    sameUnit(result, "annmom", "anndad", "ann", "cy");
+    sameUnit(result, "benmom", "bendad", "ben");
+  });
+
+  it("same-sex parents: the partner with family on the tree anchors", () => {
+    sameUnit(result, "miamom", "mia", "noa", "tot");
+  });
+
+  it("an unknown parent id is ignored", () => {
+    sameUnit(result, "kipparent", "kip");
+    assert.ok(!JSON.stringify(result).includes("fu-fx-missing"));
+  });
+
+  it("an explicit override wins over a step link and over the maternal default", () => {
+    const intoGran = deriveFamilyUnits(FIXTURE_BUCKET_RULE, [{ personId: fuId("orphan"), unitOf: fuId("gran") }]);
+    assert.equal(intoGran.unitOf[fuId("orphan")], intoGran.unitOf[fuId("gran")]);
+    const aside = deriveFamilyUnits(FIXTURE_BUCKET_RULE, [{ personId: fuId("orphan"), unitOf: fuId("lone") }]);
+    assert.equal(aside.unitOf[fuId("orphan")], aside.unitOf[fuId("lone")]);
+    assert.notEqual(aside.unitOf[fuId("orphan")], aside.unitOf[fuId("stu")]);
+    assert.deepEqual(aside.via[fuId("orphan")], { kind: "override", personId: fuId("lone") });
   });
 });
 

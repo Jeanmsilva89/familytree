@@ -1,5 +1,5 @@
 {
-  "note": "FIXTURE. Invented people for the Families lens check. Not a real family. Never replace these names with real relatives.",
+  "note": "FIXTURE. Invented people for the Families lens check. Not a real family. Never replace these names with real relatives. Nia's only parent here is Stu, and that link is step. Pal has no parents on this tree. Rex is a partnerless parent of Eli.",
   "focusPersonId": "fx-ada",
   "people": [
     {
@@ -49,11 +49,61 @@
       "bio": "Fixture. Not a real person.",
       "createdAt": "2024-01-01T00:00:00.000Z",
       "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-gran",
+      "givenName": "Gran",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-mae",
+      "givenName": "Mae",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-stu",
+      "givenName": "Stu",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. Step-parent of Nia.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-nia",
+      "givenName": "Nia",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. Parents are not on this tree. Stu is a step-parent only.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-pal",
+      "givenName": "Pal",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. No parents on this tree. Married to Nia.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-rex",
+      "givenName": "Rex",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. Partnerless parent of Eli.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
     }
   ],
   "unions": [
     { "id": "fx-u-ab", "partnerIds": ["fx-ada", "fx-ben"], "kind": "married" },
-    { "id": "fx-u-de", "partnerIds": ["fx-dee", "fx-eli"], "kind": "married" }
+    { "id": "fx-u-de", "partnerIds": ["fx-dee", "fx-eli"], "kind": "married" },
+    { "id": "fx-u-ms", "partnerIds": ["fx-mae", "fx-stu"], "kind": "married" },
+    { "id": "fx-u-np", "partnerIds": ["fx-nia", "fx-pal"], "kind": "married" }
   ],
   "childLinks": [
     {
@@ -73,6 +123,25 @@
       "childId": "fx-fay",
       "parentIds": ["fx-dee", "fx-eli"],
       "roles": { "fx-dee": "mother", "fx-eli": "father" }
+    },
+    {
+      "id": "fx-c-mae",
+      "childId": "fx-mae",
+      "parentIds": ["fx-gran"],
+      "roles": { "fx-gran": "mother" }
+    },
+    {
+      "id": "fx-c-nia",
+      "childId": "fx-nia",
+      "parentIds": ["fx-stu"],
+      "roles": { "fx-stu": "father" },
+      "kin": { "fx-stu": "step" }
+    },
+    {
+      "id": "fx-c-eli-rex",
+      "childId": "fx-eli",
+      "parentIds": ["fx-rex"],
+      "roles": { "fx-rex": "father" }
     }
   ]
 }
