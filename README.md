@@ -12,6 +12,8 @@ On a phone (max-width 719px) Family Tree uses FocusFamily: one person at a time,
 - Start with a single given name
 - Add parent, partner, child, sibling, or someone unlinked, then connect them
 - Link people already on the tree; edit couple type
+- Family sky in Visualize: each family unit is a soft bucket around its people, with person-to-person links between buckets styled by relationship (blood, adopted, step, foster, partner). Zoom far out to see every family as a glowing star, tap one to zoom in, and zoom close for today's full cards. Units follow a maternal rule (daughters stay with their family; a husband joins his wife's), and any person can be moved to another unit from their sheet (their partner and children come along) or, in Edit, by dragging them into another family. Changes glide in while the other families keep their places. Toggle with the Families lens
+- Household areas in the classic graph (Families lens off): each couple or single parent and the children still at home share one soft area, and a connector runs from parents to each grown child's own household (toggle with the Households lens)
 - Optional local photo stored with the tree in IndexedDB
 - Installable PWA that works offline after first load
 - Print the tree as a PDF from the browser

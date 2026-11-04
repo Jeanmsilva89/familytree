@@ -44,6 +44,7 @@ function normalize(stored: TreeData): TreeData {
     unions: stored.unions ?? [],
     childLinks: stored.childLinks ?? [],
     focusPersonId: stored.focusPersonId,
+    ...(stored.familyUnitOverrides?.length ? { familyUnitOverrides: stored.familyUnitOverrides } : {}),
   };
 }
 

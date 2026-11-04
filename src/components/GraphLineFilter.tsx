@@ -3,6 +3,8 @@
 import { KIN_KIND_OPTIONS } from "@/lib/types";
 import {
   genealogyOnlyFilter,
+  toggleFamilies,
+  toggleHouseholds,
   toggleLineKind,
   type LineFilter,
 } from "@/lib/kinFilter";
@@ -45,6 +47,24 @@ export function GraphLineFilter({ value, onChange }: Props) {
       >
         Couples
       </button>
+      <button
+        type="button"
+        className={value.families ? "chip is-on" : "chip"}
+        aria-pressed={value.families}
+        onClick={() => onChange(toggleFamilies(value))}
+      >
+        Families
+      </button>
+      {!value.families ? (
+        <button
+          type="button"
+          className={value.households ? "chip is-on" : "chip"}
+          aria-pressed={value.households}
+          onClick={() => onChange(toggleHouseholds(value))}
+        >
+          Households
+        </button>
+      ) : null}
     </div>
   );
 }

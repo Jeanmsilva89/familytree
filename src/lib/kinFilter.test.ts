@@ -5,6 +5,8 @@ import {
   genealogyOnlyFilter,
   lineFilterAllows,
   lineFilterAllowsCouples,
+  toggleHouseholds,
+  toggleFamilies,
   toggleLineKind,
 } from "./kinFilter";
 import { kinOf, strongestKin } from "./types";
@@ -38,5 +40,22 @@ describe("kin filters", () => {
     assert.equal(kinOf({ kin: { dad: "step" } }, "mom"), "blood");
     assert.equal(strongestKin(["step", "blood", "adopted"]), "blood");
     assert.equal(strongestKin(["step", "adopted"]), "adopted");
+  });
+
+  it("shows household areas by default and toggles them without touching the genealogy lens", () => {
+    assert.equal(DEFAULT_LINE_FILTER.households, true);
+    const genealogy = genealogyOnlyFilter(true, DEFAULT_LINE_FILTER);
+    const hidden = toggleHouseholds(genealogy);
+    assert.equal(hidden.households, false);
+    assert.equal(hidden.genealogyOnly, true);
+    assert.equal(toggleHouseholds(hidden).households, true);
+  });
+
+  it("opens the family sky by default and toggles it on its own", () => {
+    assert.equal(DEFAULT_LINE_FILTER.families, true);
+    const off = toggleFamilies(DEFAULT_LINE_FILTER);
+    assert.equal(off.families, false);
+    assert.equal(off.households, true);
+    assert.equal(toggleFamilies(off).families, true);
   });
 });

@@ -7,6 +7,10 @@ export type LineFilter = {
   step: boolean;
   foster: boolean;
   couples: boolean;
+  /** Household areas and the connectors between them (classic graph). */
+  households: boolean;
+  /** Family sky: one bucket per family unit, with semantic zoom. */
+  families: boolean;
 };
 
 export const DEFAULT_LINE_FILTER: LineFilter = {
@@ -16,6 +20,8 @@ export const DEFAULT_LINE_FILTER: LineFilter = {
   step: true,
   foster: true,
   couples: true,
+  households: true,
+  families: true,
 };
 
 export function lineFilterAllows(filter: LineFilter, kin: KinKind): boolean {
@@ -31,6 +37,14 @@ export function genealogyOnlyFilter(on: boolean, previous: LineFilter): LineFilt
   return { ...previous, genealogyOnly: on };
 }
 
-export function toggleLineKind(filter: LineFilter, key: Exclude<keyof LineFilter, "genealogyOnly">): LineFilter {
+export function toggleHouseholds(filter: LineFilter): LineFilter {
+  return { ...filter, households: !filter.households };
+}
+
+export function toggleFamilies(filter: LineFilter): LineFilter {
+  return { ...filter, families: !filter.families };
+}
+
+export function toggleLineKind(filter: LineFilter, key: Exclude<keyof LineFilter, "genealogyOnly" | "households" | "families">): LineFilter {
   return { ...filter, genealogyOnly: false, [key]: !filter[key] };
 }

@@ -18,16 +18,17 @@
  *   1 EVEN / 2 TYPE <label> / 2 DATE  — important dates
  *   1 _KV <key> / 2 _VAL <value>      — arbitrary extras
  *   1 _PID <stable id>
+ *   1 _FUNIT @Ix@ | OWN               — family unit override
  *   1 FAMS / 1 FAMC
  *
  * FAM:
- *   1 HUSB / 1 WIFE / 1 CHIL
+ *   1 HUSB / 1 WIFE / 1 CHIL            — HUSB is a father, WIFE a mother
  *   1 MARR or 1 DIV / 2 DATE
  *   1 _KIND married|partnered|separated|unspecified
  *   1 _KV / 2 _VAL
  *   1 _UID <stable id>
  */
-import type { ChildLink, ExtraField, KinKind, Person, TreeData, Union, UnionKind } from "./types";
+import type { ChildLink, ExtraField, FamilyUnitOverride, KinKind, ParentRole, Person, TreeData, Union, UnionKind } from "./types";
 import { cleanExtras, emptyTree, kinOf } from "./types";
 import { newId, nowIso } from "./ids";
 
@@ -138,6 +139,7 @@ export function parseGedcom(text: string): TreeData {
   const unions: Union[] = [];
   const childLinks: ChildLink[] = [];
   const xrefToId = new Map<string, string>();
+  const unitRefs: { personId: string; ref: string }[] = [];
   const usedIds = new Set<string>();
   const now = nowIso();
 
@@ -163,6 +165,7 @@ export function parseGedcom(text: string): TreeData {
       let bio: string | undefined;
       let birthDate: string | undefined;
       let pid: string | undefined;
+      let unitRef: string | undefined;
       const emails: string[] = [];
       const phones: string[] = [];
       const extras: ExtraField[] = [];
@@ -216,12 +219,16 @@ export function parseGedcom(text: string): TreeData {
         } else if (cur.level === 1 && (cur.tag === "_PID" || cur.tag === "_ID")) {
           pid = cur.value.trim();
           i += 1;
+        } else if (cur.level === 1 && cur.tag === "_FUNIT") {
+          unitRef = cur.value.trim();
+          i += 1;
         } else {
           i += 1;
         }
       }
       const id = stableId(pid, "p", xref);
       xrefToId.set(xref, id);
+      if (unitRef) unitRefs.push({ personId: id, ref: unitRef });
       people.push({
         id,
         givenName,
@@ -245,6 +252,7 @@ export function parseGedcom(text: string): TreeData {
     const line = lines[i];
     if (line.level === 0 && line.tag === "FAM" && line.xref) {
       const partners: string[] = [];
+      const partnerRoles: Partial<Record<string, ParentRole>> = {};
       const children: { id: string; kin?: Partial<Record<string, KinKind>> }[] = [];
       const events: string[] = [line.tag];
       const extras: ExtraField[] = [];
@@ -256,7 +264,10 @@ export function parseGedcom(text: string): TreeData {
         const cur = lines[i];
         if (cur.level === 1 && (cur.tag === "HUSB" || cur.tag === "WIFE")) {
           const pid = xrefToId.get(cur.value.trim());
-          if (pid && !partners.includes(pid)) partners.push(pid);
+          if (pid && !partners.includes(pid)) {
+            partners.push(pid);
+            partnerRoles[pid] = cur.tag === "WIFE" ? "mother" : "father";
+          }
           i += 1;
         } else if (cur.level === 1 && cur.tag === "CHIL") {
           const cid = xrefToId.get(cur.value.trim());
@@ -335,6 +346,7 @@ export function parseGedcom(text: string): TreeData {
           childId: child.id,
           parentIds: partners.length ? partners : [],
           unionId: union?.id,
+          roles: partners.length ? { ...partnerRoles } : undefined,
           kin: child.kin,
         });
       }
@@ -344,12 +356,41 @@ export function parseGedcom(text: string): TreeData {
   }
 
   const cleaned = childLinks.filter((l) => l.parentIds.length > 0);
+  const familyUnitOverrides: FamilyUnitOverride[] = [];
+  for (const { personId, ref } of unitRefs) {
+    if (ref.toUpperCase() === "OWN") familyUnitOverrides.push({ personId, unitOf: null });
+    else {
+      const unitOf = xrefToId.get(ref);
+      if (unitOf) familyUnitOverrides.push({ personId, unitOf });
+    }
+  }
   return {
     people,
     unions,
     childLinks: cleaned,
     focusPersonId: people[0]?.id,
+    ...(familyUnitOverrides.length ? { familyUnitOverrides } : {}),
   };
+}
+
+/** Role a person holds on any child link: GEDCOM writes mothers as WIFE. */
+function recordedRole(tree: TreeData, personId: string): ParentRole | undefined {
+  for (const link of tree.childLinks) {
+    const role = link.roles?.[personId];
+    if (role) return role;
+  }
+  return undefined;
+}
+
+/** HUSB/WIFE tags for up to two partners, mothers as WIFE, in a stable order. */
+function husbandAndWife(tree: TreeData, partners: string[]): [string, "HUSB" | "WIFE"][] {
+  const [a, b] = partners;
+  if (!a) return [];
+  const roleA = recordedRole(tree, a);
+  if (!b) return [[a, roleA === "mother" ? "WIFE" : "HUSB"]];
+  const roleB = recordedRole(tree, b);
+  if (roleA === "mother" && roleB !== "mother") return [[b, "HUSB"], [a, "WIFE"]];
+  return [[a, "HUSB"], [b, "WIFE"]];
 }
 
 export function serializeGedcom(tree: TreeData): string {
@@ -439,6 +480,9 @@ export function serializeGedcom(tree: TreeData): string {
     for (const email of person.emails ?? []) lines.push(`1 EMAIL ${email}`);
     for (const phone of person.phones ?? []) lines.push(`1 PHON ${phone}`);
     emitKv(lines, person.extras);
+    const unit = [...(tree.familyUnitOverrides ?? [])].reverse().find((o) => o.personId === person.id);
+    if (unit && unit.unitOf === null) lines.push("1 _FUNIT OWN");
+    else if (unit?.unitOf && idToXref.has(unit.unitOf)) lines.push(`1 _FUNIT ${idToXref.get(unit.unitOf)}`);
     for (const fam of famsOf.get(person.id) ?? []) lines.push(`1 FAMS ${fam}`);
     for (const fam of famcOf.get(person.id) ?? []) lines.push(`1 FAMC ${fam}`);
   }
@@ -447,8 +491,7 @@ export function serializeGedcom(tree: TreeData): string {
     const xref = famXrefByKey.get(key)!;
     lines.push(`0 ${xref} FAM`);
     if (fam.union?.id) lines.push(`1 _UID ${fam.union.id}`);
-    if (fam.partners[0]) lines.push(`1 HUSB ${idToXref.get(fam.partners[0])}`);
-    if (fam.partners[1]) lines.push(`1 WIFE ${idToXref.get(fam.partners[1])}`);
+    for (const [pid, tag] of husbandAndWife(tree, fam.partners)) lines.push(`1 ${tag} ${idToXref.get(pid)}`);
     lines.push(`1 _KIND ${fam.kind}`);
     if (fam.kind === "married") {
       lines.push("1 MARR");

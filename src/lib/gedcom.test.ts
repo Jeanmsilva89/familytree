@@ -53,24 +53,24 @@ describe("gedcom", () => {
   });
 
   it("roundtrips marriage kind, date, and extra key/value facts", () => {
-    let tree = startWithName("Jay");
-    const jay = tree.people[0].id;
-    tree = updatePerson(tree, jay, {
-      familyName: "Silva",
+    let tree = startWithName("Dan");
+    const dan = tree.people[0].id;
+    tree = updatePerson(tree, dan, {
+      familyName: "Example",
       extras: [{ key: "occupation", value: "builder" }, { key: "nickname", value: "Jaybird" }],
     });
-    tree = addPartner(tree, jay, "Rosana", "married");
-    const rosana = tree.people.find((p) => p.givenName === "Rosana")!.id;
+    tree = addPartner(tree, dan, "Rae", "married");
+    const rae = tree.people.find((p) => p.givenName === "Rae")!.id;
     const unionId = tree.unions[0].id;
     tree = updateUnion(tree, unionId, {
       marriedOn: "2015-06-12",
       extras: [{ key: "met_in", value: "Austin" }],
     });
-    tree = updatePerson(tree, rosana, { familyName: "Silva" });
+    tree = updatePerson(tree, rae, { familyName: "Example" });
 
     const text = serializeGedcom(tree);
-    assert.match(text, /1 NAME Jay \/Silva\//);
-    assert.match(text, /1 NAME Rosana \/Silva\//);
+    assert.match(text, /1 NAME Dan \/Example\//);
+    assert.match(text, /1 NAME Rae \/Example\//);
     assert.match(text, /1 MARR/);
     assert.match(text, /1 _KIND married/);
     assert.match(text, /1 _KV occupation/);
@@ -79,10 +79,10 @@ describe("gedcom", () => {
     assert.match(text, /2 DATE 12 JUN 2015/);
 
     const imported = parseGedcom(text);
-    assert.equal(imported.people.find((p) => p.givenName === "Jay")?.id, jay);
+    assert.equal(imported.people.find((p) => p.givenName === "Dan")?.id, dan);
     assert.equal(imported.unions[0].kind, "married");
     assert.equal(imported.unions[0].marriedOn, "2015-06-12");
-    assert.deepEqual(imported.people.find((p) => p.givenName === "Jay")?.extras, [
+    assert.deepEqual(imported.people.find((p) => p.givenName === "Dan")?.extras, [
       { key: "occupation", value: "builder" },
       { key: "nickname", value: "Jaybird" },
     ]);
@@ -90,28 +90,28 @@ describe("gedcom", () => {
   });
 
   it("unlinks a partner without dropping their children", () => {
-    let tree = startWithName("Jay");
-    const jay = tree.people[0].id;
-    tree = addPartner(tree, jay, "Rosana", "married");
-    const rosana = tree.people.find((p) => p.givenName === "Rosana")!.id;
-    tree = addChild(tree, [jay, rosana], "Sam");
-    tree = unlinkExisting(tree, jay, rosana, "partner");
+    let tree = startWithName("Dan");
+    const dan = tree.people[0].id;
+    tree = addPartner(tree, dan, "Rae", "married");
+    const rae = tree.people.find((p) => p.givenName === "Rae")!.id;
+    tree = addChild(tree, [dan, rae], "Sam");
+    tree = unlinkExisting(tree, dan, rae, "partner");
     assert.equal(tree.unions.length, 0);
     assert.equal(tree.childLinks.length, 1);
-    assert.ok(tree.people.some((p) => p.givenName === "Rosana"));
+    assert.ok(tree.people.some((p) => p.givenName === "Rae"));
   });
 
   it("roundtrips adopted and step parent links", () => {
-    let tree = startWithName("Andressa");
-    const andressa = tree.people[0].id;
-    tree = addUnlinkedPerson(tree, "Edson");
-    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
-    tree = linkExisting(tree, andressa, edson, "parent", undefined, "father", "step");
+    let tree = startWithName("Tara");
+    const tara = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Eli");
+    const eli = tree.people.find((p) => p.givenName === "Eli")!.id;
+    tree = linkExisting(tree, tara, eli, "parent", undefined, "father", "step");
     const text = serializeGedcom(tree);
     assert.match(text, /2 _KIN step/);
     const imported = parseGedcom(text);
-    const link = imported.childLinks.find((item) => item.childId === andressa);
-    const dad = imported.people.find((p) => p.givenName === "Edson")!;
+    const link = imported.childLinks.find((item) => item.childId === tara);
+    const dad = imported.people.find((p) => p.givenName === "Eli")!;
     assert.equal(link?.kin?.[dad.id], "step");
   });
 });

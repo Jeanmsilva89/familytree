@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
 import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
-import { centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround } from "@/lib/graphView";
+import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
 import { LinkRolePicker } from "./LinkRolePicker";
 
@@ -136,12 +136,18 @@ export function TreeCanvas({
     const vh = stage.clientHeight || 480;
     const xs = layout.cards.map((c) => c.x);
     const ys = layout.cards.map((c) => c.y);
-    const minX = Math.min(...xs) - CARD.w / 2;
-    const maxX = Math.max(...xs) + CARD.w / 2;
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys) + CARD.h;
-    const scale = fitContentScale(vw, vh, Math.max(maxX - minX, CARD.w), Math.max(maxY - minY, CARD.h));
-    viewRef.current = centerTransform(vw, vh, (minX + maxX) / 2, (minY + maxY) / 2, scale);
+    const shown = lineFilter.households ? layout.areas : [];
+    const minX = Math.min(...xs.map((x) => x - CARD.w / 2), ...shown.map((a) => a.cx - a.rx));
+    const maxX = Math.max(...xs.map((x) => x + CARD.w / 2), ...shown.map((a) => a.cx + a.rx));
+    const minY = Math.min(...ys, ...shown.map((a) => a.cy - a.ry));
+    const maxY = Math.max(...ys.map((y) => y + CARD.h), ...shown.map((a) => a.cy + a.ry));
+    // Frame the tree below any toolbar that floats over the top of the stage.
+    const stageTop = stage.getBoundingClientRect().top;
+    const bar = stage.parentElement?.querySelector(".graph-toolbar");
+    const inset = bar ? Math.max(0, Math.min(vh / 3, bar.getBoundingClientRect().bottom - stageTop)) : 0;
+    const scale = fitContentScale(vw, vh - inset, Math.max(maxX - minX, CARD.w), Math.max(maxY - minY, CARD.h));
+    const view = centerTransform(vw, vh - inset, (minX + maxX) / 2, (minY + maxY) / 2, scale);
+    viewRef.current = { ...view, y: view.y + inset };
     applyWorld();
   }
 
@@ -337,6 +343,10 @@ export function TreeCanvas({
   const stageW = Number.isFinite(layout.width) ? layout.width : 320;
   const stageH = Number.isFinite(layout.height) ? layout.height : 240;
   const forks = layout.forks ?? [];
+  const areas = (layout.areas ?? []).filter((a) => isFiniteBox(a.cx, a.cy, a.rx, a.ry));
+  const bridges = (layout.bridges ?? []).filter(
+    (b) => isFiniteBox(b.fromX, b.fromY) && isFiniteBox(b.toX, b.toY),
+  );
   const forkedKids = new Set(forks.flatMap((fork) => fork.childIds));
   const edges = layout.edges.filter(
     (edge) =>
@@ -395,6 +405,31 @@ export function TreeCanvas({
     >
       <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH, transform: "translate(40px, 24px) scale(1)" }}>
         <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
+          {lineFilter.households ? (
+            <g className="household-layer">
+              {areas.map((area) => {
+                const lit = Boolean(linked && area.memberIds.some((id) => linked.has(id)));
+                return (
+                  <path
+                    key={area.id}
+                    className={`household-area${area.isHome ? " is-home" : ""}${lit ? " is-lit" : ""}${linked && !lit ? " is-dim" : ""}`}
+                    d={superellipsePath(area)}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                );
+              })}
+              {bridges.map((bridge) => {
+                if (!lineFilterAllows(lineFilter, bridge.kin)) return null;
+                const lit = Boolean(linked && linked.has(bridge.personId));
+                return (
+                  <g key={bridge.id} className={`household-bridge${lit ? " is-lit" : ""}${linked && !lit ? " is-dim" : ""}`}>
+                    <path d={bridgePath(bridge)} />
+                    <circle cx={bridge.toX} cy={bridge.toY} r={4.5} />
+                  </g>
+                );
+              })}
+            </g>
+          ) : null}
           {forks.map((fork) => {
             const parents = fork.parentDrops.filter((drop) => lineFilterAllows(lineFilter, drop.kin));
             const kids = fork.childDrops.filter((drop) => lineFilterAllows(lineFilter, drop.kin));
@@ -596,6 +631,19 @@ export function TreeCanvas({
               </g>
             );
           })}
+          {lineFilter.households
+            ? areas.map((area) => (
+                <text
+                  key={`${area.id}-label`}
+                  className={`household-label${area.isHome ? " is-home" : ""}`}
+                  x={area.cx}
+                  y={area.cy - area.ry + 15}
+                  textAnchor="middle"
+                >
+                  {area.label}
+                </text>
+              ))
+            : null}
           {wire ? (
             <line
               className="graph-wire"

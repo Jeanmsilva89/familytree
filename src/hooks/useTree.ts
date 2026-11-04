@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { clearTree, loadTree, saveTree } from "@/lib/db";
 import { cloneExample } from "@/lib/example";
+import { applyFamilyUnitOverride } from "@/lib/familyUnits";
 import {
   addChild,
   addParent,
@@ -169,6 +170,12 @@ export function useTree() {
     [persist],
   );
 
+  const familyUnit = useCallback(
+    async (personId: string, choice: { unitOf: string | null } | "auto") =>
+      mutate((current) => applyFamilyUnitOverride(current, personId, choice)),
+    [mutate],
+  );
+
   const exportJson = useCallback(() => serializeTreeJson(tree), [tree]);
 
   const importJson = useCallback(async (text: string) => persist(parseTreeJson(text)), [persist]);
@@ -195,6 +202,7 @@ export function useTree() {
     focus,
     edit,
     remove,
+    familyUnit,
     exportJson,
     importJson,
   };

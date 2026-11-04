@@ -266,7 +266,14 @@ export function removePerson(tree: TreeData, id: string): TreeData {
     .map((l) => ({ ...l, parentIds: l.parentIds.filter((pid) => pid !== id) }));
   const focusPersonId =
     tree.focusPersonId === id ? nextFocusAfterRemove(tree, id) : tree.focusPersonId;
-  return { people, unions, childLinks, focusPersonId };
+  const familyUnitOverrides = tree.familyUnitOverrides?.filter((o) => o.personId !== id && o.unitOf !== id);
+  return {
+    people,
+    unions,
+    childLinks,
+    focusPersonId,
+    ...(familyUnitOverrides?.length ? { familyUnitOverrides } : {}),
+  };
 }
 
 export function mergeTree(base: TreeData, incoming: TreeData): TreeData {
