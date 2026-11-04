@@ -797,6 +797,53 @@ select {
   z-index: 0;
 }
 
+/* Household areas: a soft superellipse behind each household, a quiet label,
+   and one connector into each grown child's own household. */
+.household-area {
+  fill: color-mix(in srgb, var(--graph-spouse) 6%, transparent);
+  stroke: color-mix(in srgb, var(--graph-spouse) 34%, transparent);
+  stroke-width: 1;
+  transition: opacity 160ms ease, stroke 160ms ease;
+}
+.household-area.is-home {
+  fill: color-mix(in srgb, var(--accent) 8%, transparent);
+  stroke: color-mix(in srgb, var(--accent) 46%, transparent);
+}
+.household-area.is-lit {
+  stroke: color-mix(in srgb, var(--graph-spouse) 62%, transparent);
+}
+.household-area.is-home.is-lit {
+  stroke: color-mix(in srgb, var(--accent) 70%, transparent);
+}
+.household-area.is-dim { opacity: 0.45; }
+.household-bridge path {
+  fill: none;
+  stroke: var(--graph-spouse);
+  stroke-width: 9;
+  stroke-opacity: 0.14;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.household-bridge circle {
+  fill: var(--graph-spouse);
+  fill-opacity: 0.55;
+}
+.household-bridge.is-lit path { stroke-opacity: 0.26; }
+.household-bridge.is-dim { opacity: 0.4; }
+.household-label {
+  font-size: 10.5px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  fill: var(--muted);
+  fill-opacity: 0.9;
+  paint-order: stroke;
+  stroke: var(--graph-bg);
+  stroke-width: 4px;
+  stroke-linejoin: round;
+}
+.household-label.is-home { fill: var(--accent); }
+
 .couple-tint {
   position: absolute;
   z-index: 1;
@@ -1147,4 +1194,200 @@ html[data-theme="dark"] .portrait-card .swatch {
 .theme-picks button.is-on {
   border-color: var(--accent);
   box-shadow: 0 0 0 1px var(--accent);
+}
+
+/* Family sky: each family unit is a soft bucket; zoomed far out each bucket
+   is a glowing star, with thin lines between related families. */
+.family-sky { cursor: grab; }
+.family-sky.is-far { background: radial-gradient(120% 90% at 50% 40%, color-mix(in srgb, var(--graph-spouse) 5%, var(--graph-bg)), var(--graph-bg)); }
+.sky-world { --inv: 1; }
+.sky-bucket {
+  fill: color-mix(in srgb, var(--graph-spouse) 7%, var(--graph-bg));
+  fill-opacity: 0.74;
+  stroke: color-mix(in srgb, var(--graph-spouse) 26%, transparent);
+  stroke-width: 1;
+}
+.sky-bucket.is-lit {
+  fill: color-mix(in srgb, var(--accent) 8%, var(--graph-bg));
+  stroke: color-mix(in srgb, var(--accent) 52%, transparent);
+}
+.family-sky.is-mid .sky-bucket {
+  fill: color-mix(in srgb, var(--graph-spouse) 10%, var(--graph-bg));
+  stroke-width: 1.2;
+}
+.sky-glow-core { stop-color: var(--graph-spouse); stop-opacity: 0.62; }
+.sky-glow-mid { stop-color: var(--graph-spouse); stop-opacity: 0.2; }
+.sky-glow-edge { stop-color: var(--graph-spouse); stop-opacity: 0; }
+.sky-star-core { fill: color-mix(in srgb, var(--graph-spouse) 40%, #fff); fill-opacity: 0.9; }
+.sky-star.is-lit .sky-star-core { fill: var(--accent); }
+.sky-edge {
+  stroke: var(--graph-kin);
+  stroke-width: 1;
+  stroke-opacity: 0.6;
+  stroke-linecap: round;
+}
+.sky-edge.is-partner, .sky-link.is-partner { stroke: var(--graph-spouse); }
+.sky-link {
+  fill: none;
+  stroke: var(--graph-kin);
+  stroke-linecap: round;
+}
+.sky-label {
+  appearance: none;
+  position: absolute;
+  z-index: 3;
+  transform-origin: 0 0;
+  transform: scale(var(--inv)) translate(calc(-50% + var(--nudge, 0px)), -50%);
+  padding: 4px 10px;
+  min-height: 0;
+  border: 0;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--graph-bg) 70%, transparent);
+  color: var(--muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.family-sky.is-far .sky-label {
+  transform: scale(var(--inv)) translate(calc(-50% + var(--nudge, 0px)), 0);
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: none;
+  font-weight: 600;
+  background: transparent;
+  text-shadow: 0 1px 6px var(--graph-bg);
+}
+.sky-label small {
+  margin-left: 6px;
+  font-weight: 500;
+  color: var(--muted);
+}
+.sky-label.is-lit { color: var(--accent); }
+.sky-avatar {
+  appearance: none;
+  position: absolute;
+  z-index: 2;
+  padding: 0;
+  border: 2px solid color-mix(in srgb, var(--graph-spouse) 40%, var(--line));
+  border-radius: 50%;
+  background: var(--graph-card);
+  overflow: visible;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.sky-avatar img, .sky-avatar span {
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  object-fit: cover;
+  font-size: 26px;
+  font-weight: 700;
+  color: #fff;
+  background: hsl(var(--swatch-hue, 80) 18% 32%);
+}
+.sky-avatar em {
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 6px);
+  transform: translateX(-50%);
+  font-style: normal;
+  font-size: 24px;
+  color: var(--ink);
+  opacity: 0.8;
+  white-space: nowrap;
+}
+.sky-avatar.is-dim { opacity: 0.45; }
+.sky-avatar.is-active { border-color: var(--accent); box-shadow: 0 0 0 6px color-mix(in srgb, var(--accent) 30%, transparent); }
+.sky-hint {
+  position: absolute;
+  left: 50%;
+  bottom: calc(18px + var(--safe-bottom));
+  transform: translateX(-50%);
+  margin: 0;
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+  white-space: nowrap;
+}
+.family-unit-field { font-weight: 600; margin: 4px 0 8px; }
+.family-unit-field select { font-weight: 400; }
+.family-sky { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.family-unit-note { display: block; margin-top: 6px; font-weight: 400; font-size: 12px; color: var(--muted, rgba(255,255,255,0.6)); }
+
+/* Phones: a slim graph toolbar. One row of small buttons, then one row of
+   chips that scrolls sideways; "Their tree" floats at the bottom left. */
+@media (max-width: 719px) {
+  .graph-overlay .graph-toolbar {
+    top: calc(8px + var(--safe-top));
+    left: 10px;
+    right: 10px;
+    gap: 6px;
+  }
+  .graph-overlay .graph-toolbar > .btn {
+    min-height: 36px;
+    min-width: 0;
+    padding: 0 12px;
+    border-radius: 12px;
+    font-size: 0.9rem;
+    box-shadow: none;
+  }
+  .graph-overlay .graph-filter {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 5px;
+    padding: 4px;
+    border-radius: 14px;
+    scrollbar-width: none;
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 22px), transparent);
+  }
+  .graph-overlay .graph-filter::-webkit-scrollbar { display: none; }
+  .graph-overlay .graph-filter .chip {
+    flex: 0 0 auto;
+    min-height: 30px;
+    padding: 0 11px;
+    font-size: 0.8rem;
+  }
+  .graph-overlay .graph-toolbar > .their-tree-btn {
+    position: fixed;
+    left: 12px;
+    bottom: calc(14px + var(--safe-bottom));
+    box-shadow: var(--shadow);
+  }
+}
+
+/* Family sky edit mode. */
+.sky-bucket.is-drop {
+  fill: color-mix(in srgb, var(--accent) 14%, var(--graph-bg));
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+}
+.family-sky .graph-wire {
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 5;
+  fill: none;
+}
+.family-sky .sky-port {
+  transform: translate(-50%, -50%) scale(max(1, calc(var(--inv) * 0.7)));
+}
+.family-sky.is-editing .portrait-card { cursor: grab; touch-action: none; }
+.family-sky .portrait-card.is-carried {
+  z-index: 7;
+  cursor: grabbing;
+  opacity: 0.92;
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+  transform: scale(1.04);
+}
+@media (max-width: 719px) {
+  .family-sky .sky-edit-hint { bottom: calc(66px + var(--safe-bottom)); font-size: 0.82rem; }
 }

@@ -92,3 +92,39 @@ export function coupleTintBox(partners: { x: number; y: number }[], pad = 10) {
 export function showsCoupleHighlight(kind?: UnionKind, count = 2): boolean {
   return showsCoupleBar(kind, count);
 }
+
+/** SVG path for a superellipse area: |x/rx|^n + |y/ry|^n = 1. */
+export function superellipsePath(area: { cx: number; cy: number; rx: number; ry: number; n: number }, steps = 96): string {
+  const { cx, cy, rx, ry, n } = area;
+  const e = 2 / n;
+  const pts: string[] = [];
+  for (let i = 0; i < steps; i++) {
+    const t = (i / steps) * Math.PI * 2;
+    const c = Math.cos(t);
+    const s = Math.sin(t);
+    const x = cx + rx * Math.sign(c) * Math.pow(Math.abs(c), e);
+    const y = cy + ry * Math.sign(s) * Math.pow(Math.abs(s), e);
+    pts.push(`${x.toFixed(2)} ${y.toFixed(2)}`);
+  }
+  return `M ${pts[0]} L ${pts.slice(1).join(" L ")} Z`;
+}
+
+/**
+ * SVG path for a household connector: straight down from the parents, across
+ * the open lane between areas, then down into the person, with soft corners.
+ */
+export function bridgePath(bridge: { fromX: number; fromY: number; toX: number; toY: number }, radius = 14): string {
+  const { fromX, fromY, toX, toY } = bridge;
+  if (Math.abs(toX - fromX) < 0.5) return `M ${fromX} ${fromY} L ${toX} ${toY}`;
+  const laneY = fromY + (toY - fromY) / 2;
+  const dir = Math.sign(toX - fromX);
+  const r = Math.max(0, Math.min(radius, Math.abs(toX - fromX) / 2, Math.abs(laneY - fromY)));
+  return [
+    `M ${fromX} ${fromY}`,
+    `L ${fromX} ${laneY - r}`,
+    `Q ${fromX} ${laneY} ${fromX + dir * r} ${laneY}`,
+    `L ${toX - dir * r} ${laneY}`,
+    `Q ${toX} ${laneY} ${toX} ${laneY + r}`,
+    `L ${toX} ${toY}`,
+  ].join(" ");
+}

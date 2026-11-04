@@ -4,6 +4,9 @@ import { kidsUnderUnion, parentsOf, unionsFor } from "./tree";
 
 export const CARD = { w: 120, h: 140, gap: 28, coupleGap: 6, laneGap: 104, pad: 56 };
 
+/** Household area padding around member cards, and the gap between two areas. */
+export const AREA = { padX: 24, padY: 24, gap: 18, loosePad: 6, n: 5 };
+
 export type CoupleUnit = {
   id: string;
   union?: Union;
@@ -62,6 +65,35 @@ export type LaidFork = {
   childDrops: { x: number; y1: number; childId: string; kin: KinKind }[];
 };
 
+/** A household drawn as a soft superellipse area behind its members. */
+export type LaidArea = {
+  id: string;
+  label: string;
+  headIds: string[];
+  memberIds: string[];
+  isHome: boolean;
+  /** Superellipse centre, radii and exponent: |x/rx|^n + |y/ry|^n = 1. */
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+  n: number;
+};
+
+/** One connector between two household areas, through the person who links them. */
+export type LaidBridge = {
+  id: string;
+  fromAreaId?: string;
+  toAreaId: string;
+  personId: string;
+  kind: "child" | "coparent" | "partner";
+  kin: KinKind;
+  fromX: number;
+  fromY: number;
+  toX: number;
+  toY: number;
+};
+
 export type GraphLayout = {
   width: number;
   height: number;
@@ -71,6 +103,8 @@ export type GraphLayout = {
   forks: LaidFork[];
   focusId?: string;
   householdIds: string[];
+  areas: LaidArea[];
+  bridges: LaidBridge[];
 };
 
 export function displayNames(people: Person[]): string {

@@ -209,107 +209,107 @@ describe("self-serve mutations", () => {
 
   it("names couple kinds and can unlink a partner", () => {
     assert.equal(unionKindLabel("separated"), "Two households / separated");
-    let tree = startWithName("Edson");
-    const edson = tree.people[0].id;
-    tree = addPartner(tree, edson, "Andreia", "married");
-    const andreia = tree.people.find((p) => p.givenName === "Andreia")!.id;
+    let tree = startWithName("Eli");
+    const eli = tree.people[0].id;
+    tree = addPartner(tree, eli, "Ada", "married");
+    const ada = tree.people.find((p) => p.givenName === "Ada")!.id;
     assert.equal(tree.unions[0].kind, "married");
-    tree = unlinkExisting(tree, edson, andreia, "partner");
+    tree = unlinkExisting(tree, eli, ada, "partner");
     assert.equal(tree.unions.length, 0);
   });
 
   it("drops a couple with no remaining partner on the tree", () => {
-    let tree = startWithName("Andreia");
-    const andreia = tree.people[0].id;
+    let tree = startWithName("Ada");
+    const ada = tree.people[0].id;
     tree = {
       ...tree,
-      unions: [{ id: "u-ghost", partnerIds: [andreia, "missing"], kind: "unspecified" }],
+      unions: [{ id: "u-ghost", partnerIds: [ada, "missing"], kind: "unspecified" }],
     };
     tree = dropUnion(tree, "u-ghost");
     assert.equal(tree.unions.length, 0);
   });
 
   it("builds a related tree from one person without copying master data", () => {
-    let tree = startWithName("Jean");
-    const jean = tree.people[0].id;
+    let tree = startWithName("Jon");
+    const jon = tree.people[0].id;
     tree = addUnlinkedPerson(tree, "Stranger");
-    tree = addParent(tree, jean, "Andreia");
-    tree = addPartner(tree, jean, "Leah");
-    const andreia = tree.people.find((p) => p.givenName === "Andreia")!;
-    const leah = tree.people.find((p) => p.givenName === "Leah")!;
-    tree = addParent(tree, andreia.id, "Eunice");
-    tree = addChild(tree, [andreia.id], "Jack");
-    const eunice = tree.people.find((p) => p.givenName === "Eunice")!;
-    tree = addParent(tree, eunice.id, "Nana");
-    tree = addSibling(tree, eunice.id, "Tia");
+    tree = addParent(tree, jon, "Ada");
+    tree = addPartner(tree, jon, "Lena");
+    const ada = tree.people.find((p) => p.givenName === "Ada")!;
+    const lena = tree.people.find((p) => p.givenName === "Lena")!;
+    tree = addParent(tree, ada.id, "Una");
+    tree = addChild(tree, [ada.id], "Milo");
+    const una = tree.people.find((p) => p.givenName === "Una")!;
+    tree = addParent(tree, una.id, "Nana");
+    tree = addSibling(tree, una.id, "Tia");
     const tia = tree.people.find((p) => p.givenName === "Tia")!;
     tree = addChild(tree, [tia.id], "Cousin");
-    const view = relatedTree(tree, leah.id);
-    assert.equal(view.focusPersonId, leah.id);
-    assert.equal(tree.focusPersonId, jean);
+    const view = relatedTree(tree, lena.id);
+    assert.equal(view.focusPersonId, lena.id);
+    assert.equal(tree.focusPersonId, jon);
     assert.ok(!view.people.some((p) => p.givenName === "Stranger"));
     assert.ok(!view.people.some((p) => p.givenName === "Tia" || p.givenName === "Cousin"));
     assert.ok(view.people.some((p) => p.givenName === "Nana"));
     assert.deepEqual(
       view.people.map((p) => p.givenName).sort(),
-      ["Andreia", "Eunice", "Jack", "Jean", "Leah", "Nana"].sort(),
+      ["Ada", "Una", "Milo", "Jon", "Lena", "Nana"].sort(),
     );
     assert.equal(
-      view.people.find((p) => p.id === jean),
-      tree.people.find((p) => p.id === jean),
+      view.people.find((p) => p.id === jon),
+      tree.people.find((p) => p.id === jon),
     );
   });
 
   it("links a named father or mother", () => {
-    let tree = startWithName("Jean");
-    const jean = tree.people[0].id;
-    tree = addUnlinkedPerson(tree, "Edson");
-    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
-    tree = linkExisting(tree, jean, edson, "parent", undefined, "father");
-    assert.equal(parentsOf(tree, jean)[0].id, edson);
-    assert.equal(tree.childLinks[0].roles?.[edson], "father");
+    let tree = startWithName("Jon");
+    const jon = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Eli");
+    const eli = tree.people.find((p) => p.givenName === "Eli")!.id;
+    tree = linkExisting(tree, jon, eli, "parent", undefined, "father");
+    assert.equal(parentsOf(tree, jon)[0].id, eli);
+    assert.equal(tree.childLinks[0].roles?.[eli], "father");
   });
 
   it("links a stepfather and an adopted child with quieter kin", () => {
-    let tree = startWithName("Andressa");
-    const andressa = tree.people[0].id;
-    tree = addUnlinkedPerson(tree, "Edson");
-    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
-    tree = linkExisting(tree, andressa, edson, "parent", undefined, "father", "step");
-    assert.equal(tree.childLinks[0].kin?.[edson], "step");
+    let tree = startWithName("Tara");
+    const tara = tree.people[0].id;
+    tree = addUnlinkedPerson(tree, "Eli");
+    const eli = tree.people.find((p) => p.givenName === "Eli")!.id;
+    tree = linkExisting(tree, tara, eli, "parent", undefined, "father", "step");
+    assert.equal(tree.childLinks[0].kin?.[eli], "step");
     tree = addUnlinkedPerson(tree, "Sam");
     const sam = tree.people.find((p) => p.givenName === "Sam")!.id;
-    tree = linkExisting(tree, andressa, sam, "child", undefined, undefined, "adopted");
+    tree = linkExisting(tree, tara, sam, "child", undefined, undefined, "adopted");
     const adopted = tree.childLinks.find((l) => l.childId === sam);
     assert.ok(adopted);
-    assert.equal(adopted?.kin?.[andressa], "adopted");
+    assert.equal(adopted?.kin?.[tara], "adopted");
   });
 
   it("can change a parent to stepfather or adoptive", () => {
-    let tree = startWithName("Andressa");
-    const andressa = tree.people[0].id;
-    tree = addParent(tree, andressa, "Edson", "father");
-    const edson = tree.people.find((p) => p.givenName === "Edson")!.id;
-    assert.equal(tree.childLinks[0].roles?.[edson], "father");
-    tree = updateParentLink(tree, andressa, edson, { kin: "step" });
-    assert.equal(tree.childLinks[0].kin?.[edson], "step");
-    tree = updateParentLink(tree, andressa, edson, { kin: "blood", role: "" });
-    assert.equal(tree.childLinks[0].kin?.[edson], undefined);
-    assert.equal(tree.childLinks[0].roles?.[edson], undefined);
+    let tree = startWithName("Tara");
+    const tara = tree.people[0].id;
+    tree = addParent(tree, tara, "Eli", "father");
+    const eli = tree.people.find((p) => p.givenName === "Eli")!.id;
+    assert.equal(tree.childLinks[0].roles?.[eli], "father");
+    tree = updateParentLink(tree, tara, eli, { kin: "step" });
+    assert.equal(tree.childLinks[0].kin?.[eli], "step");
+    tree = updateParentLink(tree, tara, eli, { kin: "blood", role: "" });
+    assert.equal(tree.childLinks[0].kin?.[eli], undefined);
+    assert.equal(tree.childLinks[0].roles?.[eli], undefined);
   });
 });
 
 describe("people autocomplete", () => {
   it("ranks existing names that match what you type", () => {
     const people = [
-      { id: "a", givenName: "Jean", familyName: "Silva", createdAt: "t", updatedAt: "t" },
-      { id: "b", givenName: "Leah", familyName: "Silva", createdAt: "t", updatedAt: "t" },
-      { id: "c", givenName: "Jake", createdAt: "t", updatedAt: "t" },
+      { id: "a", givenName: "Jon", familyName: "Example", createdAt: "t", updatedAt: "t" },
+      { id: "b", givenName: "Lena", familyName: "Example", createdAt: "t", updatedAt: "t" },
+      { id: "c", givenName: "Joe", createdAt: "t", updatedAt: "t" },
     ];
-    const hits = matchPeople(people, "lea");
+    const hits = matchPeople(people, "len");
     assert.equal(hits.length, 1);
     assert.equal(hits[0].id, "b");
-    assert.equal(matchPeople(people, "sil")[0].familyName, "Silva");
+    assert.equal(matchPeople(people, "exa")[0].familyName, "Example");
     assert.equal(matchPeople(people, "j", "a").some((p) => p.id === "a"), false);
     assert.deepEqual(matchPeople(people, "   "), []);
   });

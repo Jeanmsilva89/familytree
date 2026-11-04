@@ -14,6 +14,7 @@ import {
 import { childrenOfPerson, kinBetween, parentRoleOf, parentsOf, unionsFor } from "@/lib/tree";
 import { personToVCard, vcardFilename } from "@/lib/vcard";
 import { NameAutocomplete } from "./AddNameRow";
+import { FamilyUnitPicker } from "./FamilyUnitPicker";
 import { scrollFieldIntoSheet, useBodyScrollLock } from "@/hooks/useVisualViewport";
 
 type Rel = "parent" | "partner" | "child" | "sibling";
@@ -34,6 +35,7 @@ type Props = {
   onEdit: (id: string, patch: Partial<Person>) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
   onViewTree: (person: Person) => void;
+  onSetFamilyUnit?: (personId: string, choice: { unitOf: string | null } | "auto") => Promise<void>;
 };
 
 function downloadVCard(person: Person) {
@@ -73,6 +75,7 @@ export function PersonSheet({
   onEdit,
   onRemove,
   onViewTree,
+  onSetFamilyUnit,
 }: Props) {
   const titleId = useId();
   const [rel, setRel] = useState<Rel>("parent");
@@ -268,6 +271,7 @@ export function PersonSheet({
         >
           View {person.givenName.trim() || "their"} tree
         </button>
+        {onSetFamilyUnit ? <FamilyUnitPicker tree={tree} person={person} onChange={onSetFamilyUnit} /> : null}
         {hint ? <p className="error">{hint}</p> : null}
 
         <form className="name-front" onSubmit={async (e) => { e.preventDefault(); await saveNames(); }}>

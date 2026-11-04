@@ -63,55 +63,55 @@ describe("generation lanes", () => {
 
   it("keeps grandparents of parent A off parent B's side", () => {
     const split: TreeData = {
-      focusPersonId: "jean",
+      focusPersonId: "jon",
       people: [
-        person("jay", "Jay"),
-        person("andreia", "Andreia"),
-        person("craig", "Craig"),
-        person("jean", "Jean"),
-        person("leah", "Leah"),
+        person("dan", "Dan"),
+        person("ada", "Ada"),
+        person("carl", "Carl"),
+        person("jon", "Jon"),
+        person("lena", "Lena"),
         person("pat", "Pat"),
       ],
       unions: [
-        { id: "u-ja", partnerIds: ["jay", "andreia"], kind: "married" },
-        { id: "u-jl", partnerIds: ["jean", "leah"], kind: "partnered" },
+        { id: "u-ja", partnerIds: ["dan", "ada"], kind: "married" },
+        { id: "u-jl", partnerIds: ["jon", "lena"], kind: "partnered" },
       ],
       childLinks: [
-        { id: "c-jean", childId: "jean", parentIds: ["jay", "andreia"], unionId: "u-ja" },
-        { id: "c-leah", childId: "leah", parentIds: ["craig"] },
-        { id: "c-craig", childId: "craig", parentIds: ["pat"] },
+        { id: "c-jon", childId: "jon", parentIds: ["dan", "ada"], unionId: "u-ja" },
+        { id: "c-lena", childId: "lena", parentIds: ["carl"] },
+        { id: "c-carl", childId: "carl", parentIds: ["pat"] },
       ],
     };
-    const lanes = buildGenerationLanes(split, "jean");
+    const lanes = buildGenerationLanes(split, "jon");
     const parents = lanes.find((l) => l.id === "parents");
-    const jeanSide = parents!.groups!.find((g) => g.parentId === "jean");
-    const leahSide = parents!.groups!.find((g) => g.parentId === "leah");
-    assert.deepEqual(jeanSide?.people.map((p) => p.id).sort(), ["andreia", "jay"]);
-    assert.equal(jeanSide?.label, "Jean's parents");
-    assert.equal(jeanSide?.coupleBar, true);
-    assert.deepEqual(leahSide?.people.map((p) => p.id), ["craig"]);
-    assert.equal(leahSide?.label, "Leah's parents");
-    assert.equal(leahSide?.coupleBar, false);
-    assert.ok(!jeanSide?.people.some((p) => p.id === "craig"));
-    assert.ok(!leahSide?.people.some((p) => p.id === "jay" || p.id === "andreia"));
+    const jonSide = parents!.groups!.find((g) => g.parentId === "jon");
+    const lenaSide = parents!.groups!.find((g) => g.parentId === "lena");
+    assert.deepEqual(jonSide?.people.map((p) => p.id).sort(), ["ada", "dan"]);
+    assert.equal(jonSide?.label, "Jon's parents");
+    assert.equal(jonSide?.coupleBar, true);
+    assert.deepEqual(lenaSide?.people.map((p) => p.id), ["carl"]);
+    assert.equal(lenaSide?.label, "Lena's parents");
+    assert.equal(lenaSide?.coupleBar, false);
+    assert.ok(!jonSide?.people.some((p) => p.id === "carl"));
+    assert.ok(!lenaSide?.people.some((p) => p.id === "dan" || p.id === "ada"));
 
     const twoGp: TreeData = {
       ...split,
       people: [...split.people, person("mom", "Mom"), person("dad", "Dad")],
       childLinks: [
-        { id: "c-mom", childId: "mom", parentIds: ["jay", "andreia"], unionId: "u-ja" },
-        { id: "c-dad", childId: "dad", parentIds: ["craig"] },
-        { id: "c-jean2", childId: "jean", parentIds: ["mom", "dad"] },
-        { id: "c-leah", childId: "leah", parentIds: ["pat"] },
+        { id: "c-mom", childId: "mom", parentIds: ["dan", "ada"], unionId: "u-ja" },
+        { id: "c-dad", childId: "dad", parentIds: ["carl"] },
+        { id: "c-jon2", childId: "jon", parentIds: ["mom", "dad"] },
+        { id: "c-lena", childId: "lena", parentIds: ["pat"] },
       ],
     };
-    const gps = buildGenerationLanes(twoGp, "jean").find((l) => l.id === "grandparents")!.groups!;
+    const gps = buildGenerationLanes(twoGp, "jon").find((l) => l.id === "grandparents")!.groups!;
     const momGp = gps.find((g) => g.parentId === "mom")!;
     const dadGp = gps.find((g) => g.parentId === "dad")!;
-    assert.deepEqual(momGp.people.map((p) => p.id).sort(), ["andreia", "jay"]);
-    assert.deepEqual(dadGp.people.map((p) => p.id), ["craig"]);
-    assert.ok(!momGp.people.some((p) => p.id === "craig"));
-    assert.ok(!dadGp.people.some((p) => p.id === "jay"));
+    assert.deepEqual(momGp.people.map((p) => p.id).sort(), ["ada", "dan"]);
+    assert.deepEqual(dadGp.people.map((p) => p.id), ["carl"]);
+    assert.ok(!momGp.people.some((p) => p.id === "carl"));
+    assert.ok(!dadGp.people.some((p) => p.id === "dan"));
     assert.equal(momGp.coupleBar, true);
     assert.equal(dadGp.coupleBar, false);
     assert.equal(momGp.label, "Mom's parents");
@@ -119,37 +119,37 @@ describe("generation lanes", () => {
 
   it("shows both partners' grandparents when looking at the household", () => {
     const family: TreeData = {
-      focusPersonId: "jean",
+      focusPersonId: "jon",
       people: [
-        person("jean", "Jean"),
-        person("leah", "Leah"),
-        person("edson", "Edson"),
-        person("eunice", "Eunice"),
-        person("jacyron", "Jacyron"),
+        person("jon", "Jon"),
+        person("lena", "Lena"),
+        person("eli", "Eli"),
+        person("una", "Una"),
+        person("hal", "Hal"),
         person("bob", "Bob"),
         person("sue", "Sue"),
         person("lgp1", "Lgp1"),
         person("lgp2", "Lgp2"),
       ],
       unions: [
-        { id: "u-home", partnerIds: ["jean", "leah"], kind: "partnered" },
-        { id: "u-gp", partnerIds: ["eunice", "jacyron"], kind: "married" },
+        { id: "u-home", partnerIds: ["jon", "lena"], kind: "partnered" },
+        { id: "u-gp", partnerIds: ["una", "hal"], kind: "married" },
         { id: "u-l", partnerIds: ["bob", "sue"], kind: "married" },
         { id: "u-lgp", partnerIds: ["lgp1", "lgp2"], kind: "married" },
       ],
       childLinks: [
-        { id: "c-j", childId: "jean", parentIds: ["edson"] },
-        { id: "c-e", childId: "edson", parentIds: ["eunice", "jacyron"], unionId: "u-gp" },
-        { id: "c-l", childId: "leah", parentIds: ["bob", "sue"], unionId: "u-l" },
+        { id: "c-j", childId: "jon", parentIds: ["eli"] },
+        { id: "c-e", childId: "eli", parentIds: ["una", "hal"], unionId: "u-gp" },
+        { id: "c-l", childId: "lena", parentIds: ["bob", "sue"], unionId: "u-l" },
         { id: "c-b", childId: "bob", parentIds: ["lgp1", "lgp2"], unionId: "u-lgp" },
       ],
     };
-    const lanes = buildGenerationLanes(family, "jean");
+    const lanes = buildGenerationLanes(family, "jon");
     assert.deepEqual(lanes.map((l) => l.id), ["grandparents", "parents", "focus"]);
     const gps = lanes.find((l) => l.id === "grandparents")!.people.map((p) => p.id).sort();
-    assert.deepEqual(gps, ["eunice", "jacyron", "lgp1", "lgp2"]);
+    assert.deepEqual(gps, ["hal", "lgp1", "lgp2", "una"]);
     const parents = lanes.find((l) => l.id === "parents")!.people.map((p) => p.id).sort();
-    assert.deepEqual(parents, ["bob", "edson", "sue"]);
+    assert.deepEqual(parents, ["bob", "eli", "sue"]);
   });
 
   it("shows siblings of the focus on the focus generation, not among kids", () => {
@@ -183,42 +183,42 @@ describe("generation lanes", () => {
 
   it("does not box two partners of the focus as one family", () => {
     const tree: TreeData = {
-      focusPersonId: "andreia",
+      focusPersonId: "ada",
       people: [
-        person("eunice", "Eunice"),
-        person("jacyron", "Jacyron"),
-        person("andreia", "Andreia"),
-        person("jay", "Jay"),
-        person("edson", "Edson"),
-        person("jean", "Jean"),
-        person("jack", "Jack"),
+        person("una", "Una"),
+        person("hal", "Hal"),
+        person("ada", "Ada"),
+        person("dan", "Dan"),
+        person("eli", "Eli"),
+        person("jon", "Jon"),
+        person("milo", "Milo"),
       ],
       unions: [
-        { id: "u-gp", partnerIds: ["eunice", "jacyron"], kind: "married" },
-        { id: "u-aj", partnerIds: ["andreia", "jay"], kind: "married" },
-        { id: "u-ae", partnerIds: ["andreia", "edson"], kind: "unspecified" },
+        { id: "u-gp", partnerIds: ["una", "hal"], kind: "married" },
+        { id: "u-aj", partnerIds: ["ada", "dan"], kind: "married" },
+        { id: "u-ae", partnerIds: ["ada", "eli"], kind: "unspecified" },
       ],
       childLinks: [
-        { id: "c-a", childId: "andreia", parentIds: ["eunice", "jacyron"], unionId: "u-gp" },
-        { id: "c-jean", childId: "jean", parentIds: ["andreia", "edson"], unionId: "u-ae" },
-        { id: "c-jack", childId: "jack", parentIds: ["andreia", "edson"], unionId: "u-ae" },
+        { id: "c-a", childId: "ada", parentIds: ["una", "hal"], unionId: "u-gp" },
+        { id: "c-jon", childId: "jon", parentIds: ["ada", "eli"], unionId: "u-ae" },
+        { id: "c-milo", childId: "milo", parentIds: ["ada", "eli"], unionId: "u-ae" },
       ],
     };
-    const lanes = buildGenerationLanes(tree, "andreia");
+    const lanes = buildGenerationLanes(tree, "ada");
     const family = lanes.find((l) => l.id === "focus")!;
     const boxed = family.groups!.filter((g) => g.coupleBar);
     assert.equal(boxed.length, 1);
-    assert.deepEqual(boxed[0].people.map((p) => p.id).sort(), ["andreia", "jay"]);
-    assert.ok(!boxed[0].people.some((p) => p.id === "edson"));
-    const extra = family.groups!.find((g) => g.people.some((p) => p.id === "edson"));
+    assert.deepEqual(boxed[0].people.map((p) => p.id).sort(), ["ada", "dan"]);
+    assert.ok(!boxed[0].people.some((p) => p.id === "eli"));
+    const extra = family.groups!.find((g) => g.people.some((p) => p.id === "eli"));
     assert.ok(extra);
     assert.equal(extra!.coupleBar, false);
-    assert.deepEqual(extra!.people.map((p) => p.id), ["edson"]);
+    assert.deepEqual(extra!.people.map((p) => p.id), ["eli"]);
     const kids = lanes.find((l) => l.id === "children")!;
     assert.ok(kids.groups);
-    const withEdson = kids.groups!.find((g) => g.label === "With Edson");
-    assert.ok(withEdson);
-    assert.deepEqual(withEdson!.people.map((p) => p.givenName).sort(), ["Jack", "Jean"]);
+    const withEli = kids.groups!.find((g) => g.label === "With Eli");
+    assert.ok(withEli);
+    assert.deepEqual(withEli!.people.map((p) => p.givenName).sort(), ["Jon", "Milo"]);
   });
 });
 

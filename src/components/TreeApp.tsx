@@ -11,6 +11,7 @@ import { relatedTree } from "@/lib/tree";
 import { DEFAULT_LINE_FILTER, type LineFilter } from "@/lib/kinFilter";
 import { BrandMark } from "./BrandMark";
 import { AppMenu } from "./AppMenu";
+import { FamilySky } from "./FamilySky";
 import { FocusFamily } from "./FocusFamily";
 import { GraphLineFilter } from "./GraphLineFilter";
 import { PeopleList } from "./PeopleList";
@@ -333,23 +334,38 @@ export function TreeApp() {
             ) : null}
             <GraphLineFilter value={lineFilter} onChange={setLineFilter} />
             {highlighted ? (
-              <button type="button" className="btn primary" onClick={() => openRelatedTree(highlighted)}>
+              <button type="button" className="btn primary their-tree-btn" onClick={() => openRelatedTree(highlighted)}>
                 Their tree
               </button>
             ) : null}
           </div>
-          <TreeCanvas
-            tree={treeState.tree}
-            highlightedId={highlighted?.id}
-            onHighlight={setHighlighted}
-            onOpen={setSheetPerson}
-            fitKey={graphOpen}
-            editMode={graphEdit}
-            onLink={treeState.link}
-            onUnlink={treeState.unlink}
-            onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
-            lineFilter={lineFilter}
-          />
+          {lineFilter.families ? (
+            <FamilySky
+              tree={treeState.tree}
+              highlightedId={highlighted?.id}
+              onHighlight={setHighlighted}
+              onOpen={setSheetPerson}
+              fitKey={graphOpen}
+              lineFilter={lineFilter}
+              hold={Boolean(sheetPerson)}
+              editMode={graphEdit}
+              onLink={treeState.link}
+              onMoveToUnit={(personId, unitRootId) => treeState.familyUnit(personId, { unitOf: unitRootId })}
+            />
+          ) : (
+            <TreeCanvas
+              tree={treeState.tree}
+              highlightedId={highlighted?.id}
+              onHighlight={setHighlighted}
+              onOpen={setSheetPerson}
+              fitKey={graphOpen}
+              editMode={graphEdit}
+              onLink={treeState.link}
+              onUnlink={treeState.unlink}
+              onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
+              lineFilter={lineFilter}
+            />
+          )}
           {graphAddName != null ? (
             <form
               className="graph-add"
@@ -449,6 +465,7 @@ export function TreeApp() {
         onEdit={treeState.edit}
         onRemove={treeState.remove}
         onViewTree={openRelatedTree}
+        onSetFamilyUnit={treeState.familyUnit}
       />
 
       <input ref={fileRef} className="sr-only" type="file" accept=".ged,.gedcom,text/plain" aria-label="Import GEDCOM file" onChange={async (event) => {

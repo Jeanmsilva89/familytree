@@ -89,11 +89,23 @@ export type ChildLink = {
   kin?: Partial<Record<string, KinKind>>;
 };
 
+/**
+ * Manual family-unit choice for one person. `unitOf` names someone whose unit
+ * this person should join (usually that unit's head); `null` gives the person
+ * a unit of their own. Pure data, applied by `deriveFamilyUnits`.
+ */
+export type FamilyUnitOverride = {
+  personId: string;
+  unitOf: string | null;
+};
+
 export type TreeData = {
   people: Person[];
   unions: Union[];
   childLinks: ChildLink[];
   focusPersonId?: string;
+  /** Manual family-unit reassignments, applied over the maternal rule. */
+  familyUnitOverrides?: FamilyUnitOverride[];
 };
 
 export type LinkRole = "parent" | "partner" | "child" | "sibling";
