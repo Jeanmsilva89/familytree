@@ -148,6 +148,14 @@ export function TreeApp() {
     setFamilyOpen(true);
   };
 
+  const changeLines = (next: LineFilter) => {
+    if (next.families !== lineFilter.families) {
+      setHighlighted(undefined);
+      setRelatedHighlight(undefined);
+    }
+    setLineFilter(next);
+  };
+
   const closeVisualize = () => {
     setRelatedRootId(undefined);
     setRelatedHighlight(undefined);
@@ -332,7 +340,7 @@ export function TreeApp() {
                 Reset layout
               </button>
             ) : null}
-            <GraphLineFilter value={lineFilter} onChange={setLineFilter} />
+            <GraphLineFilter value={lineFilter} onChange={changeLines} />
             {highlighted ? (
               <button type="button" className="btn primary their-tree-btn" onClick={() => openRelatedTree(highlighted)}>
                 Their tree
@@ -364,6 +372,7 @@ export function TreeApp() {
               onUnlink={treeState.unlink}
               onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
               lineFilter={lineFilter}
+              egoLayout
             />
           )}
           {graphAddName != null ? (
@@ -425,7 +434,7 @@ export function TreeApp() {
             >
               {relatedEdit ? "Done" : "Edit"}
             </button>
-            <GraphLineFilter value={lineFilter} onChange={setLineFilter} />
+            <GraphLineFilter value={lineFilter} onChange={changeLines} />
           </header>
           <TreeCanvas
             tree={relatedView}
@@ -437,6 +446,7 @@ export function TreeApp() {
             onLink={treeState.link}
             onUnlink={treeState.unlink}
             lineFilter={lineFilter}
+            egoLayout={false}
           />
         </div>
       ) : null}

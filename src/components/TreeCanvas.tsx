@@ -3,8 +3,9 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
-import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
+import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue, type GraphLayout } from "@/lib/layout";
 import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
+import { PERSONAL_MAP_MS, graphFromPersonalMap, layoutPersonalMap, morphGraph, placesMatch, type PersonalMap } from "@/lib/personalMap";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
 import { LinkRolePicker } from "./LinkRolePicker";
 
@@ -21,6 +22,8 @@ type Props = {
   onUnlink?: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => void | Promise<void>;
   onPlace?: (personId: string, x: number) => void | Promise<void>;
   lineFilter?: LineFilter;
+  /** Gather the selected person's family into a personal map. Off for the related-tree modal, which keeps a highlight for its root. */
+  egoLayout?: boolean;
 };
 
 type View = { x: number; y: number; s: number };
@@ -56,17 +59,38 @@ export function TreeCanvas({
   onUnlink,
   onPlace,
   lineFilter = DEFAULT_LINE_FILTER,
+  egoLayout = true,
 }: Props) {
   const householdHint = tree.focusPersonId;
-  const layout = useMemo(() => buildGraph(tree, householdHint), [tree, householdHint]);
+  const baseLayout = useMemo(() => buildGraph(tree, householdHint), [tree, householdHint]);
+  const personal = useMemo(
+    () => (egoLayout && !editMode && highlightedId ? layoutPersonalMap(tree, highlightedId) : null),
+    [egoLayout, editMode, highlightedId, tree],
+  );
+  const targetLayout = useMemo(
+    () => (personal ? graphFromPersonalMap(tree, personal) : baseLayout),
+    [personal, tree, baseLayout],
+  );
+  const [shown, setShown] = useState(baseLayout);
+  const shownRef = useRef(shown);
+  shownRef.current = shown;
+  const glideRef = useRef<number | null>(null);
+  const animating = !placesMatch(shown, targetLayout);
+  const viewTween = useRef<number | null>(null);
+  const framed = useRef(false);
+  const layout = shown;
   const household = useMemo(
     () => new Set(layout.householdIds.length ? layout.householdIds : layout.focusId ? [layout.focusId] : []),
     [layout.householdIds, layout.focusId],
   );
-  const linked = useMemo(
-    () => (highlightedId ? lineageIds(tree, highlightedId) : null),
-    [tree, highlightedId],
+  const rings = useMemo(
+    () => new Map(personal?.seats.map((seat) => [seat.id, seat.ring]) ?? []),
+    [personal],
   );
+  const linked = useMemo(() => {
+    if (personal) return new Set(personal.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
+    return highlightedId ? lineageIds(tree, highlightedId) : null;
+  }, [personal, tree, highlightedId]);
   const stageRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View>({ x: 40, y: 24, s: 1 });
@@ -129,26 +153,82 @@ export function TreeCanvas({
     };
   }
 
-  function fitToView() {
-    const stage = stageRef.current;
-    if (!stage || layout.cards.length === 0) return;
-    const vw = stage.clientWidth || 360;
-    const vh = stage.clientHeight || 480;
-    const xs = layout.cards.map((c) => c.x);
-    const ys = layout.cards.map((c) => c.y);
-    const shown = lineFilter.households ? layout.areas : [];
-    const minX = Math.min(...xs.map((x) => x - CARD.w / 2), ...shown.map((a) => a.cx - a.rx));
-    const maxX = Math.max(...xs.map((x) => x + CARD.w / 2), ...shown.map((a) => a.cx + a.rx));
-    const minY = Math.min(...ys, ...shown.map((a) => a.cy - a.ry));
-    const maxY = Math.max(...ys.map((y) => y + CARD.h), ...shown.map((a) => a.cy + a.ry));
-    // Frame the tree below any toolbar that floats over the top of the stage.
+  function stageInset(stage: HTMLDivElement, vh: number) {
     const stageTop = stage.getBoundingClientRect().top;
     const bar = stage.parentElement?.querySelector(".graph-toolbar");
-    const inset = bar ? Math.max(0, Math.min(vh / 3, bar.getBoundingClientRect().bottom - stageTop)) : 0;
-    const scale = fitContentScale(vw, vh - inset, Math.max(maxX - minX, CARD.w), Math.max(maxY - minY, CARD.h));
-    const view = centerTransform(vw, vh - inset, (minX + maxX) / 2, (minY + maxY) / 2, scale);
-    viewRef.current = { ...view, y: view.y + inset };
-    applyWorld();
+    return bar ? Math.max(0, Math.min(vh / 3, bar.getBoundingClientRect().bottom - stageTop)) : 0;
+  }
+
+  function stopViewTween() {
+    if (viewTween.current != null) cancelAnimationFrame(viewTween.current);
+    viewTween.current = null;
+  }
+
+  function easeInOut(t: number) {
+    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+  }
+
+  function animateCamera(target: View) {
+    stopViewTween();
+    const from = { ...viewRef.current };
+    const stage = stageRef.current;
+    const vw = stage?.clientWidth || 360;
+    const vh = stage?.clientHeight || 480;
+    const inset = stage ? stageInset(stage, vh) : 0;
+    const cx = vw / 2;
+    const cy = inset + (vh - inset) / 2;
+    const fromWorld = { x: (cx - from.x) / (from.s || 1), y: (cy - from.y) / (from.s || 1) };
+    const toWorld = { x: (cx - target.x) / target.s, y: (cy - target.y) / target.s };
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / PERSONAL_MAP_MS);
+      const k = easeInOut(t);
+      const s = Math.exp(Math.log(from.s || 1) + (Math.log(target.s) - Math.log(from.s || 1)) * k);
+      const wx = fromWorld.x + (toWorld.x - fromWorld.x) * k;
+      const wy = fromWorld.y + (toWorld.y - fromWorld.y) * k;
+      viewRef.current = { x: cx - wx * s, y: cy - wy * s, s };
+      applyWorld();
+      viewTween.current = t < 1 ? requestAnimationFrame(step) : null;
+    };
+    viewTween.current = requestAnimationFrame(step);
+  }
+
+  function frameOf(next: GraphLayout, map: PersonalMap | null, animate: boolean) {
+    const stage = stageRef.current;
+    if (!stage || next.cards.length === 0) return;
+    const vw = stage.clientWidth || 360;
+    const vh = stage.clientHeight || 480;
+    const inset = stageInset(stage, vh);
+    const lit = map ? new Set(map.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id)) : null;
+    const framedCards = lit ? next.cards.filter((card) => lit.has(card.id)) : next.cards;
+    const use = framedCards.length ? framedCards : next.cards;
+    const areas = !map && lineFilter.households ? next.areas : [];
+    const minX = Math.min(...use.map((card) => card.x - CARD.w / 2), ...areas.map((area) => area.cx - area.rx));
+    const maxX = Math.max(...use.map((card) => card.x + CARD.w / 2), ...areas.map((area) => area.cx + area.rx));
+    const minY = Math.min(...use.map((card) => card.y), ...areas.map((area) => area.cy - area.ry));
+    const maxY = Math.max(...use.map((card) => card.y + CARD.h), ...areas.map((area) => area.cy + area.ry));
+    let view: View;
+    if (map) {
+      const centerSeats = map.seats.filter((seat) => seat.ring === "center");
+      const cx = centerSeats.reduce((sum, seat) => sum + seat.x, 0) / Math.max(centerSeats.length, 1);
+      const cy = centerSeats.reduce((sum, seat) => sum + seat.y, 0) / Math.max(centerSeats.length, 1) + CARD.h / 2;
+      const halfW = Math.max(cx - minX, maxX - cx, CARD.w);
+      const halfH = Math.max(cy - minY, maxY - cy, CARD.h);
+      const scale = fitContentScale(vw, vh - inset, halfW * 2, halfH * 2);
+      view = centerTransform(vw, vh - inset, cx, cy, scale);
+    } else {
+      const scale = fitContentScale(vw, vh - inset, Math.max(maxX - minX, CARD.w), Math.max(maxY - minY, CARD.h));
+      view = centerTransform(vw, vh - inset, (minX + maxX) / 2, (minY + maxY) / 2, scale);
+    }
+    view = { ...view, y: view.y + inset };
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (animate && !reduce) animateCamera(view);
+    else {
+      stopViewTween();
+      viewRef.current = view;
+      applyWorld();
+    }
+    stage.dataset.framed = "true";
   }
 
   function zoomBy(factor: number) {
@@ -161,11 +241,41 @@ export function TreeCanvas({
 
   useEffect(() => {
     applyWorld();
+    return () => {
+      if (viewTween.current != null) cancelAnimationFrame(viewTween.current);
+      if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
+    };
   }, []);
 
   useEffect(() => {
-    fitToView();
-  }, [layout, tree.people.length, fitKey]);
+    const from = shownRef.current;
+    const to = targetLayout;
+    if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce || placesMatch(from, to)) {
+      setShown(to);
+      return;
+    }
+    const start = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - start) / PERSONAL_MAP_MS);
+      setShown(t >= 1 ? to : morphGraph(from, to, easeInOut(t), tree));
+      if (t < 1) glideRef.current = requestAnimationFrame(step);
+      else glideRef.current = null;
+    };
+    glideRef.current = requestAnimationFrame(step);
+    return () => {
+      if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
+    };
+  }, [targetLayout, tree]);
+
+  useEffect(() => {
+    const animate = framed.current;
+    framed.current = true;
+    frameOf(targetLayout, personal, animate);
+    // Framing follows the settled layout, not each animation frame.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetLayout, personal, fitKey]);
 
   useEffect(() => {
     const stage = stageRef.current;
@@ -174,6 +284,7 @@ export function TreeCanvas({
       const target = event.target as HTMLElement | null;
       if (target?.closest(".graph-pick, .graph-filter, .graph-toolbar, .graph-zoom")) return;
       if (event.cancelable) event.preventDefault();
+      stopViewTween();
       const pt = stagePoint(event.clientX, event.clientY);
       viewRef.current = scaleAround(viewRef.current, pt.x, pt.y, viewRef.current.s * (event.deltaY < 0 ? 1.08 : 0.92));
       scheduleApply();
@@ -254,12 +365,14 @@ export function TreeCanvas({
     if (pointers.current.size >= 2) {
       drag.current = null;
       suppressTap.current = true;
+      stopViewTween();
       stageRef.current?.setPointerCapture(event.pointerId);
       pinch.current = pinchSnapshot();
       return;
     }
     if (target.closest(".portrait-card, .graph-zoom, .graph-port, .graph-pick")) return;
     stageRef.current?.setPointerCapture(event.pointerId);
+    stopViewTween();
     drag.current = {
       id: event.pointerId,
       x: event.clientX,
@@ -396,8 +509,10 @@ export function TreeCanvas({
   return (
     <div
       ref={stageRef}
-      className={`graph-stage${editMode ? " is-edit" : ""}`}
-      aria-label={editMode ? "Family graph, edit mode" : "Family graph"}
+      className={`graph-stage${editMode ? " is-edit" : ""}${personal ? " is-personal" : ""}`}
+      data-layout={personal ? "personal" : "tree"}
+      data-animating={animating ? "true" : "false"}
+      aria-label={personal ? "Personal map" : editMode ? "Family graph, edit mode" : "Family graph"}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPointer}
@@ -689,6 +804,7 @@ export function TreeCanvas({
               key={card.id}
               type="button"
               data-person-id={card.id}
+              data-ring={rings.get(card.id)}
               className={`portrait-card${photo ? " has-photo" : ""}${isHome ? " is-home" : ""}${active ? " is-active" : ""}${dim ? " is-dim" : ""}${editMode ? " is-movable" : ""}`}
               style={{ left, top: card.y, width: CARD.w, height: CARD.h }}
               onClick={(event) => {
@@ -776,7 +892,20 @@ export function TreeCanvas({
       <div className="graph-zoom" role="group" aria-label="Zoom">
         <button type="button" className="icon-btn" aria-label="Zoom in" onClick={() => zoomBy(1.15)}>+</button>
         <button type="button" className="icon-btn" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.15)}>−</button>
-        <button type="button" className="icon-btn" aria-label="Recenter" onClick={fitToView}>⌂</button>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Recenter"
+          onClick={() => {
+            if (personal && highlightedId) {
+              onHighlight(undefined);
+              return;
+            }
+            frameOf(baseLayout, null, true);
+          }}
+        >
+          ⌂
+        </button>
       </div>
     </div>
   );
