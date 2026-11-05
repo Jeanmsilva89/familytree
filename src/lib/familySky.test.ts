@@ -13,8 +13,10 @@ import {
   skyBounds,
   skyMinScale,
   zoomLevel,
+  type Curve,
   type FamilySky,
 } from "./familySky";
+import { LINK_BOW_LIMIT, curveBowRatio, pointInBucket } from "./familySkyRoute";
 import { ALL_FAMILY_UNIT_FIXTURES, FIXTURE_MATERNAL_FAMILY, FIXTURE_MOVED_PARENT, fuId } from "./familyUnits.fixtures";
 import { CARD } from "./layout";
 import type { ChildLink, Person, TreeData, Union } from "./types";
@@ -265,7 +267,45 @@ describe("family sky links (FIXTURE trees)", () => {
     const gaps = sky.links.filter((l) => l.pieces.length > 1).map((l) => l.id);
     assert.ok(gaps.length <= 1, `links with gaps: ${gaps.join(", ")}`);
   });
+
+  it("keeps each person-to-person bow proportional to the distance", () => {
+    for (const [name, tree] of trees) {
+      const sky = layoutFamilySky(tree);
+      for (const link of sky.links) {
+        const ratio = curveBowRatio(link);
+        assert.ok(
+          ratio <= LINK_BOW_LIMIT + 1e-6,
+          `${name} ${link.id} bows ${(ratio * 100).toFixed(0)}% of its length`,
+        );
+      }
+    }
+  });
+
+  it("does not cross an unrelated family background when the endpoints belong elsewhere", () => {
+    for (const [name, tree] of trees) {
+      const sky = layoutFamilySky(tree);
+      for (const link of sky.links) {
+        const foreign = sky.buckets.filter((b) => b.id !== link.fromUnitId && b.id !== link.toUnitId);
+        const curves: Curve[] = [link, ...link.pieces, link.mid, ...link.midPieces];
+        for (const curve of curves) {
+          for (let i = 0; i <= 48; i++) {
+            const p = pointOnCurve(curve, i / 48);
+            const hit = foreign.find((b) => pointInBucket(b, p));
+            assert.equal(hit, undefined, `${name} ${link.id} crosses ${hit?.label ?? ""}`);
+          }
+        }
+      }
+    }
+  });
 });
+
+function pointOnCurve(q: Curve, t: number) {
+  const u = 1 - t;
+  return {
+    x: u * u * q.x1 + 2 * u * t * q.cx + t * t * q.x2,
+    y: u * u * q.y1 + 2 * u * t * q.cy + t * t * q.y2,
+  };
+}
 
 describe("family sky stability (FIXTURE trees)", () => {
   const moveJoe = (tree: TreeData): TreeData => ({
