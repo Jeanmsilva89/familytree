@@ -24,6 +24,14 @@ At desktop (1280×800) and phone (390×844), in the dark theme:
 9. Move Rex Fixture (no partner, parent of Eli) into Dee's family and confirm Rex sits on Dee's row.
 10. Reload and confirm the star positions match.
 
+Before the Families checks, on the classic graph (Families lens off):
+
+11. Tap Eli Fixture once. The graph becomes a personal map: Eli and Dee sit in the center as a couple, Fay below, Ada above, Cora on Eli's row, and Gran is dimmed farther out. The move glides.
+12. Tap empty space, then select Eli again and press Recenter. Both return the generation layout.
+13. Tap Cora twice and confirm the editor still opens.
+
+Screenshots: `personal-map-<size>-before.png`, `personal-map-<size>-focused.png`, `personal-map-<size>-after.png`.
+
 Screenshots, one set per size:
 
 - `family-sky-<size>-links.png` — person-to-person links, none crossing an unrelated family
