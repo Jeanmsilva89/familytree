@@ -4,8 +4,9 @@
  * Loads the labeled fixture in scripts/fixtures/verify-family-sky.json (never
  * real relatives), opens Visualize, turns on Families, checks buckets, zooms
  * out to the star view, taps a star, and moves fixture people between family
- * units. Also checks a step-parent bucket, a partnerless move, and that a
- * reload draws the same stars. Runs at desktop 1280x800 and phone 390x844.
+ * units. Also checks a step-parent bucket, a partnerless move, that a
+ * person-to-person link does not cross an unrelated family's background, and
+ * that a reload draws the same stars. Runs at desktop 1280x800 and phone 390x844.
  *
  *   npm run build && npm start
  *   npm run verify
@@ -84,6 +85,41 @@ async function turnFamiliesOn(page, viewport) {
     fail(`${viewport.name}: Families lens did not turn on`);
   }
   await page.getByLabel(/Family sky, \d+ families/).waitFor();
+}
+
+async function assertLinksStayClear(page, viewport) {
+  const crossed = await page.evaluate(() => {
+    const links = [...document.querySelectorAll(".family-sky .sky-link")];
+    const buckets = [...document.querySelectorAll(".family-sky .sky-bucket")];
+    const hits = [];
+    for (const link of links) {
+      if (!(link instanceof SVGPathElement)) continue;
+      const from = link.getAttribute("data-from") || "";
+      const to = link.getAttribute("data-to") || "";
+      const len = link.getTotalLength();
+      const steps = 48;
+      for (let i = 0; i <= steps; i += 1) {
+        const point = link.getPointAtLength((len * i) / steps);
+        for (const bucket of buckets) {
+          if (!(bucket instanceof SVGPathElement)) continue;
+          const members = (bucket.getAttribute("data-members") || "").split(/\s+/).filter(Boolean);
+          if (members.includes(from) || members.includes(to)) continue;
+          if (bucket.isPointInFill(new DOMPoint(point.x, point.y))) {
+            hits.push({ from, to, bucket: bucket.getAttribute("data-unit-id") });
+            i = steps;
+            break;
+          }
+        }
+      }
+    }
+    return { links: links.length, buckets: buckets.length, hits };
+  });
+  if (crossed.links < 1 || crossed.buckets < 2) {
+    fail(`${viewport.name}: expected links and family backgrounds, saw ${crossed.links} links and ${crossed.buckets} buckets`);
+  }
+  if (crossed.hits.length) {
+    fail(`${viewport.name}: a link crosses an unrelated family (${JSON.stringify(crossed.hits)})`);
+  }
 }
 
 async function showStars(page) {
@@ -169,6 +205,8 @@ async function runViewport(browser, viewport) {
     }
     const blood = await page.locator(".sky-link.is-blood").count();
     if (blood < 1) fail(`${viewport.name}: expected a blood link between family buckets`);
+    await assertLinksStayClear(page, viewport);
+    await page.screenshot({ path: shot("links") });
     await page.screenshot({ path: shot("buckets") });
 
     await showStars(page);
@@ -283,7 +321,7 @@ async function runViewport(browser, viewport) {
     if (JSON.stringify(beforeReload) !== JSON.stringify(afterReload)) {
       fail(`${viewport.name}: star positions changed after reload`);
     }
-    console.log(`${viewport.name}: buckets, stars, step family, row move, and reload passed`);
+    console.log(`${viewport.name}: links, buckets, stars, step family, row move, and reload passed`);
   } catch (error) {
     await page.screenshot({ path: shot("failed") }).catch(() => undefined);
     throw error;

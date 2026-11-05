@@ -3,6 +3,7 @@ import { CARD, type LaidCard, type LaidCouple, type LaidFork } from "./layout";
 import { buildGraph } from "./layoutGraph";
 import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type JoinReason, type UnitLinkKind } from "./familyUnits";
 import type { Camera } from "./graphView";
+import { routePersonLink, type RouteBucket, type RouteCurve } from "./familySkyRoute";
 
 /**
  * The family sky: every family unit is a soft bucket holding today's
@@ -458,58 +459,41 @@ function gapped(q: Curve, blocked: ((p: { x: number; y: number }) => boolean)[])
 }
 
 /**
- * Route a link between two card centres as one gentle curve that bends
- * around the other cards in its way (the fewest sample points inside a card,
- * then the least bend), then trim it to the cards' edges.
+ * Trim and gap the short curve from `route`. The bow and the choice to miss
+ * an unrelated family live in that function; this only keeps the stroke off
+ * the cards it still has to pass.
  */
 function routeLink(
   a: { x: number; y: number },
   b: { x: number; y: number },
-  obstacles: Rect[],
-  avatars: { x: number; y: number }[],
+  otherCards: { x: number; y: number }[],
+  foreign: RouteBucket[],
+  route: typeof routePersonLink,
 ): { near: Curve; mid: Curve; nearPieces: Curve[]; midPieces: Curve[] } {
-  const A = { x: a.x, y: a.y + CARD.h / 2 };
-  const B = { x: b.x, y: b.y + CARD.h / 2 };
-  const len = Math.max(1, Math.hypot(B.x - A.x, B.y - A.y));
-  const nx = -(B.y - A.y) / len;
-  const ny = (B.x - A.x) / len;
-  const mx = (A.x + B.x) / 2;
-  const my = (A.y + B.y) / 2;
-  const box: Rect = {
-    x0: Math.min(A.x, B.x) - len * 0.7,
-    y0: Math.min(A.y, B.y) - len * 0.7,
-    x1: Math.max(A.x, B.x) + len * 0.7,
-    y1: Math.max(A.y, B.y) + len * 0.7,
-  };
-  const near = obstacles.filter((r) => r.x1 > box.x0 && r.x0 < box.x1 && r.y1 > box.y0 && r.y0 < box.y1);
+  const q: RouteCurve = route({ from: a, to: b, cards: otherCards, foreign });
   const ra = cardRect(a, LINK_GAP);
   const rb = cardRect(b, LINK_GAP);
-  let best: { q: Curve; score: number } | undefined;
-  for (const bend of [0.12, -0.12, 0, 0.24, -0.24, 0.36, -0.36, 0.5, -0.5]) {
-    // A quadratic peaks at half its control offset, so double it.
-    const q = { x1: A.x, y1: A.y, cx: mx + nx * len * bend * 2, cy: my + ny * len * bend * 2, x2: B.x, y2: B.y };
-    let hits = 0;
-    for (let i = 1; i < 48; i++) {
-      const p = quadAt(q, i / 48);
-      if (inRect(ra, p) || inRect(rb, p)) continue;
-      if (near.some((r) => inRect(r, p))) hits++;
-    }
-    const score = hits * 10 + Math.abs(bend);
-    if (!best || score < best.score) best = { q, score };
-  }
-  const q = best!.q;
   const nearCurve = trim(q, (p) => inRect(ra, p), (p) => inRect(rb, p));
+  const A = { x: a.x, y: a.y + CARD.h / 2 };
+  const B = { x: b.x, y: b.y + CARD.h / 2 };
   const inA = (p: { x: number; y: number }) => Math.hypot(p.x - A.x, p.y - A.y) < AVATAR_ROOM;
   const inB = (p: { x: number; y: number }) => Math.hypot(p.x - B.x, p.y - B.y) < AVATAR_ROOM;
   const midCurve = trim(q, inA, inB);
+  const minX = Math.min(q.x1, q.x2, q.cx);
+  const maxX = Math.max(q.x1, q.x2, q.cx);
+  const minY = Math.min(q.y1, q.y2, q.cy);
+  const maxY = Math.max(q.y1, q.y2, q.cy);
+  const obstacles = otherCards
+    .map((card) => cardRect(card, 4))
+    .filter((r) => r.x1 > minX && r.x0 < maxX && r.y1 > minY && r.y0 < maxY);
   const nearPieces = gapped(
     nearCurve,
-    near.map((r) => (p: { x: number; y: number }) => inRect({ x0: r.x0 - LINK_GAP, y0: r.y0 - LINK_GAP, x1: r.x1 + LINK_GAP, y1: r.y1 + LINK_GAP }, p)),
+    obstacles.map((r) => (p: { x: number; y: number }) => inRect({ x0: r.x0 - LINK_GAP, y0: r.y0 - LINK_GAP, x1: r.x1 + LINK_GAP, y1: r.y1 + LINK_GAP }, p)),
   );
   const midPieces = gapped(
     midCurve,
-    avatars
-      .filter((c) => c.x > box.x0 && c.x < box.x1 && c.y > box.y0 && c.y < box.y1)
+    otherCards
+      .filter((c) => c.x > minX && c.x < maxX && c.y > minY && c.y < maxY)
       .map((c) => (p: { x: number; y: number }) => Math.hypot(p.x - c.x, p.y - c.y - CARD.h / 2) < AVATAR_ROOM),
   );
   return { near: nearCurve, mid: midCurve, nearPieces, midPieces };
@@ -528,7 +512,7 @@ export function curveHitsCards(q: Curve, cards: { x: number; y: number }[], samp
  * links, and overrides always land in the same places. Focus and any earlier
  * sky are not inputs.
  */
-export function layoutFamilySky(tree: TreeData): FamilySky {
+export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = routePersonLink): FamilySky {
   const units = deriveFamilyUnits(tree);
   const gen = stableGenerations(tree);
 
@@ -608,13 +592,12 @@ export function layoutFamilySky(tree: TreeData): FamilySky {
   const cardOf = new Map(cards.map((c) => [c.id, c]));
 
   // 5. Links between buckets: person to person, and one edge per bucket pair.
-  const obstacles = new Map(cards.map((c) => [c.id, cardRect(c, 4)]));
   const links: SkyLink[] = units.links.map((link) => {
     const a = cardOf.get(link.fromPersonId)!;
     const b = cardOf.get(link.toPersonId)!;
-    const others = [...obstacles.entries()].filter(([id]) => id !== a.id && id !== b.id).map(([, r]) => r);
     const otherCards = cards.filter((c) => c.id !== a.id && c.id !== b.id);
-    const { near, mid, nearPieces, midPieces } = routeLink(a, b, others, otherCards);
+    const foreign = buckets.filter((bucket) => bucket.id !== link.fromUnitId && bucket.id !== link.toUnitId);
+    const { near, mid, nearPieces, midPieces } = routeLink(a, b, otherCards, foreign, route);
     return { ...link, ...near, mid, pieces: nearPieces, midPieces };
   });
   const bucketOf = new Map(buckets.map((b) => [b.id, b]));

@@ -26,6 +26,7 @@ import {
   type SkyBucket,
   type ZoomLevel,
 } from "@/lib/familySky";
+import { routePersonLink } from "@/lib/familySkyRoute";
 import type { UnitLinkKind } from "@/lib/familyUnits";
 import { LinkRolePicker } from "./LinkRolePicker";
 
@@ -100,7 +101,7 @@ export function FamilySky({
   // `from` is only the previous picture, used to glide from it.
   const [laid, setLaid] = useState<{ tree: TreeData; sky: FamilySkyLayout; from?: FamilySkyLayout } | null>(null);
   const fresh = !laid || (laid.tree !== tree && !hold);
-  const sky = fresh ? layoutFamilySky(tree) : laid.sky;
+  const sky = fresh ? layoutFamilySky(tree, routePersonLink) : laid.sky;
   if (fresh) setLaid({ tree, sky, from: laid?.sky });
   // 0 → 1 while the sky glides from the previous layout to this one.
   const [morphK, setMorphK] = useState(1);
