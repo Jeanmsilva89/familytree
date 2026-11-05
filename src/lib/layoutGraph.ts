@@ -208,6 +208,85 @@ export function areaShape(halfW: number, halfH: number): { rx: number; ry: numbe
   return { rx: rx * k, ry: ry * k, n };
 }
 
+/**
+ * Couples, parent lines, and forks for cards that already have positions.
+ * `acrossHouseholds` is true when a fork leaves the parents' household, which
+ * drops the rail in the open lane between areas.
+ */
+export function connectLaidCards(
+  tree: TreeData,
+  cards: LaidCard[],
+  acrossHouseholds: (parentIds: string[], childIds: string[]) => boolean = () => false,
+): { couples: LaidCouple[]; edges: LaidEdge[]; forks: LaidFork[] } {
+  const byCard = new Map(cards.map((c) => [c.id, c]));
+
+  const couples: LaidCouple[] = [];
+  for (const union of tree.unions) {
+    const partners = union.partnerIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
+    if (partners.length < 2) continue;
+    const l = partners.reduce((a, b) => (a.x < b.x ? a : b));
+    const r = partners.reduce((a, b) => (a.x > b.x ? a : b));
+    if (l.gen !== r.gen) continue;
+    couples.push({
+      id: union.id,
+      partnerIds: union.partnerIds,
+      kind: union.kind,
+      bar: sittingDistance(l.x, r.x) && showsCoupleBar(union.kind, partners.length),
+      cx: (l.x + r.x) / 2,
+      cy: l.y + CARD.h * 0.5,
+    });
+  }
+
+  const edges: LaidEdge[] = [];
+  for (const link of tree.childLinks) {
+    const child = byCard.get(link.childId);
+    if (!child) continue;
+    const parentCards = link.parentIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
+    if (!parentCards.length) continue;
+    const fromX = parentCards.reduce((s, p) => s + p.x, 0) / parentCards.length;
+    const fromY = Math.max(...parentCards.map((p) => p.y)) + CARD.h;
+    if (!finiteNumber(fromX) || !finiteNumber(fromY)) continue;
+    edges.push({ fromX, fromY, toX: child.x, toY: child.y, parentIds: parentCards.map((p) => p.id), childId: child.id });
+  }
+
+  const forks: LaidFork[] = [];
+  const grouped = new Map<string, { parents: LaidCard[]; children: LaidCard[]; dotted: boolean }>();
+  for (const union of tree.unions) {
+    const parents = union.partnerIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
+    const children = kidsUnderUnion(tree, union).map((kid) => byCard.get(kid.id)).filter(Boolean) as LaidCard[];
+    if (parents.length < 1 || !children.length) continue;
+    const key = parents.map((p) => p.id).sort().join("|");
+    const xs = parents.map((p) => p.x).sort((a, b) => a - b);
+    const adjacent = parents.length > 1 && sittingDistance(xs[0], xs[xs.length - 1]);
+    grouped.set(key, { parents, children, dotted: parents.length > 1 && !(adjacent && showsCoupleBar(union.kind, parents.length)) });
+  }
+  for (const link of tree.childLinks) {
+    const child = byCard.get(link.childId);
+    const parents = link.parentIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
+    if (!child || !parents.length) continue;
+    const key = parents.map((p) => p.id).sort().join("|");
+    const existing = grouped.get(key);
+    if (existing) {
+      if (!existing.children.some((c) => c.id === child.id)) existing.children.push(child);
+      continue;
+    }
+    const xs = parents.map((p) => p.x).sort((a, b) => a - b);
+    const adjacent = parents.length > 1 && sittingDistance(xs[0], xs[xs.length - 1]);
+    grouped.set(key, { parents, children: [child], dotted: parents.length > 1 && !adjacent });
+  }
+  let forkN = 0;
+  for (const group of grouped.values()) {
+    const across = acrossHouseholds(
+      group.parents.map((parent) => parent.id),
+      group.children.map((child) => child.id),
+    );
+    const fork = makeFork(`fork-${forkN++}`, group.parents, group.children, group.dotted, across);
+    if (fork) forks.push(annotateFork(fork, tree));
+  }
+
+  return { couples, edges, forks };
+}
+
 export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
   if (tree.people.length === 0) return emptyGraph();
   const hint = focusHint ?? tree.focusPersonId;
@@ -480,69 +559,12 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     return [{ id: person.id, person, x: p.x, y, gen: p.gen }];
   });
   if (!cards.length) return emptyGraph();
-  const byCard = new Map(cards.map((c) => [c.id, c]));
 
-  const couples: LaidCouple[] = [];
-  for (const union of tree.unions) {
-    const partners = union.partnerIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
-    if (partners.length < 2) continue;
-    const l = partners.reduce((a, b) => (a.x < b.x ? a : b));
-    const r = partners.reduce((a, b) => (a.x > b.x ? a : b));
-    if (l.gen !== r.gen) continue;
-    couples.push({
-      id: union.id,
-      partnerIds: union.partnerIds,
-      kind: union.kind,
-      bar: sittingDistance(l.x, r.x) && showsCoupleBar(union.kind, partners.length),
-      cx: (l.x + r.x) / 2,
-      cy: l.y + CARD.h * 0.5,
-    });
-  }
-
-  const edges: LaidEdge[] = [];
-  for (const link of tree.childLinks) {
-    const child = byCard.get(link.childId);
-    if (!child) continue;
-    const parentCards = link.parentIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
-    if (!parentCards.length) continue;
-    const fromX = parentCards.reduce((s, p) => s + p.x, 0) / parentCards.length;
-    const fromY = Math.max(...parentCards.map((p) => p.y)) + CARD.h;
-    if (!finiteNumber(fromX) || !finiteNumber(fromY)) continue;
-    edges.push({ fromX, fromY, toX: child.x, toY: child.y, parentIds: parentCards.map((p) => p.id), childId: child.id });
-  }
-
-  const forks: LaidFork[] = [];
-  const grouped = new Map<string, { parents: LaidCard[]; children: LaidCard[]; dotted: boolean }>();
-  for (const union of tree.unions) {
-    const parents = union.partnerIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
-    const children = kidsUnderUnion(tree, union).map((kid) => byCard.get(kid.id)).filter(Boolean) as LaidCard[];
-    if (parents.length < 1 || !children.length) continue;
-    const key = parents.map((p) => p.id).sort().join("|");
-    const xs = parents.map((p) => p.x).sort((a, b) => a - b);
-    const adjacent = parents.length > 1 && sittingDistance(xs[0], xs[xs.length - 1]);
-    grouped.set(key, { parents, children, dotted: parents.length > 1 && !(adjacent && showsCoupleBar(union.kind, parents.length)) });
-  }
-  for (const link of tree.childLinks) {
-    const child = byCard.get(link.childId);
-    const parents = link.parentIds.map((id) => byCard.get(id)).filter(Boolean) as LaidCard[];
-    if (!child || !parents.length) continue;
-    const key = parents.map((p) => p.id).sort().join("|");
-    const existing = grouped.get(key);
-    if (existing) {
-      if (!existing.children.some((c) => c.id === child.id)) existing.children.push(child);
-      continue;
-    }
-    const xs = parents.map((p) => p.x).sort((a, b) => a - b);
-    const adjacent = parents.length > 1 && sittingDistance(xs[0], xs[xs.length - 1]);
-    grouped.set(key, { parents, children: [child], dotted: parents.length > 1 && !adjacent });
-  }
-  let forkN = 0;
-  for (const group of grouped.values()) {
-    const homes = new Set(group.parents.map((p) => blockOfPerson.get(p.id)));
-    const across = group.children.some((c) => !homes.has(blockOfPerson.get(c.id)));
-    const fork = makeFork(`fork-${forkN++}`, group.parents, group.children, group.dotted, across);
-    if (fork) forks.push(annotateFork(fork, tree));
-  }
+  const { couples, edges, forks } = connectLaidCards(tree, cards, (parentIds, childIds) => {
+    const homes = new Set(parentIds.map((id) => blockOfPerson.get(id)));
+    return childIds.some((id) => !homes.has(blockOfPerson.get(id)));
+  });
+  const byCard = new Map(cards.map((card) => [card.id, card]));
 
   // Household areas from the final card positions.
   const areas: LaidArea[] = [];

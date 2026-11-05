@@ -6,7 +6,9 @@
  * out to the star view, taps a star, and moves fixture people between family
  * units. Also checks a step-parent bucket, a partnerless move, that a
  * person-to-person link does not cross an unrelated family's background, and
- * that a reload draws the same stars. Runs at desktop 1280x800 and phone 390x844.
+ * that a reload draws the same stars. On the classic graph (Families off),
+ * a first tap gathers that fixture person's family into a personal map and
+ * clearing the selection restores the tree. Runs at desktop 1280x800 and phone 390x844.
  *
  *   npm run build && npm start
  *   npm run verify
@@ -70,6 +72,166 @@ async function openVisualize(page) {
     }
   }
   await page.locator(".graph-overlay").waitFor();
+}
+
+async function turnFamiliesOff(page) {
+  const families = page.getByRole("button", { name: "Families", exact: true });
+  await families.scrollIntoViewIfNeeded();
+  if ((await families.getAttribute("aria-pressed")) === "true") {
+    await families.click();
+    await page.locator(".family-sky").waitFor({ state: "detached" });
+  }
+  await page.locator('.graph-stage[data-layout="tree"][data-framed="true"]').waitFor();
+}
+
+async function waitMapSettled(page) {
+  await page.waitForFunction(
+    () => document.querySelector(".graph-stage:not(.family-sky)")?.getAttribute("data-animating") === "false",
+    null,
+    { timeout: 4000 },
+  );
+  await page.waitForTimeout(60);
+}
+
+async function graphCards(page) {
+  return page.locator(".graph-stage:not(.family-sky) .portrait-card").evaluateAll((nodes) =>
+    nodes.map((node) => {
+      const style = node.getAttribute("style") || "";
+      const left = Number(/left:\s*([-.\d]+)px/.exec(style)?.[1]);
+      const top = Number(/top:\s*([-.\d]+)px/.exec(style)?.[1]);
+      const width = Number(/width:\s*([-.\d]+)px/.exec(style)?.[1]) || 120;
+      const height = Number(/height:\s*([-.\d]+)px/.exec(style)?.[1]) || 140;
+      const rect = node.getBoundingClientRect();
+      return {
+        id: node.getAttribute("data-person-id"),
+        ring: node.getAttribute("data-ring"),
+        left,
+        top,
+        cx: left + width / 2,
+        cy: top + height / 2,
+        screenX: rect.left + rect.width / 2,
+        screenY: rect.top + rect.height / 2,
+      };
+    }),
+  );
+}
+
+function samePlaces(before, after, viewport) {
+  const byId = new Map(after.map((card) => [card.id, card]));
+  for (const card of before) {
+    const next = byId.get(card.id);
+    if (!next || Math.abs(next.left - card.left) > 1.5 || Math.abs(next.top - card.top) > 1.5) {
+      fail(`${viewport.name}: tree layout did not return (${card.id})`);
+    }
+  }
+}
+
+async function tapEmptyGraph(page, viewport) {
+  const point = await page.evaluate(() => {
+    const stage = document.querySelector(".graph-stage:not(.family-sky)");
+    if (!(stage instanceof HTMLElement)) return null;
+    const rect = stage.getBoundingClientRect();
+    for (let y = rect.top + 12; y < rect.bottom - 12; y += 16) {
+      for (let x = rect.left + 12; x < rect.right - 12; x += 16) {
+        const hit = document.elementFromPoint(x, y);
+        if (!(hit instanceof Element) || !stage.contains(hit)) continue;
+        if (hit.closest(".portrait-card, .graph-zoom, .graph-toolbar, .graph-port, .btn, .icon-btn")) continue;
+        return { x: x - rect.left, y: y - rect.top };
+      }
+    }
+    return null;
+  });
+  if (!point) fail(`${viewport.name}: no empty space to leave the personal map`);
+  await page.locator(".graph-stage:not(.family-sky)").click({ position: point });
+}
+
+async function runPersonalMap(page, viewport, shot) {
+  await turnFamiliesOff(page);
+  await waitMapSettled(page);
+  const before = await graphCards(page);
+  if (before.length < 8) fail(`${viewport.name}: expected the fixture tree, saw ${before.length} cards`);
+  await page.screenshot({ path: shot("before") });
+
+  const eli = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-eli"]');
+  await eli.click();
+  if (await page.getByRole("dialog").count()) fail(`${viewport.name}: first tap opened edit`);
+  await page.locator('.graph-stage[data-layout="personal"]').waitFor();
+
+  const samples = [];
+  const deadline = Date.now() + 700;
+  while (Date.now() < deadline) {
+    samples.push(await eli.evaluate((node) => node.style.left));
+    await page.waitForTimeout(35);
+  }
+  if (new Set(samples).size < 2) fail(`${viewport.name}: the selected card did not glide into the personal map`);
+
+  await waitMapSettled(page);
+  const cards = await graphCards(page);
+  const byId = new Map(cards.map((card) => [card.id, card]));
+  const focus = byId.get("fx-eli");
+  const partner = byId.get("fx-dee");
+  const child = byId.get("fx-fay");
+  const parent = byId.get("fx-ada");
+  const sibling = byId.get("fx-cora");
+  const distant = byId.get("fx-gran");
+  if (!focus || !partner || !child || !parent || !sibling || !distant) {
+    fail(`${viewport.name}: personal map is missing a fixture relative`);
+  }
+  if (focus.ring !== "center" || partner.ring !== "center") {
+    fail(`${viewport.name}: the selected person and partner should sit in the center`);
+  }
+  if (Math.abs(focus.top - partner.top) > 2 || Math.abs(Math.abs(focus.cx - partner.cx) - 126) > 3) {
+    fail(`${viewport.name}: partner is not beside the selected person as a couple`);
+  }
+  if (child.ring !== "near" || child.top <= focus.top) fail(`${viewport.name}: child should sit below, nearby`);
+  if (parent.ring !== "near" || parent.top >= focus.top) fail(`${viewport.name}: parent should sit above, nearby`);
+  if (sibling.ring !== "near" || Math.abs(sibling.top - focus.top) > 2) {
+    fail(`${viewport.name}: sibling should sit on the selected person's row`);
+  }
+  if (distant.ring !== "dim") fail(`${viewport.name}: a distant fixture person should be dimmed`);
+  const gathered = Math.hypot(focus.cx - sibling.cx, focus.cy - sibling.cy);
+  const far = Math.hypot(focus.cx - distant.cx, focus.cy - distant.cy);
+  if (!(gathered < far)) fail(`${viewport.name}: family did not gather closer than the rest of the tree`);
+  const lit = cards.filter((card) => card.ring && card.ring !== "dim");
+  const mid = (focus.cx + partner.cx) / 2;
+  const spanMid = (Math.min(...lit.map((card) => card.left)) + Math.max(...lit.map((card) => card.left + 120))) / 2;
+  if (Math.abs(mid - spanMid) > 90) fail(`${viewport.name}: the selected couple is not in the middle of the map`);
+  const view = page.viewportSize();
+  if (!view) fail(`${viewport.name}: no viewport`);
+  const screenMidX = (focus.screenX + partner.screenX) / 2;
+  const screenMidY = (focus.screenY + partner.screenY) / 2;
+  if (Math.abs(screenMidX - view.width / 2) > view.width * 0.22 || Math.abs(screenMidY - view.height / 2) > view.height * 0.3) {
+    fail(`${viewport.name}: personal map is not centered on screen (${Math.round(screenMidX)}, ${Math.round(screenMidY)})`);
+  }
+  await page.screenshot({ path: shot("focused") });
+
+  await tapEmptyGraph(page, viewport);
+  await page.locator('.graph-stage[data-layout="tree"]').waitFor();
+  await waitMapSettled(page);
+  samePlaces(before, await graphCards(page), viewport);
+
+  await eli.click();
+  await page.locator('.graph-stage[data-layout="personal"]').waitFor();
+  await waitMapSettled(page);
+  await page.getByRole("button", { name: "Recenter" }).click();
+  await page.locator('.graph-stage[data-layout="tree"]').waitFor();
+  await waitMapSettled(page);
+  samePlaces(before, await graphCards(page), viewport);
+  await page.screenshot({ path: shot("after") });
+
+  const cora = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-cora"]');
+  await cora.click();
+  await page.locator('.graph-stage[data-layout="personal"]').waitFor();
+  await waitMapSettled(page);
+  await cora.click();
+  const sheet = page.getByRole("dialog");
+  await sheet.waitFor();
+  await sheet.getByRole("button", { name: "Close" }).click();
+  await sheet.waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Recenter" }).click();
+  await page.locator('.graph-stage[data-layout="tree"]').waitFor();
+  await waitMapSettled(page);
+  console.log(`${viewport.name}: personal map gathered, restored, and second tap still edits`);
 }
 
 async function turnFamiliesOn(page, viewport) {
@@ -190,6 +352,7 @@ async function runViewport(browser, viewport) {
     });
     await page.getByText("Looking at Ada").waitFor();
     await openVisualize(page);
+    await runPersonalMap(page, viewport, (step) => path.join(outDir, `personal-map-${viewport.name}-${step}.png`));
     await turnFamiliesOn(page, viewport);
 
     for (let i = 0; i < 8; i += 1) {
