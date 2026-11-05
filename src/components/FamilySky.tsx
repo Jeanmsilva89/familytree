@@ -4,7 +4,9 @@ import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, u
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
 import { CARD, ageLabel, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
-import { superellipsePath, type Camera } from "@/lib/graphView";
+import { centerTransform, fitContentScale, superellipsePath, type Camera } from "@/lib/graphView";
+import { skyFromPersonalMap } from "@/lib/familySkyFocus";
+import { PERSONAL_MAP_MS, layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
 import {
   SKY_ZOOM,
@@ -97,12 +99,38 @@ export function FamilySky({
   onLink,
   onMoveToUnit,
 }: Props) {
-  // The sky is a pure function of the tree, so a reload draws the same places.
-  // `from` is only the previous picture, used to glide from it.
-  const [laid, setLaid] = useState<{ tree: TreeData; sky: FamilySkyLayout; from?: FamilySkyLayout } | null>(null);
-  const fresh = !laid || (laid.tree !== tree && !hold);
-  const sky = fresh ? layoutFamilySky(tree, routePersonLink) : laid.sky;
-  if (fresh) setLaid({ tree, sky, from: laid?.sky });
+  // The sky is a pure function of the tree. A selected person (outside edit mode)
+  // gathers that same sky into their personal map; `from` is only the previous picture.
+  const baseSky = useMemo(() => layoutFamilySky(tree, routePersonLink), [tree]);
+  const personal = useMemo(
+    () => (editMode || !highlightedId ? null : layoutPersonalMap(tree, highlightedId)),
+    [editMode, highlightedId, tree],
+  );
+  const targetSky = useMemo(
+    () => (personal ? skyFromPersonalMap(baseSky, tree, personal) : baseSky),
+    [baseSky, personal, tree],
+  );
+  const focusKey = personal?.focusId ?? "";
+  const [laid, setLaid] = useState<{
+    tree: TreeData;
+    sky: FamilySkyLayout;
+    focusKey: string;
+    personal: boolean;
+    from?: FamilySkyLayout;
+    fromPersonal?: boolean;
+  } | null>(null);
+  const fresh = !laid || ((laid.tree !== tree || laid.focusKey !== focusKey) && !(hold && laid.tree !== tree));
+  const sky = fresh ? targetSky : laid.sky;
+  if (fresh) {
+    setLaid({
+      tree,
+      sky,
+      focusKey,
+      personal: Boolean(personal),
+      from: laid?.sky,
+      fromPersonal: laid?.personal,
+    });
+  }
   // 0 → 1 while the sky glides from the previous layout to this one.
   const [morphK, setMorphK] = useState(1);
   const morphFrom = laid?.from;
@@ -110,7 +138,11 @@ export function FamilySky({
     () => (morphFrom && morphK < 1 ? morphSky(morphFrom, sky, easeInOut(morphK)) : sky),
     [morphFrom, sky, morphK],
   );
-  const linked = useMemo(() => (highlightedId ? lineageIds(tree, highlightedId) : null), [tree, highlightedId]);
+  const rings = useMemo(() => new Map(personal?.seats.map((seat) => [seat.id, seat.ring]) ?? []), [personal]);
+  const linked = useMemo(() => {
+    if (personal) return new Set(personal.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
+    return highlightedId ? lineageIds(tree, highlightedId) : null;
+  }, [personal, tree, highlightedId]);
   const stageRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<Camera>({ x: 0, y: 0, s: 0.2 });
@@ -151,6 +183,11 @@ export function FamilySky({
   const morphRaf = useRef<number | null>(null);
   useLayoutEffect(() => {
     if (!laid?.from) return;
+    const glideMs = laid.personal || laid.fromPersonal ? PERSONAL_MAP_MS : MORPH_MS;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setMorphK(1);
+      return;
+    }
     // Keep the old world where it was on screen, then glide to the new one.
     const v = viewRef.current;
     viewRef.current = { ...v, x: v.x - sky.shift.x * v.s, y: v.y - sky.shift.y * v.s };
@@ -159,7 +196,7 @@ export function FamilySky({
     const start = performance.now();
     setMorphK(0);
     const step = (now: number) => {
-      const t = Math.min(1, (now - start) / MORPH_MS);
+      const t = Math.min(1, (now - start) / glideMs);
       setMorphK(t);
       morphRaf.current = t < 1 ? window.requestAnimationFrame(step) : null;
     };
@@ -277,6 +314,36 @@ export function FamilySky({
     }
   }
 
+  /** Frame the lit personal-map rings, with the center couple in the middle. */
+  function framePersonal(map: PersonalMap, next: FamilySkyLayout) {
+    const { vw, vh, inset } = stageSize();
+    const lit = new Set(map.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
+    const gathered = next.cards.filter((card) => lit.has(card.id));
+    const cards = gathered.length ? gathered : next.cards;
+    if (!cards.length) return;
+    const minX = Math.min(...cards.map((card) => card.x - CARD.w / 2));
+    const maxX = Math.max(...cards.map((card) => card.x + CARD.w / 2));
+    const minY = Math.min(...cards.map((card) => card.y));
+    const maxY = Math.max(...cards.map((card) => card.y + CARD.h));
+    const center = map.seats.filter((seat) => seat.ring === "center");
+    const cx = center.reduce((sum, seat) => sum + seat.x, 0) / Math.max(center.length, 1);
+    const cy = center.reduce((sum, seat) => sum + seat.y, 0) / Math.max(center.length, 1) + CARD.h / 2;
+    const halfW = Math.max(cx - minX, maxX - cx, CARD.w);
+    const halfH = Math.max(cy - minY, maxY - cy, CARD.h);
+    const viewH = Math.max(1, vh - inset);
+    const scale = clamp(fitContentScale(vw, viewH, halfW * 2, halfH * 2));
+    const fitted = centerTransform(vw, viewH, cx, cy, scale);
+    const target = { ...fitted, y: fitted.y + inset };
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (reduce) {
+      stopTween();
+      viewRef.current = target;
+      applyWorld();
+      return;
+    }
+    animateTo(target, PERSONAL_MAP_MS);
+  }
+
   function zoomToBucket(bucket: SkyBucket, focusId?: string) {
     const cam = cameraFor(bucketBox(bucket), 1);
     // Always land close enough to see the family's people, even when a big
@@ -319,9 +386,28 @@ export function FamilySky({
   // When the tree changes (for example a family-unit reassignment), follow the
   // selected person to their redrawn bucket; otherwise show every family.
   const firstSky = useRef(true);
+  // Camera from before this personal map, so clearing the selection returns there.
+  const savedCam = useRef<Camera | null>(null);
+  const refitAfter = useRef(false);
   useEffect(() => {
     if (firstSky.current) {
       firstSky.current = false;
+      if (!personal) return;
+    }
+    if (personal) {
+      // Save the sky camera once, before framing the map. A later tree change
+      // while focused must not overwrite it with the map's own camera.
+      if (!savedCam.current && laid?.from && !laid.fromPersonal) savedCam.current = { ...viewRef.current };
+      framePersonal(personal, sky);
+      return;
+    }
+    if (savedCam.current || refitAfter.current) {
+      const back = savedCam.current;
+      const refit = refitAfter.current;
+      savedCam.current = null;
+      refitAfter.current = false;
+      if (refit || !back) fitAll(true);
+      else animateTo(back, PERSONAL_MAP_MS);
       return;
     }
     // While editing, stay at this zoom and let the change glide; keep a person
@@ -342,7 +428,7 @@ export function FamilySky({
     if (bucket) zoomToBucket(bucket, highlightedId);
     else fitAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sky]);
+  }, [sky, personal]);
 
   useEffect(() => {
     const onResize = () => applyWorld();
@@ -606,9 +692,11 @@ export function FamilySky({
   return (
     <div
       ref={stageRef}
-      className={`graph-stage family-sky is-${level}${editMode ? " is-editing" : ""}`}
-      aria-label={`Family sky, ${view.buckets.length} families, ${level === "far" ? "overview" : level === "mid" ? "families" : "people"}`}
+      className={`graph-stage family-sky is-${level}${editMode ? " is-editing" : ""}${personal ? " is-personal" : ""}`}
+      aria-label={`Family sky, ${personal ? sky.units.units.length : view.buckets.length} families, ${level === "far" ? "overview" : level === "mid" ? "families" : "people"}`}
       data-level={level}
+      data-layout={personal ? "personal" : "sky"}
+      data-animating={morphK < 1 ? "true" : "false"}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPointer}
@@ -643,7 +731,7 @@ export function FamilySky({
               })
             : null}
 
-          {!far
+          {!far && !personal
             ? view.buckets.map((bucket) => {
                 const lit = bucket.id === focusUnit;
                 const drop = carried?.over === bucket.id && sky.units.unitOf[carried.id] !== bucket.id;
@@ -661,7 +749,7 @@ export function FamilySky({
             : null}
 
           {/* Links run above the bucket fills and break around any card in their way; the selected person's links come last, on top. */}
-          {!far
+          {!far && !personal
             ? [...view.links]
                 .map((link) => ({ link, lit: Boolean(linked && linked.has(link.fromPersonId) && linked.has(link.toPersonId)) }))
                 .sort((a, b) => Number(a.lit) - Number(b.lit))
@@ -685,7 +773,7 @@ export function FamilySky({
                 })
             : null}
 
-          {far
+          {far && !personal
             ? view.buckets.map((bucket) => (
                 <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} data-members={bucket.memberIds.join(" ")} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}`}>
                   <circle cx={bucket.cx} cy={bucket.cy} r={bucket.glow} fill="url(#sky-glow)" />
@@ -694,8 +782,8 @@ export function FamilySky({
               ))
             : null}
 
-          {near
-            ? view.forks.filter((fork) => shown.has(fork.unitId)).map((fork) => {
+          {near || personal
+            ? view.forks.filter((fork) => personal || shown.has(fork.unitId)).map((fork) => {
                 const parents = fork.parentDrops.filter((d) => lineFilterAllows(lineFilter, d.kin));
                 const kids = fork.childDrops.filter((d) => lineFilterAllows(lineFilter, d.kin));
                 if (!parents.length || !kids.length) return null;
@@ -740,8 +828,8 @@ export function FamilySky({
               })
             : null}
 
-          {near && lineFilterAllowsCouples(lineFilter)
-            ? view.couples.filter((c) => c.bar && shown.has(c.unitId)).map((couple) => {
+          {(near || personal) && lineFilterAllowsCouples(lineFilter)
+            ? view.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
                 const pair = couple.partnerIds.map((id) => viewCardOf.get(id)).filter(Boolean) as typeof view.cards;
                 if (pair.length < 2) return null;
                 const [l, r] = pair[0].x < pair[1].x ? [pair[0], pair[1]] : [pair[1], pair[0]];
@@ -752,6 +840,7 @@ export function FamilySky({
                 return (
                   <line
                     key={couple.id}
+                    data-partners={couple.partnerIds.join(" ")}
                     x1={x1}
                     y1={couple.cy}
                     x2={x2}
@@ -769,8 +858,8 @@ export function FamilySky({
           ) : null}
         </svg>
 
-        {near
-          ? view.couples.filter((c) => c.bar && shown.has(c.unitId)).map((couple) => {
+        {near || personal
+          ? view.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
               const pair = couple.partnerIds.map((id) => viewCardOf.get(id)).filter(Boolean) as typeof view.cards;
               if (pair.length < 2) return null;
               const minX = Math.min(...pair.map((p) => p.x)) - CARD.w / 2 - 10;
@@ -786,8 +875,8 @@ export function FamilySky({
             })
           : null}
 
-        {near
-          ? view.cards.filter((card) => shown.has(card.unitId) || card.id === carried?.id).map((card) => {
+        {near || personal
+          ? view.cards.filter((card) => personal || shown.has(card.unitId) || card.id === carried?.id).map((card) => {
               const connected = Boolean(linked?.has(card.id));
               const selected = card.id === highlightedId;
               const dim = Boolean(linked && !connected);
@@ -799,6 +888,7 @@ export function FamilySky({
                   key={card.id}
                   type="button"
                   data-person-id={card.id}
+                  data-ring={rings.get(card.id)}
                   className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${editMode ? " is-movable" : ""}${lifted ? " is-carried" : ""}`}
                   style={{ left: (lifted?.x ?? card.x) - CARD.w / 2, top: lifted?.y ?? card.y, width: CARD.w, height: CARD.h }}
                   onClick={(event) => {
@@ -823,7 +913,7 @@ export function FamilySky({
             })
           : null}
 
-        {mid
+        {mid && !personal
           ? view.cards.filter((card) => shown.has(card.unitId)).map((card) => {
               const photo = card.person.photo;
               const dim = Boolean(linked && !linked.has(card.id));
@@ -891,7 +981,7 @@ export function FamilySky({
         />
       </div>
 
-      {far && peopleCount > 0 && !editMode ? <p className="sky-hint">Tap a family to zoom in</p> : null}
+      {far && peopleCount > 0 && !editMode && !personal ? <p className="sky-hint">Tap a family to zoom in</p> : null}
       {editMode ? (
         <p className="graph-edit-hint sky-edit-hint">
           {near
@@ -924,7 +1014,21 @@ export function FamilySky({
       <div className="graph-zoom" role="group" aria-label="Zoom">
         <button type="button" className="icon-btn" aria-label="Zoom in" onClick={() => zoomBy(1.4)}>+</button>
         <button type="button" className="icon-btn" aria-label="Zoom out" onClick={() => zoomBy(1 / 1.4)}>−</button>
-        <button type="button" className="icon-btn" aria-label="All families" onClick={() => fitAll(true)}>⌂</button>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="All families"
+          onClick={() => {
+            if (personal) {
+              refitAfter.current = true;
+              onHighlight(undefined);
+              return;
+            }
+            fitAll(true);
+          }}
+        >
+          ⌂
+        </button>
       </div>
     </div>
   );

@@ -10,7 +10,7 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts src/lib/generations.test.ts src/lib/graphView.test.ts src/lib/persist.test.ts src/lib/kinFilter.test.ts src/lib/households.test.ts src/lib/householdLayout.test.ts src/lib/familyUnits.test.ts src/lib/familyUnitsIo.test.ts src/lib/familySky.test.ts src/lib/familySkyRoute.test.ts src/lib/personalMap.test.ts",
+    "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts src/lib/generations.test.ts src/lib/graphView.test.ts src/lib/persist.test.ts src/lib/kinFilter.test.ts src/lib/households.test.ts src/lib/householdLayout.test.ts src/lib/familyUnits.test.ts src/lib/familyUnitsIo.test.ts src/lib/familySky.test.ts src/lib/familySkyRoute.test.ts src/lib/personalMap.test.ts src/lib/familySkyFocus.test.ts",
     "verify": "node scripts/verify-family-sky.mjs"
   },
   "dependencies": {
