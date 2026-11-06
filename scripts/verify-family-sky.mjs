@@ -324,7 +324,18 @@ async function runFamilyPersonalMap(page, viewport) {
   const samples = [];
   const deadline = Date.now() + 700;
   while (Date.now() < deadline) {
-    samples.push(await eli.evaluate((node) => `${node.style.left}|${node.style.top}`));
+    // Card transform only. left/top stay on the destination seat, and the camera
+    // moves the whole world, so neither of those is the glide.
+    samples.push(
+      await eli.evaluate((node) => {
+        const value = getComputedStyle(node).transform;
+        if (!value || value === "none") return "0,0";
+        const match = /matrix\(([^)]+)\)/.exec(value);
+        if (!match) return value;
+        const parts = match[1].split(",").map((part) => Number(part.trim()));
+        return `${Math.round(parts[4] || 0)},${Math.round(parts[5] || 0)}`;
+      }),
+    );
     await page.waitForTimeout(35);
   }
   if (new Set(samples).size < 2) fail(`${viewport.name}: the selected card did not glide into the family personal map`);
