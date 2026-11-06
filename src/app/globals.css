@@ -1380,6 +1380,23 @@ html[data-theme="dark"] .portrait-card .swatch {
 .family-sky .sky-port {
   transform: translate(-50%, -50%) scale(max(1, calc(var(--inv) * 0.7)));
 }
+.family-sky.is-editing.is-near .graph-lines { pointer-events: auto; }
+.family-sky.is-editing.is-near .graph-lines path:not(.graph-hit),
+.family-sky.is-editing.is-near .graph-lines line:not(.graph-hit) {
+  pointer-events: none;
+}
+.family-sky.is-editing.is-near .graph-hit { pointer-events: stroke; cursor: pointer; }
+.family-sky .sky-unlink {
+  position: absolute;
+  z-index: 6;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  cursor: pointer;
+}
 .family-sky.is-editing .portrait-card { cursor: grab; touch-action: none; }
 .family-sky .portrait-card.is-carried {
   z-index: 7;

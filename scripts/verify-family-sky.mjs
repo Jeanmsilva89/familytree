@@ -10,7 +10,10 @@
  * a first tap gathers that fixture person's family into a personal map and
  * clearing the selection restores the tree. On the Families lens, the same
  * first tap gathers that person inside the sky, and empty space or All families
- * restores the sky. Runs at desktop 1280x800 and phone 390x844.
+ * restores the sky. In Families Edit mode, close up, tapping Ada Fixture's
+ * link to Eli Fixture removes that parent link, and tapping Nia Fixture's
+ * couple bar asks before unlinking her from Pal Fixture. Runs at desktop
+ * 1280x800 and phone 390x844.
  *
  *   npm run build && npm start
  *   npm run verify
@@ -493,6 +496,303 @@ async function moveToUnit(page, sheet, unitRootId) {
   );
 }
 
+async function readTree(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open("familytree");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const get = db.transaction("tree", "readonly").objectStore("tree").get("living");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+      }),
+  );
+}
+
+async function linkScreenPoint(page, selector, { mustHit = false } = {}) {
+  return page.evaluate(({ sel, mustHit: hitOnly }) => {
+    const el = document.querySelector(sel);
+    const stage = document.querySelector(".family-sky");
+    if (!(el instanceof Element) || !(stage instanceof HTMLElement)) return null;
+    if (el instanceof HTMLElement) {
+      const box = el.getBoundingClientRect();
+      const rect = stage.getBoundingClientRect();
+      const bar = document.querySelector(".graph-toolbar")?.getBoundingClientRect();
+      const topLimit = Math.max(rect.top + 16, bar ? bar.bottom + 12 : rect.top + 16);
+      const point = { x: box.left + box.width / 2, y: box.top + box.height / 2 };
+      if (point.x < rect.left + 8 || point.x > rect.right - 8 || point.y < topLimit || point.y > rect.bottom - 8) return null;
+      const top = document.elementFromPoint(point.x, point.y);
+      if (!(top instanceof Element) || !stage.contains(top)) return null;
+      if (hitOnly && top !== el && !el.contains(top)) return null;
+      return point;
+    }
+    if (!(el instanceof SVGGeometryElement)) return null;
+    const len = el.getTotalLength();
+    const svg = el.ownerSVGElement;
+    if (!svg || len < 1 || !svg.width.baseVal.value || !svg.height.baseVal.value) return null;
+    const rect = stage.getBoundingClientRect();
+    const svgRect = svg.getBoundingClientRect();
+    const bar = document.querySelector(".graph-toolbar")?.getBoundingClientRect();
+    const topLimit = Math.max(rect.top + 16, bar ? bar.bottom + 12 : rect.top + 16);
+    const at = (t) => {
+      const local = el.getPointAtLength(len * t);
+      return {
+        x: svgRect.left + (local.x / svg.width.baseVal.value) * svgRect.width,
+        y: svgRect.top + (local.y / svg.height.baseVal.value) * svgRect.height,
+      };
+    };
+    const usable = (point) => {
+      if (point.x < rect.left + 16 || point.x > rect.right - 16 || point.y < topLimit || point.y > rect.bottom - 16) {
+        return false;
+      }
+      const top = document.elementFromPoint(point.x, point.y);
+      if (!(top instanceof Element) || !stage.contains(top)) return false;
+      if (top.closest(".graph-toolbar, .graph-zoom, .graph-port, .sky-label, .btn")) return false;
+      if (hitOnly) return top === el || top.closest(".graph-hit") === el;
+      return !top.closest(".portrait-card, .sky-avatar");
+    };
+    const samples = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.15, 0.85];
+    for (const t of samples) {
+      const point = at(t);
+      if (usable(point)) return { x: point.x, y: point.y };
+    }
+    for (let i = 0; i <= 32; i += 1) {
+      const point = at(i / 32);
+      if (usable(point)) return { x: point.x, y: point.y };
+    }
+    return null;
+  }, { sel: selector, mustHit });
+}
+
+/** Zoom until `selector` is on screen and the sky is close enough to edit. */
+async function zoomNearOn(page, viewport, selector) {
+  await showStars(page);
+  for (let i = 0; i < 8 && (await level(page)) === "far"; i += 1) {
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.waitForTimeout(200);
+  }
+  if ((await level(page)) === "far") fail(`${viewport.name}: still in the star view`);
+  await page.locator(selector).first().waitFor({ timeout: 8000 });
+  for (let i = 0; i < 12 && (await level(page)) !== "near"; i += 1) {
+    const point = await linkScreenPoint(page, selector);
+    if (!point) {
+      const stage = page.locator(".family-sky");
+      const box = await stage.boundingBox();
+      if (box) {
+        const x = box.x + box.width / 2;
+        const y = box.y + Math.min(box.height - 40, 180);
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        await page.mouse.move(x, y + 90);
+        await page.mouse.up();
+      }
+      await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+      await page.waitForTimeout(200);
+      continue;
+    }
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.wheel(0, -160);
+    await page.waitForTimeout(80);
+  }
+  await waitLevel(page, "near");
+  await waitSkySettled(page);
+  const point = await linkScreenPoint(page, selector);
+  if (!point) fail(`${viewport.name}: ${selector} is not on screen at close zoom`);
+  return point;
+}
+
+/** Pan the sky until a relationship mark is under the pointer. */
+async function bringMarkOnScreen(page, selector) {
+  for (let i = 0; i < 6; i += 1) {
+    const point = await linkScreenPoint(page, selector, { mustHit: true });
+    if (point) return point;
+    const delta = await page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      const stage = document.querySelector(".family-sky");
+      if (!(el instanceof Element) || !(stage instanceof HTMLElement)) return null;
+      const box = el.getBoundingClientRect();
+      const rect = stage.getBoundingClientRect();
+      return {
+        dx: rect.left + rect.width / 2 - (box.left + box.width / 2),
+        dy: rect.top + rect.height / 2 - (box.top + box.height / 2),
+      };
+    }, selector);
+    const start = await page.evaluate(() => {
+      const stage = document.querySelector(".family-sky");
+      if (!(stage instanceof HTMLElement)) return null;
+      const rect = stage.getBoundingClientRect();
+      for (let y = rect.top + 90; y < rect.bottom - 30; y += 28) {
+        for (let x = rect.left + 24; x < rect.right - 30; x += 28) {
+          const hit = document.elementFromPoint(x, y);
+          if (!(hit instanceof Element) || !stage.contains(hit)) continue;
+          if (hit.closest(".portrait-card, .graph-port, .graph-hit, .sky-label, .btn, .graph-zoom, .sky-avatar")) continue;
+          return { x, y };
+        }
+      }
+      return null;
+    });
+    if (!delta || !start) return null;
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.down();
+    await page.mouse.move(start.x + Math.max(-280, Math.min(280, delta.dx)), start.y + Math.max(-280, Math.min(280, delta.dy)));
+    await page.mouse.up();
+    await page.waitForTimeout(180);
+  }
+  return linkScreenPoint(page, selector, { mustHit: true });
+}
+
+async function openFamilyNear(page, viewport, label) {
+  await showStars(page);
+  await page.getByRole("button", { name: new RegExp(label) }).click();
+  await page.waitForFunction(
+    () => document.querySelector(".family-sky")?.getAttribute("data-level") !== "far",
+    null,
+    { timeout: 8000 },
+  );
+  await page.waitForTimeout(400);
+  for (let i = 0; i < 8 && (await level(page)) !== "near"; i += 1) {
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.waitForTimeout(180);
+  }
+  await waitLevel(page, "near");
+  await waitSkySettled(page);
+  if ((await level(page)) !== "near") fail(`${viewport.name}: ${label} did not open close up`);
+}
+
+/** Accept or dismiss the confirm while the tap is still in flight, so the page can continue. */
+async function clickConfirm(page, point, accept) {
+  let message = "";
+  const dialogDone = new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("no confirm")), 5000);
+    page.once("dialog", (dialog) => {
+      clearTimeout(timer);
+      message = dialog.message();
+      (accept ? dialog.accept() : dialog.dismiss()).then(resolve, reject);
+    });
+  });
+  await Promise.all([dialogDone, page.mouse.click(point.x, point.y)]);
+  return message;
+}
+
+async function enterEdit(page, viewport) {
+  const edit = page.getByRole("button", { name: "Edit", exact: true });
+  await edit.scrollIntoViewIfNeeded();
+  if ((await edit.getAttribute("aria-pressed")) !== "true") await edit.click();
+  const done = page.getByRole("button", { name: "Done", exact: true });
+  await page.locator(".family-sky.is-editing.is-near").waitFor({ timeout: 4000 });
+  if ((await done.getAttribute("aria-pressed")) !== "true") fail(`${viewport.name}: Edit did not turn on`);
+}
+
+/**
+ * Families Edit, close up: a parent curve unlinks through the classic confirm,
+ * and a couple bar asks with the classic partner question before it unlinks.
+ * Outside Edit, the same tap does not remove anyone.
+ */
+async function runSkyUnlink(page, viewport) {
+  const parentSelector = '.sky-link[data-from="fx-ada"][data-to="fx-eli"]';
+  const point = await zoomNearOn(page, viewport, parentSelector);
+  if ((await page.locator(".family-sky .graph-hit").count()) !== 0) {
+    fail(`${viewport.name}: sky links offer unlink before Edit`);
+  }
+  let stray = false;
+  const onStray = (dialog) => {
+    stray = true;
+    dialog.dismiss().catch(() => undefined);
+  };
+  page.on("dialog", onStray);
+  await page.mouse.click(point.x, point.y);
+  await page.waitForTimeout(250);
+  page.off("dialog", onStray);
+  if (stray) fail(`${viewport.name}: tapping a sky link outside Edit asked to unlink`);
+  const before = await readTree(page);
+  if (!before.childLinks.some((link) => link.childId === "fx-eli" && link.parentIds.includes("fx-ada"))) {
+    fail(`${viewport.name}: Ada's parent link disappeared before Edit`);
+  }
+
+  await enterEdit(page, viewport);
+  await page.locator(`.graph-hit[data-mark="curve"][data-from="fx-ada"][data-to="fx-eli"]`).waitFor();
+  const hit = await linkScreenPoint(page, `.graph-hit[data-mark="curve"][data-from="fx-ada"][data-to="fx-eli"]`, { mustHit: true });
+  if (!hit) fail(`${viewport.name}: Ada and Eli's link is not tappable in Edit`);
+  let parentMessage = "";
+  try {
+    parentMessage = await clickConfirm(page, hit, true);
+  } catch {
+    fail(`${viewport.name}: tapping Ada and Eli's link did not ask to unlink`);
+  }
+  if (parentMessage !== "Remove the parent link from Ada Fixture to Eli Fixture?") {
+    fail(`${viewport.name}: parent confirm said ${JSON.stringify(parentMessage)}`);
+  }
+  await page.waitForFunction(async () => {
+    const tree = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const get = db.transaction("tree", "readonly").objectStore("tree").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    return !tree.childLinks.some((link) => link.childId === "fx-eli" && link.parentIds.includes("fx-ada"));
+  });
+  await page.locator(parentSelector).waitFor({ state: "detached", timeout: 4000 }).catch(() => {
+    fail(`${viewport.name}: Ada and Eli's sky link is still drawn`);
+  });
+  await waitSkySettled(page);
+  const afterParent = await readTree(page);
+  if (!afterParent.childLinks.some((link) => link.childId === "fx-eli" && link.parentIds.includes("fx-ben"))) {
+    fail(`${viewport.name}: unlinking Ada also removed Ben`);
+  }
+  if (!afterParent.people.some((person) => person.id === "fx-ada" && person.familyName === "Fixture")) {
+    fail(`${viewport.name}: Ada Fixture was removed from the tree`);
+  }
+
+  await openFamilyNear(page, viewport, "Nia & Pal family");
+  const couple = '.sky-unlink[data-mark="couple"][data-partners="fx-nia fx-pal"]';
+  await page.locator(couple).waitFor({ state: "attached", timeout: 8000 });
+  const couplePoint = await bringMarkOnScreen(page, couple);
+  if (!couplePoint) fail(`${viewport.name}: Nia and Pal's couple link is not on screen`);
+  let declineMessage = "";
+  try {
+    declineMessage = await clickConfirm(page, couplePoint, false);
+  } catch {
+    fail(`${viewport.name}: tapping the couple link did not ask to unlink`);
+  }
+  if (declineMessage !== "Unlink Nia Fixture and Pal Fixture as partners?") {
+    fail(`${viewport.name}: partner confirm said ${JSON.stringify(declineMessage)}`);
+  }
+  const kept = await readTree(page);
+  if (!kept.unions.some((union) => union.partnerIds.includes("fx-nia") && union.partnerIds.includes("fx-pal"))) {
+    fail(`${viewport.name}: declining the confirm still unlinked Nia and Pal`);
+  }
+  try {
+    await clickConfirm(page, couplePoint, true);
+  } catch {
+    fail(`${viewport.name}: the couple link did not ask again`);
+  }
+  await page.waitForFunction(async () => {
+    const tree = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const get = db.transaction("tree", "readonly").objectStore("tree").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    const stillPartners = tree.unions.some((union) => union.partnerIds.includes("fx-nia") && union.partnerIds.includes("fx-pal"));
+    const bothStay = tree.people.some((person) => person.id === "fx-nia") && tree.people.some((person) => person.id === "fx-pal");
+    return !stillPartners && bothStay;
+  });
+  await waitSkySettled(page);
+  await page.screenshot({ path: path.join(outDir, `family-sky-${viewport.name}-unlinked.png`) });
+  console.log(`${viewport.name}: edit mode unlinked a parent curve and a couple`);
+}
+
 async function runViewport(browser, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -648,7 +948,8 @@ async function runViewport(browser, viewport) {
     if (JSON.stringify(beforeReload) !== JSON.stringify(afterReload)) {
       fail(`${viewport.name}: star positions changed after reload`);
     }
-    console.log(`${viewport.name}: links, buckets, stars, step family, row move, and reload passed`);
+    await runSkyUnlink(page, viewport);
+    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, and unlink passed`);
   } catch (error) {
     await page.screenshot({ path: shot("failed") }).catch(() => undefined);
     throw error;
