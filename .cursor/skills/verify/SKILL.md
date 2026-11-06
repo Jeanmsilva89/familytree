@@ -34,7 +34,7 @@ Screenshots: `personal-map-<size>-before.png`, `personal-map-<size>-focused.png`
 
 On the Families lens, after it is turned back on:
 
-14. Zoom in on Eli Fixture and tap him once. The sky becomes his personal map (`data-layout="personal"`): Dee beside him, Fay below, Ada above, Cora on his row, Gran dimmed. The move glides (~480ms).
+14. Zoom in on Eli Fixture and tap him once. The sky becomes his personal map (`data-layout="personal"`): Dee beside him, Fay below, Ada above, Cora on his row, Gran dimmed. The move glides (~480ms). The script samples the selected card's transform while that glide runs, so a camera move alone does not count.
 15. Tap empty space. The family-sky layout returns (`data-layout="sky"`).
 16. Tap Eli once more, then press All families (⌂). The sky layout returns.
 17. Tap Cora twice and confirm the editor still opens. Turning Families off still lands on the classic generation layout.

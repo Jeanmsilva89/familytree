@@ -14,7 +14,6 @@ import {
   bucketBox,
   cameraToFit,
   layoutFamilySky,
-  morphSky,
   overviewZoom,
   visibleBuckets,
   labelAnchor,
@@ -23,11 +22,12 @@ import {
   skyMinScale,
   zoomLevel,
   type Box,
-  type Curve,
   type FamilySky as FamilySkyLayout,
   type SkyBucket,
   type ZoomLevel,
 } from "@/lib/familySky";
+import { coupleBarGeometry, curvesPath, forkGuides, glideMotion } from "@/lib/skyGlide";
+import { bindSkyGlide, clearSkyGlide, stepSkyGlide } from "@/lib/skyGlideDom";
 import { routePersonLink } from "@/lib/familySkyRoute";
 import type { UnitLinkKind } from "@/lib/familyUnits";
 import {
@@ -80,11 +80,6 @@ const DASH: Record<UnitLinkKind, string | undefined> = {
 
 function allows(filter: LineFilter, kind: UnitLinkKind) {
   return kind === "partner" ? lineFilterAllowsCouples(filter) : lineFilterAllows(filter, kind);
-}
-
-/** One SVG path for a link's visible pieces (it breaks wherever it would pass under a card). */
-function piecesPath(pieces: Curve[]) {
-  return pieces.map((q) => `M ${q.x1} ${q.y1} Q ${q.cx} ${q.cy} ${q.x2} ${q.y2}`).join(" ");
 }
 
 function easeOut(t: number) {
@@ -142,13 +137,8 @@ export function FamilySky({
       fromPersonal: laid?.personal,
     });
   }
-  // 0 → 1 while the sky glides from the previous layout to this one.
-  const [morphK, setMorphK] = useState(1);
-  const morphFrom = laid?.from;
-  const view = useMemo(
-    () => (morphFrom && morphK < 1 ? morphSky(morphFrom, sky, easeInOut(morphK)) : sky),
-    [morphFrom, sky, morphK],
-  );
+  // True only at the ends of a layout glide. Frames in between paint through refs, not state.
+  const [animating, setAnimating] = useState(false);
   const rings = useMemo(() => new Map(personal?.seats.map((seat) => [seat.id, seat.ring]) ?? []), [personal]);
   const linked = useMemo(() => {
     if (personal) return new Set(personal.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
@@ -191,32 +181,91 @@ export function FamilySky({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sky, focusUnit]);
 
-  const morphRaf = useRef<number | null>(null);
+  const glideRef = useRef<{
+    motion: ReturnType<typeof glideMotion>;
+    to: FamilySkyLayout;
+    start: number;
+    ms: number;
+    k: number;
+    raf: number | null;
+  } | null>(null);
+
+  function paintGlide(k: number) {
+    const glide = glideRef.current;
+    const world = worldRef.current;
+    if (!glide || !world) return;
+    glide.k = k;
+    stepSkyGlide(world, glide.to, glide.motion, k, levelRef.current);
+    labelsRef.current?.nudge();
+  }
+
   useLayoutEffect(() => {
-    if (!laid?.from) return;
+    const from = laid?.from;
+    const to = laid?.sky;
+    if (!from || !to) {
+      glideRef.current = null;
+      return;
+    }
+    const world = worldRef.current;
     const glideMs = laid.personal || laid.fromPersonal ? PERSONAL_MAP_MS : MORPH_MS;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setMorphK(1);
+      glideRef.current = null;
+      if (world) {
+        // Land on the destination. A glide that was cancelled may have left line coordinates behind.
+        stepSkyGlide(world, to, glideMotion(from, to), 1, levelRef.current);
+        clearSkyGlide(world);
+      }
+      setAnimating(false);
       return;
     }
     // Keep the old world where it was on screen, then glide to the new one.
     const v = viewRef.current;
-    viewRef.current = { ...v, x: v.x - sky.shift.x * v.s, y: v.y - sky.shift.y * v.s };
+    viewRef.current = { ...v, x: v.x - to.shift.x * v.s, y: v.y - to.shift.y * v.s };
     applyWorld();
-    if (morphRaf.current != null) window.cancelAnimationFrame(morphRaf.current);
-    const start = performance.now();
-    setMorphK(0);
+    const motion = glideMotion(from, to);
+    const glide = { motion, to, start: performance.now(), ms: glideMs, k: 0, raf: null as number | null };
+    glideRef.current = glide;
+    if (world) {
+      bindSkyGlide(world, motion);
+      stepSkyGlide(world, to, motion, 0, levelRef.current);
+    }
+    setAnimating(true);
     const step = (now: number) => {
-      const t = Math.min(1, (now - start) / glideMs);
-      setMorphK(t);
-      morphRaf.current = t < 1 ? window.requestAnimationFrame(step) : null;
+      if (glideRef.current !== glide) return;
+      const t = Math.min(1, (now - glide.start) / glide.ms);
+      if (t >= 1) {
+        const node = worldRef.current;
+        if (node) {
+          stepSkyGlide(node, glide.to, glide.motion, 1, levelRef.current);
+          clearSkyGlide(node);
+        }
+        glide.raf = null;
+        glideRef.current = null;
+        setAnimating(false);
+        return;
+      }
+      paintGlide(easeInOut(t));
+      glide.raf = window.requestAnimationFrame(step);
     };
-    morphRaf.current = window.requestAnimationFrame(step);
+    glide.raf = window.requestAnimationFrame(step);
     return () => {
-      if (morphRaf.current != null) window.cancelAnimationFrame(morphRaf.current);
+      if (glide.raf != null) window.cancelAnimationFrame(glide.raf);
+      glideRef.current = null;
+      if (world) clearSkyGlide(world);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [laid]);
+
+  // A camera or zoom update can re-render mid-glide. Put the current frame back
+  // before paint so React's destination picture does not flash through.
+  useLayoutEffect(() => {
+    const glide = glideRef.current;
+    const world = worldRef.current;
+    if (!glide || !world) return;
+    bindSkyGlide(world, glide.motion);
+    stepSkyGlide(world, glide.to, glide.motion, glide.k, levelRef.current);
+    labelsRef.current?.nudge();
+  });
 
   function stageSize() {
     const stage = stageRef.current;
@@ -706,23 +755,21 @@ export function FamilySky({
   const unlinkArmed = skyUnlinkEnabled(editMode, level) && Boolean(onUnlink);
   const peopleCount = tree.people.length;
 
-  const viewCardOf = view === sky ? cardOf : new Map(view.cards.map((c) => [c.id, c]));
-
   return (
     <div
       ref={stageRef}
       className={`graph-stage family-sky is-${level}${editMode ? " is-editing" : ""}${personal ? " is-personal" : ""}`}
-      aria-label={`Family sky, ${personal ? sky.units.units.length : view.buckets.length} families, ${level === "far" ? "overview" : level === "mid" ? "families" : "people"}`}
+      aria-label={`Family sky, ${personal ? sky.units.units.length : sky.buckets.length} families, ${level === "far" ? "overview" : level === "mid" ? "families" : "people"}`}
       data-level={level}
       data-layout={personal ? "personal" : "sky"}
-      data-animating={morphK < 1 ? "true" : "false"}
+      data-animating={animating ? "true" : "false"}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPointer}
       onPointerCancel={endPointer}
     >
-      <div ref={worldRef} className="graph-world sky-world" style={{ width: view.width, height: view.height }}>
-        <svg className="graph-lines" width={view.width} height={view.height} aria-hidden>
+      <div ref={worldRef} className="graph-world sky-world" style={{ width: sky.width, height: sky.height }}>
+        <svg className="graph-lines" width={sky.width} height={sky.height} aria-hidden>
           <defs>
             <radialGradient id="sky-glow">
               <stop offset="0%" className="sky-glow-core" />
@@ -732,12 +779,13 @@ export function FamilySky({
           </defs>
 
           {far
-            ? view.unitEdges.map((edge) => {
+            ? sky.unitEdges.map((edge) => {
                 const kind = edge.kinds.find((k) => allows(lineFilter, k));
                 if (!kind) return null;
                 return (
                   <line
                     key={edge.id}
+                    data-edge-id={edge.id}
                     className={`sky-edge is-${kind}`}
                     x1={edge.x1}
                     y1={edge.y1}
@@ -751,7 +799,7 @@ export function FamilySky({
             : null}
 
           {!far && !personal
-            ? view.buckets.map((bucket) => {
+            ? sky.buckets.map((bucket) => {
                 const lit = bucket.id === focusUnit;
                 const drop = carried?.over === bucket.id && sky.units.unitOf[carried.id] !== bucket.id;
                 return (
@@ -769,16 +817,16 @@ export function FamilySky({
 
           {/* Links run above the bucket fills and break around any card in their way; the selected person's links come last, on top. */}
           {!far && !personal
-            ? [...view.links]
+            ? [...sky.links]
                 .map((link) => ({ link, lit: Boolean(linked && linked.has(link.fromPersonId) && linked.has(link.toPersonId)) }))
                 .sort((a, b) => Number(a.lit) - Number(b.lit))
                 .map(({ link, lit }) => {
                   if (!allows(lineFilter, link.kind)) return null;
                   const w = linkStyle(link.kind, lit);
-                  const d = piecesPath(near ? link.pieces : link.midPieces);
+                  const d = curvesPath(near ? link.pieces : link.midPieces);
                   const mark = unlinkArmed ? curveUnlinkMark(link) : null;
                   return (
-                    <g key={link.id}>
+                    <g key={link.id} data-link-id={link.id}>
                       <path
                         className={`sky-link is-${link.kind}${lit ? " is-lit" : ""}`}
                         data-from={link.fromPersonId}
@@ -814,7 +862,7 @@ export function FamilySky({
             : null}
 
           {far && !personal
-            ? view.buckets.map((bucket) => (
+            ? sky.buckets.map((bucket) => (
                 <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} data-members={bucket.memberIds.join(" ")} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}`}>
                   <circle cx={bucket.cx} cy={bucket.cy} r={bucket.glow} fill="url(#sky-glow)" />
                   <circle className="sky-star-core" cx={bucket.cx} cy={bucket.cy} r={bucket.glow * 0.16} />
@@ -823,23 +871,20 @@ export function FamilySky({
             : null}
 
           {near || personal
-            ? view.forks.filter((fork) => personal || shown.has(fork.unitId)).map((fork) => {
+            ? sky.forks.filter((fork) => personal || shown.has(fork.unitId)).map((fork) => {
                 const parents = fork.parentDrops.filter((d) => lineFilterAllows(lineFilter, d.kin));
                 const kids = fork.childDrops.filter((d) => lineFilterAllows(lineFilter, d.kin));
                 if (!parents.length || !kids.length) return null;
                 const lit = Boolean(
                   linked && (parents.some((d) => linked.has(d.parentId)) || kids.some((d) => linked.has(d.childId))),
                 );
-                const stemX = parents.reduce((s, d) => s + d.x, 0) / parents.length;
-                const joinL = Math.min(...parents.map((d) => d.x));
-                const joinR = Math.max(...parents.map((d) => d.x));
-                const railL = Math.min(...kids.map((d) => d.x), stemX);
-                const railR = Math.max(...kids.map((d) => d.x), stemX);
+                const guides = forkGuides(parents, kids, fork.joinY, fork.railY);
                 const forkKin = kids.every((d) => d.kin === kids[0].kin) ? kids[0].kin : fork.kin;
                 const bar = kinLine(forkKin, lit, fork.dotted && forkKin === "blood");
-                const seg = (key: string, x1: number, y1: number, x2: number, y2: number, w = bar) => (
+                const seg = (key: string, x1: number, y1: number, x2: number, y2: number, w = bar, segName?: string) => (
                   <line
                     key={key}
+                    data-seg={segName}
                     x1={x1}
                     y1={y1}
                     x2={x2}
@@ -849,24 +894,29 @@ export function FamilySky({
                     strokeOpacity={w.opacity}
                     strokeDasharray={w.dash}
                     strokeLinecap="round"
+                    visibility={segName === "join" && !guides.joinWide ? "hidden" : segName === "rail" && !guides.railWide ? "hidden" : undefined}
                   />
                 );
                 return (
-                  <g key={fork.id} className="graph-fork">
-                    {parents.map((d) => seg(`p-${d.parentId}`, d.x, d.y0, d.x, fork.joinY, kinLine(d.kin, lit, fork.dotted && d.kin === "blood")))}
-                    {joinR - joinL > 6 ? seg("join", joinL, fork.joinY, joinR, fork.joinY) : null}
-                    {seg("stem", stemX, fork.joinY, stemX, fork.railY)}
+                  <g key={fork.id} data-fork-id={fork.id} className="graph-fork">
+                    {parents.map((d) => (
+                      <g key={`p-${d.parentId}`} data-seg="parent" data-person-id={d.parentId}>
+                        {seg(`p-${d.parentId}`, d.x, d.y0, d.x, guides.joinY, kinLine(d.kin, lit, fork.dotted && d.kin === "blood"))}
+                      </g>
+                    ))}
+                    {seg("join", guides.joinL, guides.joinY, guides.joinR, guides.joinY, bar, "join")}
+                    {seg("stem", guides.stemX, guides.joinY, guides.stemX, guides.railY, bar, "stem")}
                     {forkKin !== "blood" ? (
-                      <text className="graph-kin-label" x={stemX} y={(fork.joinY + fork.railY) / 2} textAnchor="middle" fill="var(--graph-kin)" fillOpacity={0.55} fontSize="11">
+                      <text data-seg="kin" className="graph-kin-label" x={guides.stemX} y={(guides.joinY + guides.railY) / 2} textAnchor="middle" fill="var(--graph-kin)" fillOpacity={0.55} fontSize="11">
                         {kinKindLabel(forkKin)}
                       </text>
                     ) : null}
-                    {railR - railL > 6 ? seg("rail", railL, fork.railY, railR, fork.railY) : null}
+                    {seg("rail", guides.railL, guides.railY, guides.railR, guides.railY, bar, "rail")}
                     {kids.map((d) => {
                       const mark = unlinkArmed ? forkUnlinkMark(fork, d) : null;
                       return (
-                        <g key={`c-${d.childId}`}>
-                          {seg(`c-${d.childId}`, d.x, fork.railY, d.x, d.y1, kinLine(d.kin, lit, false))}
+                        <g key={`c-${d.childId}`} data-seg="child" data-person-id={d.childId}>
+                          {seg(`c-${d.childId}`, d.x, guides.railY, d.x, d.y1, kinLine(d.kin, lit, false))}
                           {mark ? (
                             <line
                               className="graph-hit"
@@ -875,7 +925,7 @@ export function FamilySky({
                               data-parent={mark.parentId}
                               data-child={mark.childId}
                               x1={d.x}
-                              y1={fork.railY}
+                              y1={guides.railY}
                               x2={d.x}
                               y2={d.y1}
                               stroke="transparent"
@@ -895,22 +945,23 @@ export function FamilySky({
             : null}
 
           {(near || personal) && lineFilterAllowsCouples(lineFilter)
-            ? view.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
-                const pair = couple.partnerIds.map((id) => viewCardOf.get(id)).filter(Boolean) as typeof view.cards;
-                if (pair.length < 2) return null;
-                const [l, r] = pair[0].x < pair[1].x ? [pair[0], pair[1]] : [pair[1], pair[0]];
-                const x1 = l.x + CARD.w / 2 + 1;
-                const x2 = r.x - CARD.w / 2 - 1;
-                if (x2 <= x1) return null;
+            ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
+                const geom = coupleBarGeometry(
+                  couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
+                  couple.partnerIds,
+                  couple.cy,
+                );
+                if (!geom?.showBar) return null;
                 const lit = Boolean(linked && couple.partnerIds.every((id) => linked.has(id)));
                 return (
                   <line
                     key={couple.id}
+                    data-couple={couple.id}
                     data-partners={couple.partnerIds.join(" ")}
-                    x1={x1}
-                    y1={couple.cy}
-                    x2={x2}
-                    y2={couple.cy}
+                    x1={geom.x1}
+                    y1={geom.y}
+                    x2={geom.x2}
+                    y2={geom.y}
                     stroke="var(--graph-spouse)"
                     strokeWidth={(lit ? 2.6 : 1.6) + (couple.kind === "married" ? 1.6 : 0.4)}
                     strokeOpacity={lit ? 0.9 : linked ? 0.12 : 0.4}
@@ -925,24 +976,26 @@ export function FamilySky({
         </svg>
 
         {near || personal
-          ? view.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
-              const pair = couple.partnerIds.map((id) => viewCardOf.get(id)).filter(Boolean) as typeof view.cards;
-              if (pair.length < 2) return null;
-              const minX = Math.min(...pair.map((p) => p.x)) - CARD.w / 2 - 10;
-              const maxX = Math.max(...pair.map((p) => p.x)) + CARD.w / 2 + 10;
-              const top = Math.min(...pair.map((p) => p.y)) - 10;
+          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
+              const geom = coupleBarGeometry(
+                couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
+                couple.partnerIds,
+                couple.cy,
+              );
+              if (!geom) return null;
               return (
                 <div
                   key={`${couple.id}-tint`}
+                  data-couple={couple.id}
                   className={`couple-tint${couple.kind === "married" ? " is-married" : ""}`}
-                  style={{ left: minX, top, width: maxX - minX, height: CARD.h + 20 }}
+                  style={{ left: geom.tint.left, top: geom.tint.top, width: geom.tint.width, height: geom.tint.height }}
                 />
               );
             })
           : null}
 
         {near || personal
-          ? view.cards.filter((card) => personal || shown.has(card.unitId) || card.id === carried?.id).map((card) => {
+          ? sky.cards.filter((card) => personal || shown.has(card.unitId) || card.id === carried?.id).map((card) => {
               const connected = Boolean(linked?.has(card.id));
               const selected = card.id === highlightedId;
               const dim = Boolean(linked && !connected);
@@ -980,7 +1033,7 @@ export function FamilySky({
           : null}
 
         {mid && !personal
-          ? view.cards.filter((card) => shown.has(card.unitId)).map((card) => {
+          ? sky.cards.filter((card) => shown.has(card.unitId)).map((card) => {
               const photo = card.person.photo;
               const dim = Boolean(linked && !linked.has(card.id));
               return (
@@ -1010,7 +1063,7 @@ export function FamilySky({
           : null}
 
         {near && editMode && onLink
-          ? view.cards
+          ? sky.cards
               .filter((card) => shown.has(card.unitId) && card.id !== carried?.id)
               .flatMap((card) => {
                 const ports: { port: Port; side?: "left" | "right"; label: string }[] = [
@@ -1038,24 +1091,25 @@ export function FamilySky({
           : null}
 
         {unlinkArmed && (near || personal) && lineFilterAllowsCouples(lineFilter)
-          ? view.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
+          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
               const mark = coupleUnlinkMark(couple.partnerIds);
-              const pair = couple.partnerIds.map((id) => viewCardOf.get(id)).filter(Boolean) as typeof view.cards;
-              if (!mark || pair.length < 2) return null;
-              const [l, r] = pair[0].x < pair[1].x ? [pair[0], pair[1]] : [pair[1], pair[0]];
-              const x1 = l.x + CARD.w / 2 + 1;
-              const x2 = r.x - CARD.w / 2 - 1;
-              if (x2 <= x1) return null;
+              const geom = coupleBarGeometry(
+                couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
+                couple.partnerIds,
+                couple.cy,
+              );
+              if (!mark || !geom?.showBar) return null;
               const [a, b] = mark.partnerIds.map((id) => tree.people.find((person) => person.id === id));
               return (
                 <button
                   key={`${couple.id}-unlink`}
                   type="button"
                   className="sky-unlink"
+                  data-couple={couple.id}
                   data-mark="couple"
                   data-partners={mark.partnerIds.join(" ")}
                   aria-label={`Unlink ${displayName(a ?? { givenName: "this couple", id: "", createdAt: "", updatedAt: "" })} and ${displayName(b ?? { givenName: "them", id: "", createdAt: "", updatedAt: "" })}`}
-                  style={{ left: (x1 + x2) / 2 - 22, top: couple.cy - 22 }}
+                  style={{ left: geom.unlink.left, top: geom.unlink.top }}
                   onClick={(event) => {
                     event.stopPropagation();
                     releaseUnlink(mark);
@@ -1067,7 +1121,7 @@ export function FamilySky({
 
         <SkyLabels
           ref={labelsRef}
-          sky={view}
+          sky={sky}
           focusUnit={focusUnit}
           onPick={(bucket) => {
             if (!suppressTap.current) zoomToBucket(bucket);
@@ -1128,7 +1182,7 @@ export function FamilySky({
   );
 }
 
-type LabelsHandle = { update: (cam: Camera, level: ZoomLevel, vw: number) => void; reset: () => void };
+type LabelsHandle = { update: (cam: Camera, level: ZoomLevel, vw: number) => void; reset: () => void; nudge: () => void };
 
 type LabelsProps = { sky: FamilySkyLayout; focusUnit?: string; onPick: (bucket: SkyBucket) => void };
 
@@ -1161,7 +1215,9 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
       const w = widths.current.get(id);
       if (!bucket || w === undefined) continue;
       const at = labelAnchor(bucket, level);
-      const sx = cam.x + at.x * cam.s;
+      // During a glide the label's left is the moving anchor; otherwise it matches `at`.
+      const worldX = el.style.left ? parseFloat(el.style.left) : at.x;
+      const sx = cam.x + worldX * cam.s;
       // On screen: nudge inside the edges. Off screen: hide, rather than show a clipped stub.
       let dx = 0;
       const onScreen = sx > 0 && sx < vw;
@@ -1191,6 +1247,7 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
       reset() {
         last.current = null;
       },
+      nudge,
     }),
     [sky],
   );
@@ -1217,6 +1274,7 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
             type="button"
             className={`sky-label${bucket.id === focusUnit ? " is-lit" : ""}`}
             data-unit-id={bucket.id}
+            data-level={state.level}
             style={{ left: at.x, top: at.y }}
             aria-label={`${bucket.label} family, ${bucket.memberIds.length} ${bucket.memberIds.length === 1 ? "person" : "people"}. Zoom in`}
             onClick={(event) => {
