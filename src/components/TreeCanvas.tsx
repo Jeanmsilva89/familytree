@@ -7,6 +7,7 @@ import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue, type Gra
 import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
 import { PERSONAL_MAP_MS, graphFromPersonalMap, layoutPersonalMap, morphGraph, placesMatch, type PersonalMap } from "@/lib/personalMap";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
+import { commitUnlink, coupleUnlinkMark } from "@/lib/skyUnlink";
 import { LinkRolePicker } from "./LinkRolePicker";
 
 type Port = "parent" | "partner" | "child";
@@ -488,22 +489,13 @@ export function TreeCanvas({
 
   async function unlinkKin(childId: string, parentIds: string[]) {
     if (!onUnlink || !parentIds.length) return;
-    const child = tree.people.find((p) => p.id === childId);
-    const parent = tree.people.find((p) => p.id === parentIds[0]);
-    if (!confirm(`Remove the parent link from ${displayName(parent ?? { givenName: "this person", id: "", createdAt: "", updatedAt: "" })} to ${displayName(child ?? { givenName: "this person", id: "", createdAt: "", updatedAt: "" })}?`)) {
-      return;
-    }
-    await onUnlink(childId, parentIds[0], "parent");
+    await commitUnlink(tree.people, { mark: "fork", kind: "blood", parentId: parentIds[0], childId }, onUnlink);
   }
 
   async function unlinkCouple(partnerIds: string[]) {
-    if (!onUnlink || partnerIds.length < 2) return;
-    const a = tree.people.find((p) => p.id === partnerIds[0]);
-    const b = tree.people.find((p) => p.id === partnerIds[1]);
-    if (!confirm(`Unlink ${displayName(a ?? { givenName: "this couple", id: "", createdAt: "", updatedAt: "" })} and ${displayName(b ?? { givenName: "them", id: "", createdAt: "", updatedAt: "" })} as partners?`)) {
-      return;
-    }
-    await onUnlink(partnerIds[0], partnerIds[1], "partner");
+    const mark = coupleUnlinkMark(partnerIds);
+    if (!onUnlink || !mark) return;
+    await commitUnlink(tree.people, mark, onUnlink);
   }
 
   return (

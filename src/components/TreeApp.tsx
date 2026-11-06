@@ -358,6 +358,7 @@ export function TreeApp() {
               hold={Boolean(sheetPerson)}
               editMode={graphEdit}
               onLink={treeState.link}
+              onUnlink={treeState.unlink}
               onMoveToUnit={(personId, unitRootId) => treeState.familyUnit(personId, { unitOf: unitRootId })}
             />
           ) : (

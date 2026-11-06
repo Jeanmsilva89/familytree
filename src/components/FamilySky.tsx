@@ -30,6 +30,14 @@ import {
 } from "@/lib/familySky";
 import { routePersonLink } from "@/lib/familySkyRoute";
 import type { UnitLinkKind } from "@/lib/familyUnits";
+import {
+  commitUnlink,
+  coupleUnlinkMark,
+  curveUnlinkMark,
+  forkUnlinkMark,
+  skyUnlinkEnabled,
+  type SkyUnlinkMark,
+} from "@/lib/skyUnlink";
 import { LinkRolePicker } from "./LinkRolePicker";
 
 type Props = {
@@ -41,9 +49,11 @@ type Props = {
   lineFilter?: LineFilter;
   /** While true (say, a sheet covers the sky), keep showing the last layout; the change glides in afterwards. */
   hold?: boolean;
-  /** Edit in place: drag a dot onto someone to link them, drag a person into another family to move them. */
+  /** Edit in place: drag a dot onto someone to link them, drag a person into another family to move them, tap a line to unlink. */
   editMode?: boolean;
   onLink?: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole, kin?: KinKind) => void | Promise<void>;
+  /** Same unlink handler as the classic graph. */
+  onUnlink?: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => void | Promise<void>;
   /** Move a person into the family unit rooted at `unitRootId`. */
   onMoveToUnit?: (personId: string, unitRootId: string) => void | Promise<void>;
 };
@@ -97,6 +107,7 @@ export function FamilySky({
   hold = false,
   editMode = false,
   onLink,
+  onUnlink,
   onMoveToUnit,
 }: Props) {
   // The sky is a pure function of the tree. A selected person (outside edit mode)
@@ -481,7 +492,7 @@ export function FamilySky({
   }
 
   /** Edit mode, close up: start a wire from a dot, or pick up a person. Returns true when handled. */
-  function editPointerDown(event: PointerEvent<HTMLDivElement>, target: HTMLElement) {
+  function editPointerDown(event: PointerEvent<HTMLDivElement>, target: Element) {
     if (!editMode || levelRef.current !== "near" || pointers.current.size > 0) return false;
     const portEl = target.closest(".graph-port") as HTMLElement | null;
     if (portEl && onLink) {
@@ -590,8 +601,10 @@ export function FamilySky({
   }
 
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
-    const target = event.target as HTMLElement;
-    if (editPointerDown(event, target)) {
+    const target = event.target instanceof Element ? event.target : null;
+    // A tap on a relationship mark is an unlink, not a pan or a carry.
+    if (editMode && target?.closest(".graph-hit, .sky-unlink")) return;
+    if (target && editPointerDown(event, target)) {
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       return;
     }
@@ -609,9 +622,9 @@ export function FamilySky({
       pinch.current = dist < 8 ? null : { ...viewRef.current, dist, midX: (a.x + b.x) / 2, midY: (a.y + b.y) / 2 };
       return;
     }
-    if (target.closest(".graph-zoom")) return;
+    if (target?.closest(".graph-zoom")) return;
     // Capturing on a button would retarget its click to the stage.
-    if (!target.closest(".portrait-card, .sky-avatar, .sky-label")) stageRef.current?.setPointerCapture(event.pointerId);
+    if (!target?.closest(".portrait-card, .sky-avatar, .sky-label")) stageRef.current?.setPointerCapture(event.pointerId);
     drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, vx: viewRef.current.x, vy: viewRef.current.y };
   }
 
@@ -666,6 +679,11 @@ export function FamilySky({
     else onHighlight(person);
   }
 
+  function releaseUnlink(mark: SkyUnlinkMark) {
+    if (!onUnlink) return;
+    void commitUnlink(tree.people, mark, onUnlink);
+  }
+
   function linkStyle(kind: UnitLinkKind, lit: boolean) {
     const quiet = kind !== "blood";
     if (lit) return { width: 2.4, opacity: 0.92 };
@@ -685,6 +703,7 @@ export function FamilySky({
   const near = level === "near";
   const mid = level === "mid";
   const far = level === "far";
+  const unlinkArmed = skyUnlinkEnabled(editMode, level) && Boolean(onUnlink);
   const peopleCount = tree.people.length;
 
   const viewCardOf = view === sky ? cardOf : new Map(view.cards.map((c) => [c.id, c]));
@@ -756,19 +775,40 @@ export function FamilySky({
                 .map(({ link, lit }) => {
                   if (!allows(lineFilter, link.kind)) return null;
                   const w = linkStyle(link.kind, lit);
+                  const d = piecesPath(near ? link.pieces : link.midPieces);
+                  const mark = unlinkArmed ? curveUnlinkMark(link) : null;
                   return (
-                    <path
-                      key={link.id}
-                      className={`sky-link is-${link.kind}${lit ? " is-lit" : ""}`}
-                      data-from={link.fromPersonId}
-                      data-to={link.toPersonId}
-                      d={piecesPath(near ? link.pieces : link.midPieces)}
-                      strokeWidth={w.width}
-                      strokeOpacity={w.opacity}
-                      strokeDasharray={DASH[link.kind]}
-                      strokeLinecap="round"
-                      vectorEffect="non-scaling-stroke"
-                    />
+                    <g key={link.id}>
+                      <path
+                        className={`sky-link is-${link.kind}${lit ? " is-lit" : ""}`}
+                        data-from={link.fromPersonId}
+                        data-to={link.toPersonId}
+                        d={d}
+                        strokeWidth={w.width}
+                        strokeOpacity={w.opacity}
+                        strokeDasharray={DASH[link.kind]}
+                        strokeLinecap="round"
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      {mark ? (
+                        <path
+                          className="graph-hit"
+                          data-mark="curve"
+                          data-kind={link.kind}
+                          data-from={link.fromPersonId}
+                          data-to={link.toPersonId}
+                          d={d}
+                          fill="none"
+                          stroke="transparent"
+                          strokeWidth={18}
+                          vectorEffect="non-scaling-stroke"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            releaseUnlink(mark);
+                          }}
+                        />
+                      ) : null}
+                    </g>
                   );
                 })
             : null}
@@ -822,7 +862,33 @@ export function FamilySky({
                       </text>
                     ) : null}
                     {railR - railL > 6 ? seg("rail", railL, fork.railY, railR, fork.railY) : null}
-                    {kids.map((d) => seg(`c-${d.childId}`, d.x, fork.railY, d.x, d.y1, kinLine(d.kin, lit, false)))}
+                    {kids.map((d) => {
+                      const mark = unlinkArmed ? forkUnlinkMark(fork, d) : null;
+                      return (
+                        <g key={`c-${d.childId}`}>
+                          {seg(`c-${d.childId}`, d.x, fork.railY, d.x, d.y1, kinLine(d.kin, lit, false))}
+                          {mark ? (
+                            <line
+                              className="graph-hit"
+                              data-mark="fork"
+                              data-kind={mark.kind}
+                              data-parent={mark.parentId}
+                              data-child={mark.childId}
+                              x1={d.x}
+                              y1={fork.railY}
+                              x2={d.x}
+                              y2={d.y1}
+                              stroke="transparent"
+                              strokeWidth={18}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                releaseUnlink(mark);
+                              }}
+                            />
+                          ) : null}
+                        </g>
+                      );
+                    })}
                   </g>
                 );
               })
@@ -971,6 +1037,34 @@ export function FamilySky({
               })
           : null}
 
+        {unlinkArmed && (near || personal) && lineFilterAllowsCouples(lineFilter)
+          ? view.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
+              const mark = coupleUnlinkMark(couple.partnerIds);
+              const pair = couple.partnerIds.map((id) => viewCardOf.get(id)).filter(Boolean) as typeof view.cards;
+              if (!mark || pair.length < 2) return null;
+              const [l, r] = pair[0].x < pair[1].x ? [pair[0], pair[1]] : [pair[1], pair[0]];
+              const x1 = l.x + CARD.w / 2 + 1;
+              const x2 = r.x - CARD.w / 2 - 1;
+              if (x2 <= x1) return null;
+              const [a, b] = mark.partnerIds.map((id) => tree.people.find((person) => person.id === id));
+              return (
+                <button
+                  key={`${couple.id}-unlink`}
+                  type="button"
+                  className="sky-unlink"
+                  data-mark="couple"
+                  data-partners={mark.partnerIds.join(" ")}
+                  aria-label={`Unlink ${displayName(a ?? { givenName: "this couple", id: "", createdAt: "", updatedAt: "" })} and ${displayName(b ?? { givenName: "them", id: "", createdAt: "", updatedAt: "" })}`}
+                  style={{ left: (x1 + x2) / 2 - 22, top: couple.cy - 22 }}
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    releaseUnlink(mark);
+                  }}
+                />
+              );
+            })
+          : null}
+
         <SkyLabels
           ref={labelsRef}
           sky={view}
@@ -985,7 +1079,7 @@ export function FamilySky({
       {editMode ? (
         <p className="graph-edit-hint sky-edit-hint">
           {near
-            ? "Drag a dot onto someone to link them. Drag a person to another family to move them."
+            ? "Drag a dot onto someone to link them. Drag a person to another family to move them. Tap a line to remove it."
             : "Zoom in on a family to edit it."}
         </p>
       ) : null}
