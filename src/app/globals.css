@@ -1483,3 +1483,36 @@ html[data-theme="dark"] .generated-avatar {
 @media (max-width: 719px) {
   .family-sky .sky-edit-hint { bottom: calc(66px + var(--safe-bottom)); font-size: 0.82rem; }
 }
+.portrait-card,
+.sky-avatar {
+  -webkit-touch-callout: none;
+}
+.person-hold-menu {
+  position: fixed;
+  z-index: 40;
+  display: grid;
+  gap: 4px;
+  width: 188px;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--card);
+  box-shadow: var(--shadow);
+}
+.person-hold-menu button {
+  appearance: none;
+  min-height: 40px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.person-hold-menu button:hover,
+.person-hold-menu button:focus-visible {
+  background: color-mix(in srgb, var(--accent) 22%, var(--card));
+}

@@ -8,6 +8,8 @@ import { GeneratedAvatar } from "./GeneratedAvatar";
 import { centerTransform, fitContentScale, superellipsePath, type Camera } from "@/lib/graphView";
 import { skyFromPersonalMap } from "@/lib/familySkyFocus";
 import { PERSONAL_MAP_MS, layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
+import { gatheredPersonId } from "@/lib/personInteraction";
+import { usePersonInteraction } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
 import {
   SKY_ZOOM,
@@ -112,12 +114,18 @@ export function FamilySky({
   onMoveToUnit,
   onPlace,
 }: Props) {
-  // The sky is a pure function of the tree. A selected person (outside edit mode)
-  // gathers that same sky into their personal map; `from` is only the previous picture.
+  const interaction = usePersonInteraction({
+    people: tree.people,
+    selectedId: highlightedId,
+    editMode,
+    onSelect: onHighlight,
+    onOpen,
+  });
   const baseSky = useMemo(() => layoutFamilySky(tree, routePersonLink), [tree]);
+  const gatheredId = gatheredPersonId(interaction.focus, editMode);
   const personal = useMemo(
-    () => (editMode || !highlightedId ? null : layoutPersonalMap(tree, highlightedId)),
-    [editMode, highlightedId, tree],
+    () => (gatheredId ? layoutPersonalMap(tree, gatheredId) : null),
+    [gatheredId, tree],
   );
   const targetSky = useMemo(
     () => (personal ? skyFromPersonalMap(baseSky, tree, personal) : baseSky),
@@ -752,6 +760,7 @@ export function FamilySky({
     if (pointers.current.size >= 2) {
       drag.current = null;
       suppressTap.current = true;
+      interaction.cancelHold();
       stageRef.current?.setPointerCapture(event.pointerId);
       const pts = [...pointers.current.values()];
       const a = stagePoint(pts[0].x, pts[0].y);
@@ -808,13 +817,16 @@ export function FamilySky({
     const v = viewRef.current;
     const bucket = bucketAt(sky, (pt.x - v.x) / v.s, (pt.y - v.y) / v.s, v.s);
     if (bucket && levelRef.current !== "near") zoomToBucket(bucket);
-    else onHighlight(undefined);
+    else interaction.clear();
   }
 
   function tapCard(person: Person) {
-    if (suppressTap.current) return;
-    if (highlightedId === person.id) onOpen(person);
-    else onHighlight(person);
+    if (suppressTap.current) {
+      suppressTap.current = false;
+      interaction.dropSwallow();
+      return;
+    }
+    interaction.tap(person.id);
   }
 
   function releaseUnlink(mark: SkyUnlinkMark) {
@@ -1105,6 +1117,7 @@ export function FamilySky({
                     event.stopPropagation();
                     tapCard(card.person);
                   }}
+                  {...interaction.bindPerson(card.id)}
                   aria-pressed={selected}
                 >
                   {photo ? (
@@ -1135,10 +1148,15 @@ export function FamilySky({
                   aria-label={`${displayName(card.person)}. Zoom in`}
                   onClick={(event) => {
                     event.stopPropagation();
-                    if (suppressTap.current) return;
-                    onHighlight(card.person);
+                    if (suppressTap.current) {
+                      suppressTap.current = false;
+                      interaction.dropSwallow();
+                      return;
+                    }
+                    interaction.selectOnly(card.id);
                     zoomToPerson(card.id);
                   }}
+                  {...interaction.bindPerson(card.id)}
                 >
                   {photo ? (
                     <img src={photo} alt="" />
@@ -1259,7 +1277,7 @@ export function FamilySky({
           onClick={() => {
             if (personal) {
               refitAfter.current = true;
-              onHighlight(undefined);
+              interaction.clear();
               return;
             }
             fitAll(true);
@@ -1268,6 +1286,7 @@ export function FamilySky({
           ⌂
         </button>
       </div>
+      {interaction.menu}
     </div>
   );
 }

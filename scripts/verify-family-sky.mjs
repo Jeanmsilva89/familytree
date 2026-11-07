@@ -8,11 +8,8 @@
  * person-to-person link does not cross an unrelated family's background, and
  * that a reload draws the same stars. In Families Edit mode, close up, a
  * horizontal drag along a row nudges that person and the nudge is still
- * there after a reload. On the classic graph (Families off),
- * a first tap gathers that fixture person's family into a personal map and
- * clearing the selection restores the tree. On the Families lens, the same
- * first tap gathers that person inside the sky, and empty space or All families
- * restores the sky. In Families Edit mode, close up, tapping Ada Fixture's
+ * there after a reload. Gather family, not a tap, enters a personal map.
+ * In Families Edit mode, close up, tapping Ada Fixture's
  * link to Eli Fixture removes that parent link, and tapping Nia Fixture's
  * couple bar asks before unlinking her from Pal Fixture. Runs at desktop
  * 1280x800 and phone 390x844.
@@ -128,7 +125,21 @@ function samePlaces(before, after, viewport) {
   for (const card of before) {
     const next = byId.get(card.id);
     if (!next || Math.abs(next.left - card.left) > 1.5 || Math.abs(next.top - card.top) > 1.5) {
-      fail(`${viewport.name}: tree layout did not return (${card.id})`);
+      fail(`${viewport.name}: tree layout did not return (${card.id} left ${card.left} -> ${next?.left} top ${card.top} -> ${next?.top})`);
+    }
+  }
+}
+
+function sharedPlaces(before, after, viewport, requiredIds) {
+  const byId = new Map(after.map((card) => [card.id, card]));
+  for (const id of requiredIds) {
+    if (!byId.has(id)) fail(`${viewport.name}: ${id} left the layout`);
+  }
+  for (const card of before) {
+    const next = byId.get(card.id);
+    if (!next) continue;
+    if (Math.abs(next.left - card.left) > 1.5 || Math.abs(next.top - card.top) > 1.5) {
+      fail(`${viewport.name}: layout moved (${card.id} left ${card.left} -> ${next.left} top ${card.top} -> ${next.top})`);
     }
   }
 }
@@ -152,6 +163,60 @@ async function tapEmptyGraph(page, viewport) {
   await page.locator(".graph-stage:not(.family-sky)").click({ position: point });
 }
 
+async function cardPoint(locator) {
+  const box = await locator.boundingBox();
+  if (!box) return null;
+  return { x: box.x + box.width / 2, y: box.y + Math.min(36, box.height / 2) };
+}
+
+async function holdCard(page, locator, viewport) {
+  const point = await cardPoint(locator);
+  if (!point) fail(`${viewport.name}: no card to hold`);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.waitForTimeout(680);
+  await page.mouse.up();
+  const menu = page.getByRole("menu");
+  await menu.waitFor({ timeout: 2000 });
+  await page.locator('[role="menu"][data-ready="true"]').waitFor({ timeout: 2000 });
+  return menu;
+}
+
+async function dragCard(page, locator, viewport) {
+  const point = await cardPoint(locator);
+  if (!point) fail(`${viewport.name}: no card to drag`);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + 36, point.y, { steps: 8 });
+  await page.waitForTimeout(80);
+  await page.mouse.up();
+  await page.waitForTimeout(80);
+  if (viewport.name !== "phone") return;
+  await page.evaluate((point) => {
+    const target = document.elementFromPoint(point.x, point.y);
+    if (!(target instanceof Element)) return;
+    const eventAt = (type, x) => {
+      target.dispatchEvent(new PointerEvent(type, {
+        bubbles: true,
+        cancelable: true,
+        pointerId: 7,
+        pointerType: "touch",
+        isPrimary: true,
+        clientX: x,
+        clientY: point.y,
+      }));
+    };
+    eventAt("pointerdown", point.x);
+    eventAt("pointermove", point.x + 42);
+    eventAt("pointerup", point.x + 42);
+  }, point);
+  await page.waitForTimeout(680);
+}
+
+async function assertNoMenu(page, viewport, why) {
+  if (await page.getByRole("menu").count()) fail(`${viewport.name}: ${why}`);
+}
+
 async function runPersonalMap(page, viewport, shot) {
   await turnFamiliesOff(page);
   await waitMapSettled(page);
@@ -162,6 +227,39 @@ async function runPersonalMap(page, viewport, shot) {
   const eli = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-eli"]');
   await eli.click();
   if (await page.getByRole("dialog").count()) fail(`${viewport.name}: first tap opened edit`);
+  await page.waitForTimeout(250);
+  if ((await page.locator('.graph-stage:not(.family-sky)').getAttribute("data-layout")) !== "tree") {
+    fail(`${viewport.name}: a tap rearranged the tree`);
+  }
+  samePlaces(before, await graphCards(page), viewport);
+  await assertNoMenu(page, viewport, "a tap opened the hold menu");
+
+  await eli.focus();
+  await page.keyboard.press("Shift+F10");
+  const keyed = page.getByRole("menu");
+  await keyed.waitFor({ timeout: 2000 });
+  await page.locator('[role="menu"][data-ready="true"]').waitFor({ timeout: 2000 });
+  samePlaces(before, await graphCards(page), viewport);
+  await page.keyboard.press("Escape");
+  await keyed.waitFor({ state: "detached" });
+  samePlaces(before, await graphCards(page), viewport);
+
+  await dragCard(page, eli, viewport);
+  await assertNoMenu(page, viewport, "a drag opened the hold menu");
+  if ((await page.locator('.graph-stage:not(.family-sky)').getAttribute("data-layout")) !== "tree") {
+    fail(`${viewport.name}: a drag gathered the tree`);
+  }
+  samePlaces(before, await graphCards(page), viewport);
+
+  const menu = await holdCard(page, eli, viewport);
+  samePlaces(before, await graphCards(page), viewport);
+  await page.screenshot({ path: shot("menu") });
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "detached" });
+  samePlaces(before, await graphCards(page), viewport);
+
+  const gathering = await holdCard(page, eli, viewport);
+  await gathering.getByRole("menuitem", { name: "Gather family" }).click();
   await page.locator('.graph-stage[data-layout="personal"]').waitFor();
 
   const samples = [];
@@ -217,7 +315,8 @@ async function runPersonalMap(page, viewport, shot) {
   await waitMapSettled(page);
   samePlaces(before, await graphCards(page), viewport);
 
-  await eli.click();
+  const again = await holdCard(page, eli, viewport);
+  await again.getByRole("menuitem", { name: "Gather family" }).click();
   await page.locator('.graph-stage[data-layout="personal"]').waitFor();
   await waitMapSettled(page);
   await page.getByRole("button", { name: "Recenter" }).click();
@@ -228,8 +327,10 @@ async function runPersonalMap(page, viewport, shot) {
 
   const cora = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-cora"]');
   await cora.click();
-  await page.locator('.graph-stage[data-layout="personal"]').waitFor();
-  await waitMapSettled(page);
+  await page.waitForTimeout(200);
+  if ((await page.locator('.graph-stage:not(.family-sky)').getAttribute("data-layout")) !== "tree") {
+    fail(`${viewport.name}: a tap on a second person rearranged the tree`);
+  }
   await cora.click();
   const sheet = page.getByRole("dialog");
   await sheet.waitFor();
@@ -321,6 +422,40 @@ async function runFamilyPersonalMap(page, viewport) {
 
   await eli.click();
   if (await page.getByRole("dialog").count()) fail(`${viewport.name}: first Families tap opened edit`);
+  await page.waitForTimeout(250);
+  if ((await page.locator(".family-sky").getAttribute("data-layout")) !== "sky") {
+    fail(`${viewport.name}: a tap rearranged the family sky`);
+  }
+  samePlaces(before, await skyCards(page), viewport);
+  await assertNoMenu(page, viewport, "a Families tap opened the hold menu");
+
+  await eli.focus();
+  await page.keyboard.press("Shift+F10");
+  const keyed = page.getByRole("menu");
+  await keyed.waitFor({ timeout: 2000 });
+  await page.locator('[role="menu"][data-ready="true"]').waitFor({ timeout: 2000 });
+  samePlaces(before, await skyCards(page), viewport);
+  await page.keyboard.press("Escape");
+  await keyed.waitFor({ state: "detached" });
+  samePlaces(before, await skyCards(page), viewport);
+
+  await dragCard(page, eli, viewport);
+  await assertNoMenu(page, viewport, "a Families drag opened the hold menu");
+  if ((await page.locator(".family-sky").getAttribute("data-layout")) !== "sky") {
+    fail(`${viewport.name}: a drag gathered the family sky`);
+  }
+  sharedPlaces(before, await skyCards(page), viewport, ["fx-eli", "fx-dee"]);
+  const resting = await skyCards(page);
+
+  const menu = await holdCard(page, eli, viewport);
+  samePlaces(resting, await skyCards(page), viewport);
+  await page.screenshot({ path: shot("menu") });
+  await page.keyboard.press("Escape");
+  await menu.waitFor({ state: "detached" });
+  samePlaces(resting, await skyCards(page), viewport);
+
+  const gathering = await holdCard(page, eli, viewport);
+  await gathering.getByRole("menuitem", { name: "Gather family" }).click();
   await page.locator('.family-sky[data-layout="personal"]').waitFor();
 
   const samples = [];
@@ -387,10 +522,11 @@ async function runFamilyPersonalMap(page, viewport) {
   await tapEmptySky(page, viewport);
   await page.locator('.family-sky[data-layout="sky"]').waitFor();
   await waitSkySettled(page);
-  samePlaces(before, await skyCards(page), viewport);
+  samePlaces(resting, await skyCards(page), viewport);
   await page.screenshot({ path: shot("after") });
 
-  await eli.click();
+  const again = await holdCard(page, eli, viewport);
+  await again.getByRole("menuitem", { name: "Gather family" }).click();
   await page.locator('.family-sky[data-layout="personal"]').waitFor();
   await waitSkySettled(page);
   await page.getByRole("button", { name: "All families" }).click();
@@ -399,8 +535,10 @@ async function runFamilyPersonalMap(page, viewport) {
 
   const cora = await revealSkyPerson(page, viewport, "fx-cora");
   await cora.click();
-  await page.locator('.family-sky[data-layout="personal"]').waitFor();
-  await waitSkySettled(page);
+  await page.waitForTimeout(200);
+  if ((await page.locator(".family-sky").getAttribute("data-layout")) !== "sky") {
+    fail(`${viewport.name}: a tap on a second person rearranged the family sky`);
+  }
   await cora.click();
   const sheet = page.getByRole("dialog");
   await sheet.waitFor();
