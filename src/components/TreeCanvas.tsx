@@ -7,6 +7,8 @@ import { CARD, ageLabel, buildGraph, lineageIds, type GraphLayout } from "@/lib/
 import { GeneratedAvatar } from "./GeneratedAvatar";
 import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
 import { PERSONAL_MAP_MS, graphFromPersonalMap, layoutPersonalMap, morphGraph, placesMatch, type PersonalMap } from "@/lib/personalMap";
+import { gatheredPersonId } from "@/lib/personInteraction";
+import { usePersonInteraction } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
 import { commitUnlink, coupleUnlinkMark } from "@/lib/skyUnlink";
 import { LinkRolePicker } from "./LinkRolePicker";
@@ -24,8 +26,7 @@ type Props = {
   onUnlink?: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => void | Promise<void>;
   onPlace?: (personId: string, x: number) => void | Promise<void>;
   lineFilter?: LineFilter;
-  /** Gather the selected person's family into a personal map. Off for the related-tree modal, which keeps a highlight for its root. */
-  egoLayout?: boolean;
+  canGather?: boolean;
 };
 
 type View = { x: number; y: number; s: number };
@@ -61,13 +62,22 @@ export function TreeCanvas({
   onUnlink,
   onPlace,
   lineFilter = DEFAULT_LINE_FILTER,
-  egoLayout = true,
+  canGather = true,
 }: Props) {
+  const interaction = usePersonInteraction({
+    people: tree.people,
+    selectedId: highlightedId,
+    editMode,
+    canGather,
+    onSelect: onHighlight,
+    onOpen,
+  });
   const householdHint = tree.focusPersonId;
   const baseLayout = useMemo(() => buildGraph(tree, householdHint), [tree, householdHint]);
+  const gatheredId = gatheredPersonId(interaction.focus, editMode);
   const personal = useMemo(
-    () => (egoLayout && !editMode && highlightedId ? layoutPersonalMap(tree, highlightedId) : null),
-    [egoLayout, editMode, highlightedId, tree],
+    () => (canGather && gatheredId ? layoutPersonalMap(tree, gatheredId) : null),
+    [canGather, gatheredId, tree],
   );
   const targetLayout = useMemo(
     () => (personal ? graphFromPersonalMap(tree, personal) : baseLayout),
@@ -296,9 +306,12 @@ export function TreeCanvas({
   }, []);
 
   function tapCard(person: Person) {
-    if (suppressTap.current) return;
-    if (highlightedId === person.id) onOpen(person);
-    else onHighlight(person);
+    if (suppressTap.current) {
+      suppressTap.current = false;
+      interaction.dropSwallow();
+      return;
+    }
+    interaction.tap(person.id);
   }
 
   function activePoints() {
@@ -367,6 +380,7 @@ export function TreeCanvas({
     if (pointers.current.size >= 2) {
       drag.current = null;
       suppressTap.current = true;
+      interaction.cancelHold();
       stopViewTween();
       stageRef.current?.setPointerCapture(event.pointerId);
       pinch.current = pinchSnapshot();
@@ -448,7 +462,7 @@ export function TreeCanvas({
       const moved = Math.abs(event.clientX - start.x) + Math.abs(event.clientY - start.y);
       drag.current = null;
       if (moved < 8 && !suppressTap.current && !(event.target as HTMLElement).closest(".portrait-card, .graph-zoom, .graph-pick")) {
-        onHighlight(undefined);
+        interaction.clear();
         setPartnerPick(null);
       }
     }
@@ -804,6 +818,7 @@ export function TreeCanvas({
                 event.stopPropagation();
                 tapCard(card.person);
               }}
+              {...interaction.bindPerson(card.person.id)}
               aria-pressed={selected}
             >
               {photo ? <img className="portrait-photo" src={photo} alt="" /> : (
@@ -888,8 +903,8 @@ export function TreeCanvas({
           className="icon-btn"
           aria-label="Recenter"
           onClick={() => {
-            if (personal && highlightedId) {
-              onHighlight(undefined);
+            if (personal) {
+              interaction.clear();
               return;
             }
             frameOf(baseLayout, null, true);
@@ -898,6 +913,7 @@ export function TreeCanvas({
           ⌂
         </button>
       </div>
+      {interaction.menu}
     </div>
   );
 }

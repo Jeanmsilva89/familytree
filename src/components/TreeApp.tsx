@@ -376,7 +376,7 @@ export function TreeApp() {
               onUnlink={treeState.unlink}
               onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
               lineFilter={lineFilter}
-              egoLayout
+              canGather
             />
           )}
           {graphAddName != null ? (
@@ -450,7 +450,7 @@ export function TreeApp() {
             onLink={treeState.link}
             onUnlink={treeState.unlink}
             lineFilter={lineFilter}
-            egoLayout={false}
+            canGather={false}
           />
         </div>
       ) : null}
