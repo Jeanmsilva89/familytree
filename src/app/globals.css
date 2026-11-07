@@ -1381,7 +1381,7 @@ html[data-theme="dark"] .portrait-card .swatch {
   transform: translate(calc(var(--dx, 0px) * var(--glide-u, 0)), calc(var(--dy, 0px) * var(--glide-u, 0))) translate(-50%, -50%) scale(max(1, calc(var(--inv) * 0.7)));
 }
 /* Personal-map glide: one variable on the world moves every card. React stays on the destination layout. */
-.family-sky[data-animating="true"] .portrait-card:not(.is-carried),
+.family-sky[data-animating="true"] .portrait-card:not(.is-carried):not(.is-placing),
 .family-sky[data-animating="true"] .sky-avatar {
   transform: translate(calc(var(--dx, 0px) * var(--glide-u, 0)), calc(var(--dy, 0px) * var(--glide-u, 0)));
 }
@@ -1403,6 +1403,10 @@ html[data-theme="dark"] .portrait-card .swatch {
   cursor: pointer;
 }
 .family-sky.is-editing .portrait-card { cursor: grab; touch-action: none; }
+.family-sky .portrait-card.is-placing {
+  z-index: 6;
+  cursor: grabbing;
+}
 .family-sky .portrait-card.is-carried {
   z-index: 7;
   cursor: grabbing;

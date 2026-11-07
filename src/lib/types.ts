@@ -65,8 +65,13 @@ export type Person = {
   photo?: string;
   /** Free-form facts beyond genealogy (occupation, notes, nicknames, …). */
   extras?: ExtraField[];
-  /** Manual graph x after auto-layout, set by dragging in edit mode. */
+  /** Manual graph x after auto-layout, set by dragging in the classic view. */
   graphX?: number;
+  /**
+   * Pixels to the right of this person's automatic place on their family-sky
+   * row. The classic graph ignores it. Absent means the automatic place.
+   */
+  rowNudge?: number;
   createdAt: string;
   updatedAt: string;
 };

@@ -8,6 +8,7 @@ import {
   layoutFamilySky,
   morphSky,
   overviewZoom,
+  rowGesture,
   visibleBuckets,
   legibleLabels,
   skyBounds,
@@ -23,6 +24,20 @@ import type { ChildLink, Person, TreeData, Union } from "./types";
 
 function inside(b: FamilySky["buckets"][number], x: number, y: number) {
   return Math.pow(Math.abs(x - b.cx) / b.rx, b.n) + Math.pow(Math.abs(y - b.cy) / b.ry, b.n) <= 1.0001;
+}
+
+function nudge(tree: TreeData, byId: Record<string, number>): TreeData {
+  return {
+    ...tree,
+    people: tree.people.map((person) => (person.id in byId ? { ...person, rowNudge: byId[person.id] } : person)),
+  };
+}
+
+function skyPlaces(sky: FamilySky) {
+  return {
+    cards: sky.cards.map((card) => [card.id, card.x, card.y, card.unitId]),
+    buckets: sky.buckets.map((bucket) => [bucket.id, bucket.cx, bucket.cy, bucket.memberIds.join(" ")]),
+  };
 }
 
 function assertNoOverlap(sky: FamilySky) {
@@ -307,6 +322,136 @@ function pointOnCurve(q: Curve, t: number) {
   };
 }
 
+describe("family sky row nudges (FIXTURE trees)", () => {
+  const baseTree = FIXTURE_MATERNAL_FAMILY;
+
+  it("keeps a classic graph place from moving the sky", () => {
+    const base = layoutFamilySky(baseTree);
+    const dad = base.cards.find((card) => card.id === fuId("dad"))!;
+    const stained: TreeData = {
+      ...baseTree,
+      people: baseTree.people.map((person) => (person.id === dad.id ? { ...person, graphX: 4000 } : person)),
+    };
+    assert.deepEqual(skyPlaces(layoutFamilySky(stained)), skyPlaces(base));
+  });
+
+  it("slides a person along an open row and leaves everyone else's place and every bucket alone", () => {
+    const before = JSON.stringify(baseTree);
+    const base = layoutFamilySky(baseTree);
+    const dad = base.cards.find((card) => card.id === fuId("dad"))!;
+    const sky = layoutFamilySky(nudge(baseTree, { [dad.id]: 36 }));
+    assert.equal(JSON.stringify(baseTree), before);
+    const moved = sky.cards.find((card) => card.id === dad.id)!;
+    const home = sky.buckets.find((bucket) => bucket.id === dad.unitId)!;
+    assert.equal(moved.x, dad.x + 36);
+    assert.equal(moved.y, dad.y);
+    assert.equal(moved.unitId, dad.unitId);
+    assert.ok(inside(home, moved.x, moved.y + CARD.h / 2));
+    for (const card of sky.cards) {
+      if (card.id === dad.id) continue;
+      const prior = base.cards.find((item) => item.id === card.id)!;
+      assert.equal(card.x, prior.x);
+      assert.equal(card.y, prior.y);
+      assert.equal(card.unitId, prior.unitId);
+    }
+    assert.deepEqual(
+      sky.buckets.map((bucket) => [bucket.id, bucket.cx, bucket.cy, bucket.memberIds.join(" ")]),
+      base.buckets.map((bucket) => [bucket.id, bucket.cx, bucket.cy, bucket.memberIds.join(" ")]),
+    );
+    const drop = sky.forks.flatMap((fork) => fork.parentDrops).find((item) => item.parentId === dad.id);
+    if (drop) assert.equal(drop.x, moved.x);
+  });
+
+  it("does not slide someone into the person beside them", () => {
+    const base = layoutFamilySky(baseTree);
+    const grandma = base.cards.find((card) => card.id === fuId("grandma"))!;
+    const grandpa = base.cards.find((card) => card.id === fuId("grandpa"))!;
+    const sky = layoutFamilySky(nudge(baseTree, { [grandma.id]: 10 }));
+    const next = sky.cards.find((card) => card.id === grandma.id)!;
+    const partner = sky.cards.find((card) => card.id === grandpa.id)!;
+    assert.equal(next.x, grandma.x);
+    assert.equal(next.y, grandma.y);
+    assert.equal(partner.x, grandpa.x);
+    assert.ok(Math.abs(next.x - partner.x) >= CARD.w);
+  });
+
+  it("moves someone past the person beside them onto that side of the row", () => {
+    const base = layoutFamilySky(baseTree);
+    const grandma = base.cards.find((card) => card.id === fuId("grandma"))!;
+    const grandpa = base.cards.find((card) => card.id === fuId("grandpa"))!;
+    const sky = layoutFamilySky(nudge(baseTree, { [grandma.id]: grandpa.x - grandma.x + 20 }));
+    const next = sky.cards.find((card) => card.id === grandma.id)!;
+    const partner = sky.cards.find((card) => card.id === grandpa.id)!;
+    const home = sky.buckets.find((bucket) => bucket.id === grandma.unitId)!;
+    assert.equal(next.y, grandma.y);
+    assert.equal(partner.y, grandpa.y);
+    assert.equal(next.unitId, grandma.unitId);
+    assert.equal(partner.unitId, grandpa.unitId);
+    assert.ok(next.x > partner.x);
+    assert.equal(partner.x, grandma.x);
+    assert.equal(home.cx, base.buckets.find((bucket) => bucket.id === home.id)!.cx);
+    assert.equal(home.cy, base.buckets.find((bucket) => bucket.id === home.id)!.cy);
+    assert.deepEqual(home.memberIds, base.buckets.find((bucket) => bucket.id === home.id)!.memberIds);
+    for (const card of [next, partner]) {
+      for (const [x, y] of [
+        [card.x - CARD.w / 2, card.y],
+        [card.x + CARD.w / 2, card.y],
+        [card.x - CARD.w / 2, card.y + CARD.h],
+        [card.x + CARD.w / 2, card.y + CARD.h],
+      ]) {
+        assert.ok(inside(home, x, y), `${card.person.givenName} stays inside the family`);
+      }
+    }
+    const couple = sky.couples.find((item) => item.partnerIds.includes(grandma.id) && item.partnerIds.includes(grandpa.id));
+    assert.ok(couple);
+    assert.equal(couple.cx, (next.x + partner.x) / 2);
+    const drop = sky.forks.flatMap((fork) => fork.parentDrops).find((item) => item.parentId === grandma.id);
+    if (drop) assert.equal(drop.x, next.x);
+  });
+
+  it("keeps a huge nudge inside the family without moving the bucket", () => {
+    const base = layoutFamilySky(baseTree);
+    const dad = base.cards.find((card) => card.id === fuId("dad"))!;
+    const sky = layoutFamilySky(nudge(baseTree, { [dad.id]: 5000 }));
+    const moved = sky.cards.find((card) => card.id === dad.id)!;
+    const home = sky.buckets.find((bucket) => bucket.id === dad.unitId)!;
+    const prior = base.buckets.find((bucket) => bucket.id === home.id)!;
+    assert.ok(moved.x > dad.x);
+    assert.ok(moved.x < dad.x + 5000);
+    assert.equal(moved.y, dad.y);
+    assert.equal(home.cx, prior.cx);
+    assert.equal(home.cy, prior.cy);
+    assert.deepEqual(home.memberIds, prior.memberIds);
+    for (const [x, y] of [
+      [moved.x - CARD.w / 2, moved.y],
+      [moved.x + CARD.w / 2, moved.y],
+      [moved.x - CARD.w / 2, moved.y + CARD.h],
+      [moved.x + CARD.w / 2, moved.y + CARD.h],
+    ]) {
+      assert.ok(inside(home, x, y));
+    }
+  });
+
+  it("ignores a nudge that is not a real offset", () => {
+    const base = layoutFamilySky(baseTree);
+    const dad = base.cards.find((card) => card.id === fuId("dad"))!;
+    const sky = layoutFamilySky(nudge(baseTree, { [dad.id]: Number.NaN }));
+    assert.equal(sky.cards.find((card) => card.id === dad.id)!.x, dad.x);
+  });
+});
+
+describe("family sky edit drag", () => {
+  it("places a horizontal drag that stays in the family, and carries a drag into another family", () => {
+    assert.equal(rowGesture("pending", { dx: 2, dy: 1 }, false), "pending");
+    assert.equal(rowGesture("pending", { dx: 12, dy: 3 }, false), "place");
+    assert.equal(rowGesture("pending", { dx: 3, dy: 14 }, false), "carry");
+    assert.equal(rowGesture("pending", { dx: 20, dy: 0 }, true), "carry");
+    assert.equal(rowGesture("place", { dx: 30, dy: 4 }, false), "place");
+    assert.equal(rowGesture("place", { dx: 30, dy: 4 }, true), "carry");
+    assert.equal(rowGesture("carry", { dx: 40, dy: 0 }, false), "carry");
+  });
+});
+
 describe("family sky stability (FIXTURE trees)", () => {
   const moveJoe = (tree: TreeData): TreeData => ({
     ...tree,
@@ -340,6 +485,25 @@ describe("family sky stability (FIXTURE trees)", () => {
       after.buckets.map((bucket) => [bucket.cx, bucket.cy]),
       layoutFamilySky(structuredClone(edited)).buckets.map((bucket) => [bucket.cx, bucket.cy]),
     );
+  });
+
+  it("the same saved row nudges lay out the same after a reload", () => {
+    const base = layoutFamilySky(FIXTURE_MATERNAL_FAMILY);
+    const at = (sky: FamilySky, id: string) => sky.cards.find((card) => card.id === fuId(id))!;
+    const grandma = at(base, "grandma");
+    const grandpa = at(base, "grandpa");
+    const dad = at(base, "dad");
+    const edited = nudge(FIXTURE_MATERNAL_FAMILY, {
+      [dad.id]: 36,
+      [grandma.id]: grandpa.x - grandma.x + 20,
+    });
+    const once = layoutFamilySky(edited);
+    const twice = layoutFamilySky(structuredClone(edited));
+    assert.deepEqual(once, twice);
+    assert.equal(at(once, "dad").x, dad.x + 36);
+    assert.equal(at(once, "dad").y, dad.y);
+    assert.ok(at(once, "grandma").x > at(once, "grandpa").x);
+    assert.equal(at(once, "grandpa").x, grandma.x);
   });
 
   it("morphSky glides people and buckets from the old layout to the new", () => {

@@ -1,5 +1,5 @@
 import type { TreeData } from "./types";
-import { CARD, type LaidCard, type LaidCouple, type LaidFork } from "./layout";
+import { CARD, showsCoupleBar, type GraphLayout, type LaidCard, type LaidCouple, type LaidFork } from "./layout";
 import { buildGraph } from "./layoutGraph";
 import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type JoinReason, type UnitLinkKind } from "./familyUnits";
 import type { Camera } from "./graphView";
@@ -150,6 +150,7 @@ function unitTree(tree: TreeData, unit: FamilyUnit, via: Record<string, JoinReas
   const brought = broughtByOverride(unit, via);
   const people = tree.people
     .filter((p) => inside.has(p.id))
+    // graphX is the classic graph's absolute place. It must not size or move a bucket.
     .map((p) => ({ ...p, graphX: undefined }));
   const unions = tree.unions
     .map((u) => ({ ...u, partnerIds: u.partnerIds.filter((id) => inside.has(id)) }))
@@ -163,6 +164,141 @@ function unitTree(tree: TreeData, unit: FamilyUnit, via: Record<string, JoinReas
     .filter((l) => l.parentIds.length > 0)
     .map((l) => (l.unionId && !unions.some((u) => u.id === l.unionId) ? { ...l, unionId: undefined } : l));
   return { people, unions, childLinks, focusPersonId: unit.rootId };
+}
+
+type BucketFrame = { cx: number; cy: number; rx: number; ry: number; n: number };
+
+function finiteNudge(person: { rowNudge?: number }) {
+  const nudge = person.rowNudge;
+  return typeof nudge === "number" && Number.isFinite(nudge) ? nudge : 0;
+}
+
+function cardFits(frame: BucketFrame, x: number, y: number) {
+  const corners = [
+    [x - CARD.w / 2, y],
+    [x + CARD.w / 2, y],
+    [x - CARD.w / 2, y + CARD.h],
+    [x + CARD.w / 2, y + CARD.h],
+  ];
+  return corners.every(
+    ([px, py]) =>
+      Math.pow(Math.abs(px - frame.cx) / frame.rx, frame.n) + Math.pow(Math.abs(py - frame.cy) / frame.ry, frame.n) <= 1,
+  );
+}
+
+/** The furthest x from `fromX` toward `wantX` that still sits inside the family. */
+function clampToFrame(frame: BucketFrame, y: number, fromX: number, wantX: number) {
+  if (cardFits(frame, wantX, y)) return wantX;
+  let lo = fromX;
+  let hi = wantX;
+  for (let i = 0; i < 28; i++) {
+    const mid = (lo + hi) / 2;
+    if (cardFits(frame, mid, y)) lo = mid;
+    else hi = mid;
+  }
+  return lo;
+}
+
+/**
+ * Apply saved row nudges after the buckets are placed.
+ * A nudge slides someone along their own row. Passing the person beside
+ * them exchanges those two automatic places. It does not change the row,
+ * the family, or where the family sits.
+ */
+function applyRowNudges(graph: GraphLayout, frame: BucketFrame) {
+  const rows = new Map<number, LaidCard[]>();
+  for (const card of graph.cards) {
+    const row = rows.get(card.y);
+    if (row) row.push(card);
+    else rows.set(card.y, [card]);
+  }
+  let moved = false;
+  for (const row of rows.values()) {
+    if (!row.some((card) => finiteNudge(card.person))) continue;
+    const auto = new Map(row.map((card) => [card.id, card.x]));
+    const desired = (card: LaidCard) => auto.get(card.id)! + finiteNudge(card.person);
+    const byId = (a: LaidCard, b: LaidCard) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+    const byDesired = [...row].sort((a, b) => desired(a) - desired(b) || auto.get(a.id)! - auto.get(b.id)! || byId(a, b));
+    const byAuto = [...row].sort((a, b) => auto.get(a.id)! - auto.get(b.id)! || byId(a, b));
+    const reordered = byDesired.some((card, index) => card.id !== byAuto[index].id);
+    const next = new Map<string, number>();
+    if (reordered) {
+      const slots = byAuto.map((card) => auto.get(card.id)!);
+      byDesired.forEach((card, index) => next.set(card.id, slots[index]));
+    } else {
+      for (const card of row) {
+        const origin = auto.get(card.id)!;
+        let x = origin + finiteNudge(card.person);
+        const left = byAuto.filter((other) => auto.get(other.id)! < origin).at(-1);
+        const right = byAuto.find((other) => auto.get(other.id)! > origin);
+        if (left) x = Math.max(x, auto.get(left.id)! + (origin - auto.get(left.id)!));
+        if (right) x = Math.min(x, auto.get(right.id)! - (auto.get(right.id)! - origin));
+        next.set(card.id, clampToFrame(frame, card.y, origin, x));
+      }
+    }
+    for (const card of row) {
+      const x = next.get(card.id)!;
+      if (x !== card.x) {
+        card.x = x;
+        moved = true;
+      }
+    }
+  }
+  if (moved) retieUnit(graph);
+}
+
+/** Parent lines and couple bars follow cards that slid along the row. */
+function retieUnit(graph: GraphLayout) {
+  const byId = new Map(graph.cards.map((card) => [card.id, card]));
+  for (const couple of graph.couples) {
+    const partners = couple.partnerIds.map((id) => byId.get(id)).filter((card): card is LaidCard => Boolean(card));
+    if (partners.length < 2) continue;
+    const left = partners.reduce((a, b) => (a.x < b.x ? a : b));
+    const right = partners.reduce((a, b) => (a.x > b.x ? a : b));
+    const together = right.x - left.x <= CARD.w + CARD.coupleGap + 0.51;
+    couple.cx = (left.x + right.x) / 2;
+    couple.cy = left.y + CARD.h * 0.5;
+    couple.bar = together && showsCoupleBar(couple.kind, partners.length);
+  }
+  for (const fork of graph.forks) {
+    for (const drop of fork.parentDrops) {
+      const card = byId.get(drop.parentId);
+      if (card) drop.x = card.x;
+    }
+    for (const drop of fork.childDrops) {
+      const card = byId.get(drop.childId);
+      if (card) drop.x = card.x;
+    }
+    const parentXs = fork.parentDrops.map((drop) => drop.x);
+    const childXs = fork.childDrops.map((drop) => drop.x);
+    if (!parentXs.length) continue;
+    const stemX = parentXs.reduce((sum, x) => sum + x, 0) / parentXs.length;
+    fork.joinLeft = Math.min(...parentXs);
+    fork.joinRight = Math.max(...parentXs);
+    fork.stemX = stemX;
+    fork.railLeft = Math.min(...childXs, stemX);
+    fork.railRight = Math.max(...childXs, stemX);
+  }
+}
+
+export type RowGesture = "pending" | "place" | "carry";
+
+/**
+ * What an edit drag on a sky card is doing.
+ * Along the row it places. Into another family, or mostly up and down, it carries.
+ */
+export function rowGesture(
+  mode: RowGesture,
+  movement: { dx: number; dy: number },
+  overForeignBucket: boolean,
+): RowGesture {
+  if (mode === "carry") return "carry";
+  const travel = Math.abs(movement.dx) + Math.abs(movement.dy);
+  if (overForeignBucket && (mode === "place" || travel > 4)) return "carry";
+  if (mode === "place") return "place";
+  if (travel <= 4) return "pending";
+  if (Math.abs(movement.dx) >= Math.abs(movement.dy)) return "place";
+  return "carry";
 }
 
 function shiftFork(fork: LaidFork, dx: number, dy: number, unitId: string): SkyFork {
@@ -570,6 +706,13 @@ export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = 
     const node = nodes[i];
     const localCx = (l.minX + l.maxX) / 2;
     const localCy = (l.minY + l.maxY) / 2;
+    applyRowNudges(l.graph, {
+      cx: localCx,
+      cy: localCy - LABEL_ROOM / 2,
+      rx: l.shape.rx,
+      ry: l.shape.ry,
+      n: l.shape.n,
+    });
     const dx = node.x - localCx;
     // Content sits below centre, leaving the label strip on top.
     const dy = node.y - localCy + LABEL_ROOM / 2;

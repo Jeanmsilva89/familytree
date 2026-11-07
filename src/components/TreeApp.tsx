@@ -327,13 +327,15 @@ export function TreeApp() {
             >
               Add person
             </button>
-            {treeState.tree.people.some((person) => typeof person.graphX === "number") ? (
+            {treeState.tree.people.some((person) => typeof person.graphX === "number" || typeof person.rowNudge === "number") ? (
               <button
                 type="button"
                 className="btn"
                 onClick={() => {
                   for (const person of treeState.tree.people) {
-                    if (typeof person.graphX === "number") void treeState.edit(person.id, { graphX: undefined });
+                    if (typeof person.graphX === "number" || typeof person.rowNudge === "number") {
+                      void treeState.edit(person.id, { graphX: undefined, rowNudge: undefined });
+                    }
                   }
                 }}
               >
@@ -360,6 +362,7 @@ export function TreeApp() {
               onLink={treeState.link}
               onUnlink={treeState.unlink}
               onMoveToUnit={(personId, unitRootId) => treeState.familyUnit(personId, { unitOf: unitRootId })}
+              onPlace={(id, x) => treeState.edit(id, { rowNudge: Math.round(x) })}
             />
           ) : (
             <TreeCanvas
