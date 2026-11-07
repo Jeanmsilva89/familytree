@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
-import { CARD, ageLabel, buildGraph, initialsOf, lineageIds, swatchHue, type GraphLayout } from "@/lib/layout";
+import { CARD, ageLabel, buildGraph, lineageIds, type GraphLayout } from "@/lib/layout";
+import { GeneratedAvatar } from "./GeneratedAvatar";
 import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
 import { PERSONAL_MAP_MS, graphFromPersonalMap, layoutPersonalMap, morphGraph, placesMatch, type PersonalMap } from "@/lib/personalMap";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
@@ -806,9 +807,7 @@ export function TreeCanvas({
               aria-pressed={selected}
             >
               {photo ? <img className="portrait-photo" src={photo} alt="" /> : (
-                <span className="swatch" style={{ ["--swatch-hue" as string]: String(swatchHue(card.person)) }} aria-hidden>
-                  {initialsOf(card.person)}
-                </span>
+                <GeneratedAvatar person={card.person} className="swatch" />
               )}
               <span className="identity">
                 <strong title={displayName(card.person)}>{card.person.givenName || displayName(card.person)}</strong>

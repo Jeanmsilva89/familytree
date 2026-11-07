@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { Person, TreeData } from "@/lib/types";
-import { displayName, initials } from "@/lib/types";
+import { displayName } from "@/lib/types";
+import { GeneratedAvatar } from "./GeneratedAvatar";
 import { scrollFieldIntoSheet, useBodyScrollLock } from "@/hooks/useVisualViewport";
 
 type Props = {
@@ -66,7 +67,7 @@ export function PeopleList({ tree, title = "Everyone", excludeId, embedded, onPi
           <li key={person.id}>
             <button type="button" className="people-row" onClick={() => onPick(person)}>
               <span className="avatar" aria-hidden>
-                {person.photo ? <img src={person.photo} alt="" /> : initials(person)}
+                {person.photo ? <img src={person.photo} alt="" /> : <GeneratedAvatar person={person} />}
               </span>
               <span>{displayName(person)}</span>
             </button>

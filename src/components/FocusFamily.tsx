@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { LinkRole, Person, TreeData, UnionKind } from "@/lib/types";
-import { ageFromBirthDate, displayName, initials } from "@/lib/types";
+import { ageFromBirthDate, displayName } from "@/lib/types";
+import { GeneratedAvatar } from "./GeneratedAvatar";
 import { buildGenerationLanes, type GenerationGroup, type GenerationLane } from "@/lib/generations";
 import { highlightedCoupleIds } from "@/lib/graphView";
 import { parentsOf, unionsFor } from "@/lib/tree";
@@ -40,7 +41,7 @@ function SatAvatar({ person, onFocus }: { person: Person; onFocus: () => void })
   return (
     <button type="button" className="focus-sat" onClick={onFocus} aria-label={`Focus ${label}`}>
       <span className="focus-sat-face" aria-hidden>
-        {person.photo ? <img src={person.photo} alt="" /> : initials(person)}
+        {person.photo ? <img src={person.photo} alt="" /> : <GeneratedAvatar person={person} />}
       </span>
     </button>
   );
@@ -57,7 +58,7 @@ function PersonChip({ person, focused, flash, parents, partner, onFocus, onOpen,
   const article = (
       <article className={cls} data-person-id={person.id}>
         <button type="button" className="focus-face" onClick={onFocus} aria-label={`Focus ${label}`}>
-          <span className="avatar" aria-hidden>{person.photo ? <img src={person.photo} alt="" /> : initials(person)}</span>
+          <span className="avatar" aria-hidden>{person.photo ? <img src={person.photo} alt="" /> : <GeneratedAvatar person={person} />}</span>
           <span className="focus-name">{label}</span>
           {age ? <span className="hint">{age}</span> : null}
         </button>

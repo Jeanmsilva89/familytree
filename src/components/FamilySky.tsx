@@ -3,7 +3,8 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
-import { CARD, ageLabel, initialsOf, lineageIds, swatchHue } from "@/lib/layout";
+import { CARD, ageLabel, lineageIds } from "@/lib/layout";
+import { GeneratedAvatar } from "./GeneratedAvatar";
 import { centerTransform, fitContentScale, superellipsePath, type Camera } from "@/lib/graphView";
 import { skyFromPersonalMap } from "@/lib/familySkyFocus";
 import { PERSONAL_MAP_MS, layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
@@ -1109,9 +1110,7 @@ export function FamilySky({
                   {photo ? (
                     <img className="portrait-photo" src={photo} alt="" />
                   ) : (
-                    <span className="swatch" style={{ ["--swatch-hue" as string]: String(swatchHue(card.person)) }} aria-hidden>
-                      {initialsOf(card.person)}
-                    </span>
+                    <GeneratedAvatar person={card.person} className="swatch" />
                   )}
                   <span className="identity">
                     <strong title={displayName(card.person)}>{card.person.givenName || displayName(card.person)}</strong>
@@ -1144,7 +1143,7 @@ export function FamilySky({
                   {photo ? (
                     <img src={photo} alt="" />
                   ) : (
-                    <span style={{ ["--swatch-hue" as string]: String(swatchHue(card.person)) }}>{initialsOf(card.person)}</span>
+                    <GeneratedAvatar person={card.person} />
                   )}
                   <em>{card.person.givenName}</em>
                 </button>
