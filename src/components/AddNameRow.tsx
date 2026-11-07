@@ -2,7 +2,8 @@
 
 import { FormEvent, useId, useMemo, useState, type KeyboardEvent } from "react";
 import type { Person } from "@/lib/types";
-import { displayName, initials, matchPeople } from "@/lib/types";
+import { displayName, matchPeople } from "@/lib/types";
+import { GeneratedAvatar } from "./GeneratedAvatar";
 
 type SuggestProps = {
   id?: string;
@@ -88,7 +89,7 @@ export function NameAutocomplete({
                 onClick={() => onPick?.(person)}
               >
                 <span className="avatar" aria-hidden>
-                  {person.photo ? <img src={person.photo} alt="" /> : initials(person)}
+                  {person.photo ? <img src={person.photo} alt="" /> : <GeneratedAvatar person={person} />}
                 </span>
                 <span>{displayName(person)}</span>
               </button>

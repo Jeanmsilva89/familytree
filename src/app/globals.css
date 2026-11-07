@@ -895,6 +895,7 @@ select {
   display: grid;
   place-items: center;
   border-radius: 50%;
+  overflow: hidden;
   font-weight: 700;
   letter-spacing: 0.04em;
   font-size: 0.95rem;
@@ -912,6 +913,64 @@ html[data-theme="dark"] .portrait-card .swatch {
     color: #fff;
     background: hsl(var(--swatch-hue, 80) 18% 32%);
   }
+}
+
+/* Generated portrait: same circle as the swatch, with a quiet id-stable mark. */
+.generated-avatar {
+  --avatar-base: hsl(var(--swatch-hue, 80) 22% 74%);
+  --avatar-lift: hsl(var(--swatch-hue, 80) 34% 90%);
+  --avatar-rim: hsl(var(--swatch-hue, 80) 24% 40%);
+  --avatar-ink: var(--ink);
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  border-radius: 50%;
+  background: var(--avatar-base);
+  color: var(--avatar-ink);
+}
+.generated-avatar svg { display: block; width: 100%; height: 100%; }
+.generated-avatar .avatar-base { fill: var(--avatar-base); }
+.generated-avatar .avatar-lift { fill: var(--avatar-lift); }
+.generated-avatar .avatar-arc {
+  fill: none;
+  stroke: var(--avatar-rim);
+  stroke-width: 2.25;
+  stroke-linecap: round;
+}
+.generated-avatar .avatar-initials {
+  fill: var(--avatar-ink);
+  font-family: inherit;
+  paint-order: stroke;
+  stroke: var(--avatar-base);
+  stroke-width: 2px;
+  stroke-linejoin: round;
+}
+html[data-theme="dark"] .generated-avatar {
+  --avatar-base: hsl(var(--swatch-hue, 80) 18% 28%);
+  --avatar-lift: hsl(var(--swatch-hue, 80) 26% 42%);
+  --avatar-rim: hsl(var(--swatch-hue, 80) 32% 68%);
+  --avatar-ink: #fff;
+}
+@media (prefers-color-scheme: dark) {
+  html:not([data-theme="light"]) .generated-avatar {
+    --avatar-base: hsl(var(--swatch-hue, 80) 18% 28%);
+    --avatar-lift: hsl(var(--swatch-hue, 80) 26% 42%);
+    --avatar-rim: hsl(var(--swatch-hue, 80) 32% 68%);
+    --avatar-ink: #fff;
+  }
+}
+.portrait-card .swatch.generated-avatar {
+  display: block;
+  background: var(--avatar-base);
+  color: var(--avatar-ink);
+}
+.avatar > .generated-avatar,
+.focus-sat-face > .generated-avatar {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  height: auto;
 }
 
 .portrait-card .identity {
@@ -1292,6 +1351,13 @@ html[data-theme="dark"] .portrait-card .swatch {
   font-weight: 700;
   color: #fff;
   background: hsl(var(--swatch-hue, 80) 18% 32%);
+}
+.sky-avatar span.generated-avatar {
+  display: block;
+  overflow: hidden;
+  padding: 0;
+  background: var(--avatar-base);
+  color: var(--avatar-ink);
 }
 .sky-avatar em {
   position: absolute;
