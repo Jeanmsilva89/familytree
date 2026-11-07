@@ -6,7 +6,9 @@
  * out to the star view, taps a star, and moves fixture people between family
  * units. Also checks a step-parent bucket, a partnerless move, that a
  * person-to-person link does not cross an unrelated family's background, and
- * that a reload draws the same stars. On the classic graph (Families off),
+ * that a reload draws the same stars. In Families Edit mode, close up, a
+ * horizontal drag along a row nudges that person and the nudge is still
+ * there after a reload. On the classic graph (Families off),
  * a first tap gathers that fixture person's family into a personal map and
  * clearing the selection restores the tree. On the Families lens, the same
  * first tap gathers that person inside the sky, and empty space or All families
@@ -702,6 +704,89 @@ async function enterEdit(page, viewport) {
  * and a couple bar asks with the classic partner question before it unlinks.
  * Outside Edit, the same tap does not remove anyone.
  */
+/**
+ * Families Edit, close up: drag Fay Fixture along her row. The nudge is saved
+ * and she is still sitting there after a reload. She stays in Dee's family.
+ */
+async function runSkyPlace(page, viewport) {
+  const fayCard = '.portrait-card[data-person-id="fx-fay"]';
+  await revealSkyPerson(page, viewport, "fx-fay");
+  await enterEdit(page, viewport);
+  const point = await bringMarkOnScreen(page, fayCard);
+  if (!point) fail(`${viewport.name}: Fay Fixture is not on screen at close zoom`);
+  const before = (await skyCards(page)).find((card) => card.id === "fx-fay");
+  const box = await page.locator(fayCard).boundingBox();
+  const stage = await page.locator(".family-sky").boundingBox();
+  if (!before || !box || !stage) fail(`${viewport.name}: Fay Fixture is not on her row`);
+  const scale = await page.evaluate(() => {
+    const world = document.querySelector(".sky-world");
+    const value = world ? getComputedStyle(world).transform : "none";
+    const match = /matrix\(([^)]+)\)/.exec(value);
+    const n = match ? Number(match[1].split(",")[0]) : 1;
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  });
+  const centerX = point.x;
+  const centerY = point.y;
+  const roomRight = stage.x + stage.width - centerX;
+  const roomLeft = centerX - stage.x;
+  const dir = roomRight >= 36 ? 1 : -1;
+  const screenDelta = Math.min(40 * scale, (dir > 0 ? roomRight : roomLeft) - 20);
+  if (screenDelta < 16) fail(`${viewport.name}: Fay Fixture is too close to the screen edge to nudge`);
+  await page.mouse.move(centerX, centerY);
+  await page.mouse.down();
+  await page.mouse.move(centerX + dir * screenDelta, centerY, { steps: 12 });
+  await page.mouse.up();
+  try {
+    await page.waitForFunction(async (sign) => {
+      const tree = await new Promise((resolve, reject) => {
+        const request = indexedDB.open("familytree");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const get = db.transaction("tree", "readonly").objectStore("tree").get("living");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+      });
+      const fay = tree.people.find((person) => person.id === "fx-fay");
+      return typeof fay?.rowNudge === "number" && Math.sign(fay.rowNudge) === sign;
+    }, dir);
+  } catch {
+    fail(`${viewport.name}: dragging Fay Fixture along her row did not save a place`);
+  }
+  await waitSkySettled(page);
+  const after = (await skyCards(page)).find((card) => card.id === "fx-fay");
+  if (!after) fail(`${viewport.name}: Fay Fixture left the sky after the nudge`);
+  if (Math.sign(after.left - before.left) !== dir) {
+    fail(`${viewport.name}: Fay Fixture did not sit at the nudged place (${before.left} -> ${after.left})`);
+  }
+  if (after.top !== before.top) fail(`${viewport.name}: the nudge moved Fay Fixture off her row`);
+  const members = await page.locator('.sky-bucket[data-members~="fx-fay"]').getAttribute("data-members");
+  if (!members?.split(" ").includes("fx-dee") || !members.split(" ").includes("fx-rex")) {
+    fail(`${viewport.name}: the nudge moved Fay Fixture out of Dee's family (${members})`);
+  }
+  await page.screenshot({ path: path.join(outDir, `family-sky-${viewport.name}-placed.png`) });
+  const nudgedLeft = after.left;
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /menu/i }).waitFor({ timeout: 20000 });
+  await page.getByText("Looking at Ada").waitFor();
+  await openVisualize(page);
+  await turnFamiliesOn(page, viewport);
+  await revealSkyPerson(page, viewport, "fx-fay");
+  await waitSkySettled(page);
+  const restored = (await skyCards(page)).find((card) => card.id === "fx-fay");
+  if (!restored || Math.abs(restored.left - nudgedLeft) > 0.5 || restored.top !== after.top) {
+    fail(`${viewport.name}: Fay Fixture's nudge did not survive reload (${nudgedLeft} -> ${restored?.left})`);
+  }
+  const saved = await readTree(page);
+  const fay = saved.people.find((person) => person.id === "fx-fay");
+  if (typeof fay?.rowNudge !== "number" || Math.sign(fay.rowNudge) !== dir) {
+    fail(`${viewport.name}: Fay Fixture's saved place was missing after reload`);
+  }
+  console.log(`${viewport.name}: edit mode nudged Fay along her row and kept it after reload`);
+}
+
 async function runSkyUnlink(page, viewport) {
   const parentSelector = '.sky-link[data-from="fx-ada"][data-to="fx-eli"]';
   const point = await zoomNearOn(page, viewport, parentSelector);
@@ -959,8 +1044,9 @@ async function runViewport(browser, viewport) {
     if (JSON.stringify(beforeReload) !== JSON.stringify(afterReload)) {
       fail(`${viewport.name}: star positions changed after reload`);
     }
+    await runSkyPlace(page, viewport);
     await runSkyUnlink(page, viewport);
-    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, and unlink passed`);
+    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, place, and unlink passed`);
   } catch (error) {
     await page.screenshot({ path: shot("failed") }).catch(() => undefined);
     throw error;

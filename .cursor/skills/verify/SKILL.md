@@ -43,9 +43,11 @@ Screenshots: `family-sky-personal-<size>-focused.png`, `family-sky-personal-<siz
 
 After the reload check, still on the Families lens:
 
-18. Zoom in close (`data-level="near"`) on the curve from Ada Fixture to Eli Fixture. Before Edit, that curve is not an unlink target: tapping it does not ask, and the parent link stays in IndexedDB.
-19. Turn on Edit. Tap that same curve. Confirm "Remove the parent link from Ada Fixture to Eli Fixture?". The curve disappears. IndexedDB no longer lists Ada as Eli's parent. Ben is still Eli's parent. Ada Fixture is still on the tree.
-20. Zoom in on Nia Fixture and Pal Fixture. Tap their couple bar. The confirm says "Unlink Nia Fixture and Pal Fixture as partners?". Dismissing it leaves the union. Accepting it removes the union and leaves both people on the tree.
+18. Zoom in close (`data-level="near"`) on Fay Fixture. Turn on Edit. Drag her horizontally along her row. She stays on that row, in Dee Fixture's family. IndexedDB stores her `rowNudge`. Reload, open Families again, and confirm she still sits at that nudged place.
+
+19. Zoom in close (`data-level="near"`) on the curve from Ada Fixture to Eli Fixture. Before Edit, that curve is not an unlink target: tapping it does not ask, and the parent link stays in IndexedDB.
+20. Turn on Edit. Tap that same curve. Confirm "Remove the parent link from Ada Fixture to Eli Fixture?". The curve disappears. IndexedDB no longer lists Ada as Eli's parent. Ben is still Eli's parent. Ada Fixture is still on the tree.
+21. Zoom in on Nia Fixture and Pal Fixture. Tap their couple bar. The confirm says "Unlink Nia Fixture and Pal Fixture as partners?". Dismissing it leaves the union. Accepting it removes the union and leaves both people on the tree.
 
 Screenshot: `family-sky-<size>-unlinked.png`.
 
@@ -57,6 +59,7 @@ Screenshots, one set per size:
 - `family-sky-<size>-zoomed.png`
 - `family-sky-<size>-unit.png`
 - `family-sky-<size>-row.png` — Rex on Dee's row, after the move
+- `family-sky-<size>-placed.png` — Fay nudged along her row in Edit
 - `family-sky-<size>-unlinked.png` — after Ada Fixture's link to Eli Fixture is removed in Edit
 
 `<size>` is `desktop` or `phone`.

@@ -15,6 +15,7 @@ import {
   cameraToFit,
   layoutFamilySky,
   overviewZoom,
+  rowGesture,
   visibleBuckets,
   labelAnchor,
   legibleLabels,
@@ -23,7 +24,9 @@ import {
   zoomLevel,
   type Box,
   type FamilySky as FamilySkyLayout,
+  type RowGesture,
   type SkyBucket,
+  type SkyCard,
   type ZoomLevel,
 } from "@/lib/familySky";
 import { coupleBarGeometry, curvesPath, forkGuides, glideMotion } from "@/lib/skyGlide";
@@ -56,6 +59,8 @@ type Props = {
   onUnlink?: (personId: string, otherId: string, role: Exclude<LinkRole, "sibling">) => void | Promise<void>;
   /** Move a person into the family unit rooted at `unitRootId`. */
   onMoveToUnit?: (personId: string, unitRootId: string) => void | Promise<void>;
+  /** Persist a place along the family row. `x` is pixels to the right of the automatic place. */
+  onPlace?: (personId: string, x: number) => void | Promise<void>;
 };
 
 type Port = "parent" | "partner" | "child";
@@ -104,6 +109,7 @@ export function FamilySky({
   onLink,
   onUnlink,
   onMoveToUnit,
+  onPlace,
 }: Props) {
   // The sky is a pure function of the tree. A selected person (outside edit mode)
   // gathers that same sky into their personal map; `from` is only the previous picture.
@@ -165,6 +171,16 @@ export function FamilySky({
   const [wire, setWire] = useState<{ x1: number; y1: number; x2: number; y2: number } | null>(null);
   const carry = useRef<{ id: string; pointerId: number; x: number; y: number; dx: number; dy: number } | null>(null);
   const [carried, setCarried] = useState<{ id: string; x: number; y: number; over?: string } | null>(null);
+  const gesture = useRef<{
+    id: string;
+    pointerId: number;
+    x: number;
+    y: number;
+    originX: number;
+    placeX: number;
+    mode: RowGesture;
+  } | null>(null);
+  const [placing, setPlacing] = useState<{ id: string; x: number } | null>(null);
   const [pick, setPick] = useState<{ fromId: string; toId: string } | null>(null);
   // While carrying a person or a wire near the screen edge, the sky pans along.
   const followAfterDrop = useRef<string | null>(null);
@@ -540,6 +556,12 @@ export function FamilySky({
     return sky.cards.find((c) => Math.abs(wx - c.x) <= CARD.w / 2 + 8 && wy >= c.y - 8 && wy <= c.y + CARD.h + 8);
   }
 
+  function shownPoint(card: SkyCard) {
+    if (carried?.id === card.id) return { x: carried.x, y: carried.y };
+    if (placing?.id === card.id) return { x: placing.x, y: card.y };
+    return { x: card.x, y: card.y };
+  }
+
   /** Edit mode, close up: start a wire from a dot, or pick up a person. Returns true when handled. */
   function editPointerDown(event: PointerEvent<HTMLDivElement>, target: Element) {
     if (!editMode || levelRef.current !== "near" || pointers.current.size > 0) return false;
@@ -559,13 +581,20 @@ export function FamilySky({
       return true;
     }
     const cardEl = target.closest(".portrait-card") as HTMLElement | null;
-    if (cardEl && onMoveToUnit) {
+    if (cardEl && (onPlace || onMoveToUnit)) {
       const id = cardEl.dataset.personId;
       const card = id ? cardOf.get(id) : undefined;
       if (!id || !card) return false;
       stageRef.current?.setPointerCapture(event.pointerId);
-      const pt = worldPoint(event.clientX, event.clientY);
-      carry.current = { id, pointerId: event.pointerId, x: event.clientX, y: event.clientY, dx: pt.x - card.x, dy: pt.y - card.y };
+      gesture.current = {
+        id,
+        pointerId: event.pointerId,
+        x: event.clientX,
+        y: event.clientY,
+        originX: card.x,
+        placeX: card.x,
+        mode: "pending",
+      };
       suppressTap.current = false;
       return true;
     }
@@ -603,11 +632,47 @@ export function FamilySky({
     pan.raf = window.requestAnimationFrame(edgePanStep);
   }
 
+  function beginCarry(id: string, pointerId: number, clientX: number, clientY: number) {
+    if (carry.current?.pointerId === pointerId) return;
+    const card = cardOf.get(id);
+    if (!card) return;
+    const pt = worldPoint(clientX, clientY);
+    const at = shownPoint(card);
+    carry.current = { id, pointerId, x: clientX, y: clientY, dx: pt.x - at.x, dy: pt.y - at.y };
+    setPlacing(null);
+  }
+
   function editPointerMove(event: PointerEvent<HTMLDivElement>) {
+    const g = gesture.current;
+    if (g && g.pointerId === event.pointerId) {
+      const scale = viewRef.current.s || 1;
+      const dx = (event.clientX - g.x) / scale;
+      const dy = (event.clientY - g.y) / scale;
+      const pt = worldPoint(event.clientX, event.clientY);
+      const over = bucketAt(sky, pt.x, pt.y, scale)?.id;
+      const home = cardOf.get(g.id)?.unitId;
+      let next = rowGesture(g.mode, { dx, dy }, Boolean(over && home && over !== home));
+      if (next === "place" && !onPlace) next = "carry";
+      g.mode = next;
+      if (next === "pending") return true;
+      suppressTap.current = true;
+      if (next === "place") {
+        carry.current = null;
+        setCarried(null);
+        g.placeX = g.originX + dx;
+        setPlacing({ id: g.id, x: g.placeX });
+        return true;
+      }
+      beginCarry(g.id, event.pointerId, event.clientX, event.clientY);
+      trackEdit(event.clientX, event.clientY);
+      edgePan.current.clientX = event.clientX;
+      edgePan.current.clientY = event.clientY;
+      if (edgePan.current.raf == null) edgePan.current.raf = window.requestAnimationFrame(edgePanStep);
+      return true;
+    }
     const c = carry.current;
     const mine = (connect.current && connect.current.pointerId === event.pointerId) || (c && c.pointerId === event.pointerId);
     if (!mine) return false;
-    if (c && !suppressTap.current && Math.abs(event.clientX - c.x) + Math.abs(event.clientY - c.y) < 6) return true;
     if (c) suppressTap.current = true;
     trackEdit(event.clientX, event.clientY);
     edgePan.current.clientX = event.clientX;
@@ -626,13 +691,36 @@ export function FamilySky({
       if (to && to.id !== fromId && event.type !== "pointercancel") setPick({ fromId, toId: to.id });
       return true;
     }
+    const g = gesture.current;
+    if (g && g.pointerId === event.pointerId) {
+      gesture.current = null;
+      const mode = g.mode;
+      setPlacing(null);
+      if (mode === "place") {
+        carry.current = null;
+        setCarried(null);
+        const dx = g.placeX - g.originX;
+        if (Math.abs(dx) > 8 && event.type !== "pointercancel") {
+          suppressTap.current = true;
+          const previous = cardOf.get(g.id)?.person.rowNudge;
+          const base = typeof previous === "number" && Number.isFinite(previous) ? previous : 0;
+          void onPlace?.(g.id, base + dx);
+        }
+        return true;
+      }
+      if (mode === "pending") {
+        const card = cardOf.get(g.id);
+        if (card && event.type !== "pointercancel") tapCard(card.person);
+        suppressTap.current = true;
+        return true;
+      }
+    }
     const c = carry.current;
     if (c && c.pointerId === event.pointerId) {
       carry.current = null;
       const dropped = carried;
       setCarried(null);
       if (!dropped && !suppressTap.current && event.type !== "pointercancel") {
-        // Not carried anywhere: an ordinary tap on the card.
         const card = cardOf.get(c.id);
         if (card) tapCard(card.person);
         suppressTap.current = true;
@@ -1001,15 +1089,17 @@ export function FamilySky({
               const dim = Boolean(linked && !connected);
               const photo = card.person.photo;
               const age = ageLabel(card.person.birthDate);
-              const lifted = carried?.id === card.id ? carried : undefined;
+              const at = shownPoint(card);
+              const lifted = carried?.id === card.id;
+              const sliding = !lifted && placing?.id === card.id;
               return (
                 <button
                   key={card.id}
                   type="button"
                   data-person-id={card.id}
                   data-ring={rings.get(card.id)}
-                  className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${editMode ? " is-movable" : ""}${lifted ? " is-carried" : ""}`}
-                  style={{ left: (lifted?.x ?? card.x) - CARD.w / 2, top: lifted?.y ?? card.y, width: CARD.w, height: CARD.h }}
+                  className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${editMode ? " is-movable" : ""}${lifted ? " is-carried" : ""}${sliding ? " is-placing" : ""}`}
+                  style={{ left: at.x - CARD.w / 2, top: at.y, width: CARD.w, height: CARD.h }}
                   onClick={(event) => {
                     event.stopPropagation();
                     tapCard(card.person);
@@ -1073,7 +1163,8 @@ export function FamilySky({
                   { port: "child", label: `Link a child of ${card.person.givenName}` },
                 ];
                 return ports.map((item) => {
-                  const pt = portPoint(card.x, card.y, item.port, item.side);
+                  const at = shownPoint(card);
+                  const pt = portPoint(at.x, at.y, item.port, item.side);
                   return (
                     <button
                       key={`${card.id}-${item.port}-${item.side ?? "c"}`}
@@ -1133,7 +1224,7 @@ export function FamilySky({
       {editMode ? (
         <p className="graph-edit-hint sky-edit-hint">
           {near
-            ? "Drag a dot onto someone to link them. Drag a person to another family to move them. Tap a line to remove it."
+            ? "Drag a person along their row to nudge their place, or into another family to move them. Drag a dot onto someone to link them. Tap a line to remove it."
             : "Zoom in on a family to edit it."}
         </p>
       ) : null}
