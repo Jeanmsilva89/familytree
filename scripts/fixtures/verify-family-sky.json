@@ -1,5 +1,24 @@
 {
-  "note": "FIXTURE. Invented people for the Families lens check. Not a real family. Never replace these names with real relatives. Nia's only parent here is Stu, and that link is step. Pal has no parents on this tree. Rex is a partnerless parent of Eli.",
+  "note": "FIXTURE. Invented people for the Families lens check. Not a real family. Never replace these names with real relatives. Nia's only parent here is Stu, and that link is step. Pal has no parents on this tree. Rex is a partnerless parent of Eli. The access sidecar is a local invite for Quinn Fixture, who is not a person on this tree.",
+  "access": {
+    "ownerPersonId": "fx-ada",
+    "offers": [
+      {
+        "inviteId": "fx-invite-quinn",
+        "grant": { "personIds": ["fx-eli", "fx-dee"], "branchRootIds": [] }
+      }
+    ],
+    "links": [
+      {
+        "id": "fx-invite-quinn",
+        "guestLabel": "Quinn Fixture",
+        "status": "pending",
+        "invitedByPersonId": "fx-ada",
+        "sourceTreeId": "device",
+        "targetTreeId": "device"
+      }
+    ]
+  },
   "focusPersonId": "fx-ada",
   "people": [
     {

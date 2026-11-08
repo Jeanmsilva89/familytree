@@ -1487,6 +1487,95 @@ html[data-theme="dark"] .generated-avatar {
 .sky-avatar {
   -webkit-touch-callout: none;
 }
+
+/* Visibility lens: a cool ring while arranging, a warm ring while previewing. */
+.graph-toolbar .lens-bar {
+  pointer-events: auto;
+  flex: 1 1 100%;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 6px 8px;
+  border-radius: 16px;
+  background: color-mix(in srgb, #8aa4e8 14%, var(--card));
+  color: var(--ink);
+  border: 1px solid color-mix(in srgb, #8aa4e8 55%, var(--line));
+}
+.lens-bar .chip {
+  appearance: none;
+  min-height: 32px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.lens-bar .chip.is-on {
+  background: color-mix(in srgb, #8aa4e8 28%, var(--card));
+  border-color: #8aa4e8;
+}
+.lens-bar .chip small {
+  display: block;
+  margin-top: -2px;
+  font-size: 0.62rem;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  opacity: 0.72;
+}
+.invite-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px;
+  border-radius: 999px;
+  border: 1px dashed color-mix(in srgb, #8aa4e8 70%, var(--line));
+}
+.invite-card[data-invite-status="accepted"] { border-style: solid; }
+.invite-card[data-invite-status="revoked"] { opacity: 0.62; }
+.lens-bar .invite-step { min-height: 28px; }
+.lens-name {
+  display: inline-flex;
+  gap: 4px;
+  align-items: center;
+}
+.lens-name input {
+  min-height: 32px;
+  width: 8.5rem;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: var(--card);
+  color: inherit;
+  font: inherit;
+}
+.family-sky.is-lens { box-shadow: inset 0 0 0 3px #7f96d8; }
+.family-sky.is-lens[data-lens-phase="preview"] { box-shadow: inset 0 0 0 3px #d2a85a; }
+.family-sky.is-lens[data-lens-phase="working"] { box-shadow: inset 0 0 0 3px #6fbfb6; }
+.portrait-card.is-lens-dim,
+.sky-avatar.is-lens-dim {
+  opacity: 0.32;
+  filter: saturate(0.35);
+}
+.portrait-card.is-lens-ghost,
+.sky-avatar.is-lens-ghost {
+  opacity: 0.4;
+  border-style: dashed;
+  filter: grayscale(0.75);
+}
+@media (max-width: 719px) {
+  .graph-overlay .lens-bar {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .graph-overlay .lens-bar::-webkit-scrollbar { display: none; }
+  .lens-bar .chip,
+  .invite-card { flex: 0 0 auto; }
+}
 .person-hold-menu {
   position: fixed;
   z-index: 40;

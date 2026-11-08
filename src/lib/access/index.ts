@@ -11,6 +11,24 @@ export { acceptedInvite, exposeLink, pendingInvite, revokedInvite } from "./link
 export { ownerWorkingView, resolveVisibility } from "./visibility";
 
 export {
+  DEVICE_TREE_ID,
+  acceptInviteCard,
+  addGuestCard,
+  ensureDeviceOwner,
+  graphForViewer,
+  marksForViewer,
+  parseAccess,
+  parseAccessValue,
+  revokeInviteCard,
+  separateAccess,
+  serializeAccess,
+  touchBranch,
+  touchPerson,
+  viewerFor,
+} from "./arrange";
+export type { LookingAs, PersonMark } from "./arrange";
+
+export {
   emptyAccess,
   emptyGraph,
   guestViewer,

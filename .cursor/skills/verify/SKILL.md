@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Drive the Family Tree PWA in a browser and confirm the Families lens with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, or a production deploy of familytree-rose.vercel.app.
+description: Drive the Family Tree PWA in a browser and confirm the Families lens and the visibility lens with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, the visibility lens, or a production deploy of familytree-rose.vercel.app.
 ---
 
 # Verify the Families lens
@@ -57,6 +57,19 @@ After the reload check, still on the Families lens:
 
 Screenshot: `family-sky-<size>-unlinked.png`.
 
+Still on the Families lens, in the dark theme:
+
+28. Turn Edit off if it is on. Open Lens. The sky is the owner's working view: every fixture person, details open.
+29. Choose Eli Fixture. Touch Dee Fixture once (include), Fay Fixture twice (dim), and Rex Fixture three times (hide). A touch does not gather and does not open the editor. The layout stays `data-layout="sky"`.
+30. Turn on Preview. The sky matches that view: Dee shown, Fay visually reduced (`is-lens-dim`, lower opacity, living details withheld), Rex gone.
+31. Choose the pending guest Quinn Fixture and preview. No one is on the sky.
+32. Accept the invite. Only Eli Fixture and Dee Fixture are shown, details withheld. Fay is not, because the invite did not grant her.
+33. Revoke the invite. The sky is empty again.
+34. Choose You. The full fixture tree is back, details open, and Fay is not dimmed.
+35. Reload. Eli's arranged lens and Quinn's revoked invite are still there. The saved tree itself has no access field.
+
+Screenshots: `lens-<size>-arrange.png`, `lens-<size>-preview.png`, `lens-<size>-guest-pending.png`, `lens-<size>-guest-accepted.png`, `lens-<size>-guest-revoked.png`, `lens-<size>-owner.png`.
+
 Screenshots, one set per size:
 
 - `family-sky-<size>-links.png` — person-to-person links, none crossing an unrelated family
@@ -67,6 +80,12 @@ Screenshots, one set per size:
 - `family-sky-<size>-row.png` — Rex on Dee's row, after the move
 - `family-sky-<size>-placed.png` — Fay nudged along her row in Edit
 - `family-sky-<size>-unlinked.png` — after Ada Fixture's link to Eli Fixture is removed in Edit
+- `lens-<size>-arrange.png` — Eli Fixture's lens while Fay is dimmed and Rex is hidden but still touchable
+- `lens-<size>-preview.png` — that same view with Rex gone and Fay dialed back
+- `lens-<size>-guest-pending.png` — Quinn Fixture's pending invite, nobody shown
+- `lens-<size>-guest-accepted.png` — only Eli and Dee, the people the invite grants
+- `lens-<size>-guest-revoked.png` — the invite cleared
+- `lens-<size>-owner.png` — You, the full fixture tree again
 
 `<size>` is `desktop` or `phone`.
 

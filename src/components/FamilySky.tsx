@@ -45,6 +45,7 @@ import {
   type SkyUnlinkMark,
 } from "@/lib/skyUnlink";
 import { LinkRolePicker } from "./LinkRolePicker";
+import type { PersonMark } from "@/lib/access";
 
 type Props = {
   tree: TreeData;
@@ -64,6 +65,19 @@ type Props = {
   onMoveToUnit?: (personId: string, unitRootId: string) => void | Promise<void>;
   /** Persist a place along the family row. `x` is pixels to the right of the automatic place. */
   onPlace?: (personId: string, x: number) => void | Promise<void>;
+  /**
+   * Arranging a visibility lens. Touches include, hide, or dim. They do not
+   * gather, drag, or open the editor.
+   */
+  lens?: {
+    active: boolean;
+    phase: "working" | "arrange" | "preview";
+    marks: Record<string, PersonMark>;
+    resolvedIds: string[];
+    caption: string;
+    onPerson: (personId: string) => void;
+    onBranch: (rootId: string) => void;
+  };
 };
 
 type Port = "parent" | "partner" | "child";
@@ -113,6 +127,7 @@ export function FamilySky({
   onUnlink,
   onMoveToUnit,
   onPlace,
+  lens,
 }: Props) {
   const interaction = usePersonInteraction({
     people: tree.people,
@@ -121,6 +136,11 @@ export function FamilySky({
     onSelect: onHighlight,
     onOpen,
   });
+  const clearInteraction = interaction.clear;
+  useEffect(() => {
+    if (!lens?.active) return;
+    clearInteraction();
+  }, [clearInteraction, lens?.active]);
   const baseSky = useMemo(() => layoutFamilySky(tree, routePersonLink), [tree]);
   const gatheredId = gatheredPersonId(interaction.focus, editMode);
   const personal = useMemo(
@@ -850,6 +870,31 @@ export function FamilySky({
   }
 
   const shown = new Set(shownKey.split("|"));
+  const lensOn = Boolean(lens?.active);
+  function lensShows(personId: string) {
+    if (!lensOn || !lens) return true;
+    return lens.marks[personId]?.draw === "shown";
+  }
+  function lensDraws(personId: string) {
+    if (!lensOn || !lens) return true;
+    return Boolean(lens.marks[personId]);
+  }
+  const labelSky = !lensOn
+    ? sky
+    : {
+        ...sky,
+        buckets: sky.buckets.flatMap((bucket) => {
+          if (!bucket.memberIds.some((id) => lensDraws(id))) return [];
+          if (lens?.phase !== "preview") return [bucket];
+          const named = bucket.headIds.filter((id) => lensShows(id));
+          const ids = named.length ? named : bucket.memberIds.filter((id) => lensShows(id));
+          const label = ids
+            .map((id) => tree.people.find((person) => person.id === id)?.givenName)
+            .filter(Boolean)
+            .join(" & ");
+          return [label ? { ...bucket, label } : bucket];
+        }),
+      };
   const near = level === "near";
   const mid = level === "mid";
   const far = level === "far";
@@ -859,10 +904,12 @@ export function FamilySky({
   return (
     <div
       ref={stageRef}
-      className={`graph-stage family-sky is-${level}${editMode ? " is-editing" : ""}${personal ? " is-personal" : ""}`}
+      className={`graph-stage family-sky is-${level}${editMode ? " is-editing" : ""}${personal ? " is-personal" : ""}${lensOn ? " is-lens" : ""}`}
       aria-label={`Family sky, ${personal ? sky.units.units.length : sky.buckets.length} families, ${level === "far" ? "overview" : level === "mid" ? "families" : "people"}`}
       data-level={level}
       data-layout={personal ? "personal" : "sky"}
+      data-lens-phase={lensOn ? lens?.phase : undefined}
+      data-resolved={lensOn ? lens?.resolvedIds.join(" ") : undefined}
       data-animating={animating ? "true" : "false"}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -883,6 +930,10 @@ export function FamilySky({
             ? sky.unitEdges.map((edge) => {
                 const kind = edge.kinds.find((k) => allows(lineFilter, k));
                 if (!kind) return null;
+                if (lensOn) {
+                  const keep = (id: string) => sky.buckets.find((bucket) => bucket.id === id)?.memberIds.some((member) => lensDraws(member));
+                  if (!keep(edge.aId) || !keep(edge.bId)) return null;
+                }
                 return (
                   <line
                     key={edge.id}
@@ -900,7 +951,7 @@ export function FamilySky({
             : null}
 
           {!far && !personal
-            ? sky.buckets.map((bucket) => {
+            ? sky.buckets.filter((bucket) => !lensOn || bucket.memberIds.some((id) => lensDraws(id))).map((bucket) => {
                 const lit = bucket.id === focusUnit;
                 const drop = carried?.over === bucket.id && sky.units.unitOf[carried.id] !== bucket.id;
                 return (
@@ -923,6 +974,7 @@ export function FamilySky({
                 .sort((a, b) => Number(a.lit) - Number(b.lit))
                 .map(({ link, lit }) => {
                   if (!allows(lineFilter, link.kind)) return null;
+                  if (lensOn && (!lensShows(link.fromPersonId) || !lensShows(link.toPersonId))) return null;
                   const w = linkStyle(link.kind, lit);
                   const d = curvesPath(near ? link.pieces : link.midPieces);
                   const mark = unlinkArmed ? curveUnlinkMark(link) : null;
@@ -963,7 +1015,7 @@ export function FamilySky({
             : null}
 
           {far && !personal
-            ? sky.buckets.map((bucket) => (
+            ? sky.buckets.filter((bucket) => !lensOn || bucket.memberIds.some((id) => lensDraws(id))).map((bucket) => (
                 <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} data-members={bucket.memberIds.join(" ")} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}`}>
                   <circle cx={bucket.cx} cy={bucket.cy} r={bucket.glow} fill="url(#sky-glow)" />
                   <circle className="sky-star-core" cx={bucket.cx} cy={bucket.cy} r={bucket.glow * 0.16} />
@@ -973,8 +1025,8 @@ export function FamilySky({
 
           {near || personal
             ? sky.forks.filter((fork) => personal || shown.has(fork.unitId)).map((fork) => {
-                const parents = fork.parentDrops.filter((d) => lineFilterAllows(lineFilter, d.kin));
-                const kids = fork.childDrops.filter((d) => lineFilterAllows(lineFilter, d.kin));
+                const parents = fork.parentDrops.filter((d) => lineFilterAllows(lineFilter, d.kin) && lensShows(d.parentId));
+                const kids = fork.childDrops.filter((d) => lineFilterAllows(lineFilter, d.kin) && lensShows(d.childId));
                 if (!parents.length || !kids.length) return null;
                 const lit = Boolean(
                   linked && (parents.some((d) => linked.has(d.parentId)) || kids.some((d) => linked.has(d.childId))),
@@ -1046,7 +1098,7 @@ export function FamilySky({
             : null}
 
           {(near || personal) && lineFilterAllowsCouples(lineFilter)
-            ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
+            ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
                 const geom = coupleBarGeometry(
                   couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
                   couple.partnerIds,
@@ -1077,7 +1129,7 @@ export function FamilySky({
         </svg>
 
         {near || personal
-          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
+          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
               const geom = coupleBarGeometry(
                 couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
                 couple.partnerIds,
@@ -1096,29 +1148,39 @@ export function FamilySky({
           : null}
 
         {near || personal
-          ? sky.cards.filter((card) => personal || shown.has(card.unitId) || card.id === carried?.id).map((card) => {
+          ? sky.cards.filter((card) => (personal || shown.has(card.unitId) || card.id === carried?.id) && lensDraws(card.id)).map((card) => {
               const connected = Boolean(linked?.has(card.id));
               const selected = card.id === highlightedId;
-              const dim = Boolean(linked && !connected);
-              const photo = card.person.photo;
-              const age = ageLabel(card.person.birthDate);
+              const dim = Boolean(linked && !connected) && !lensOn;
+              const mark = lensOn ? lens?.marks[card.id] : undefined;
+              const withheld = mark?.details === "withheld";
+              const photo = withheld ? undefined : card.person.photo;
+              const age = withheld ? undefined : ageLabel(card.person.birthDate);
               const at = shownPoint(card);
               const lifted = carried?.id === card.id;
               const sliding = !lifted && placing?.id === card.id;
+              const lensClass = mark?.draw === "ghost" ? " is-lens-ghost" : mark?.presence === "dimmed" ? " is-lens-dim" : "";
               return (
                 <button
                   key={card.id}
                   type="button"
                   data-person-id={card.id}
                   data-ring={rings.get(card.id)}
-                  className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${editMode ? " is-movable" : ""}${lifted ? " is-carried" : ""}${sliding ? " is-placing" : ""}`}
+                  data-lens={mark?.effect}
+                  data-draw={mark?.draw}
+                  data-details={mark?.details}
+                  className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${lensClass}${editMode && !lensOn ? " is-movable" : ""}${lifted ? " is-carried" : ""}${sliding ? " is-placing" : ""}`}
                   style={{ left: at.x - CARD.w / 2, top: at.y, width: CARD.w, height: CARD.h }}
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (lensOn) {
+                      lens?.onPerson(card.id);
+                      return;
+                    }
                     tapCard(card.person);
                   }}
-                  {...interaction.bindPerson(card.id)}
-                  aria-pressed={selected}
+                  {...(lensOn ? {} : interaction.bindPerson(card.id))}
+                  aria-pressed={lensOn ? undefined : selected}
                 >
                   {photo ? (
                     <img className="portrait-photo" src={photo} alt="" />
@@ -1127,7 +1189,7 @@ export function FamilySky({
                   )}
                   <span className="identity">
                     <strong title={displayName(card.person)}>{card.person.givenName || displayName(card.person)}</strong>
-                    <em>{age ?? "—"}</em>
+                    {withheld ? null : <em>{age ?? "—"}</em>}
                   </span>
                 </button>
               );
@@ -1135,19 +1197,29 @@ export function FamilySky({
           : null}
 
         {mid && !personal
-          ? sky.cards.filter((card) => shown.has(card.unitId)).map((card) => {
-              const photo = card.person.photo;
-              const dim = Boolean(linked && !linked.has(card.id));
+          ? sky.cards.filter((card) => shown.has(card.unitId) && lensDraws(card.id)).map((card) => {
+              const mark = lensOn ? lens?.marks[card.id] : undefined;
+              const withheld = mark?.details === "withheld";
+              const photo = withheld ? undefined : card.person.photo;
+              const dim = Boolean(linked && !linked.has(card.id)) && !lensOn;
+              const lensClass = mark?.draw === "ghost" ? " is-lens-ghost" : mark?.presence === "dimmed" ? " is-lens-dim" : "";
               return (
                 <button
                   key={card.id}
                   type="button"
                   data-person-id={card.id}
-                  className={`sky-avatar${dim ? " is-dim" : ""}${card.id === highlightedId ? " is-active" : ""}`}
+                  data-lens={mark?.effect}
+                  data-draw={mark?.draw}
+                  data-details={mark?.details}
+                  className={`sky-avatar${dim ? " is-dim" : ""}${lensClass}${card.id === highlightedId && !lensOn ? " is-active" : ""}`}
                   style={{ left: card.x - AVATAR_R, top: card.y + CARD.h / 2 - AVATAR_R, width: AVATAR_R * 2, height: AVATAR_R * 2 }}
-                  aria-label={`${displayName(card.person)}. Zoom in`}
+                  aria-label={lensOn ? displayName(card.person) : `${displayName(card.person)}. Zoom in`}
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (lensOn) {
+                      lens?.onPerson(card.id);
+                      return;
+                    }
                     if (suppressTap.current) {
                       suppressTap.current = false;
                       interaction.dropSwallow();
@@ -1156,7 +1228,7 @@ export function FamilySky({
                     interaction.selectOnly(card.id);
                     zoomToPerson(card.id);
                   }}
-                  {...interaction.bindPerson(card.id)}
+                  {...(lensOn ? {} : interaction.bindPerson(card.id))}
                 >
                   {photo ? (
                     <img src={photo} alt="" />
@@ -1199,7 +1271,7 @@ export function FamilySky({
           : null}
 
         {unlinkArmed && (near || personal) && lineFilterAllowsCouples(lineFilter)
-          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId))).map((couple) => {
+          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
               const mark = coupleUnlinkMark(couple.partnerIds);
               const geom = coupleBarGeometry(
                 couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
@@ -1229,16 +1301,23 @@ export function FamilySky({
 
         <SkyLabels
           ref={labelsRef}
-          sky={sky}
+          sky={labelSky}
           focusUnit={focusUnit}
+          branchTouch={lensOn && lens?.phase !== "working"}
           onPick={(bucket) => {
+            if (lensOn && lens?.phase !== "working") {
+              const root = bucket.headIds[0];
+              if (root) lens?.onBranch(root);
+              return;
+            }
             if (!suppressTap.current) zoomToBucket(bucket);
           }}
         />
       </div>
 
       {far && peopleCount > 0 && !editMode && !personal ? <p className="sky-hint">Tap a family to zoom in</p> : null}
-      {editMode ? (
+      {lensOn ? <p className="graph-edit-hint sky-edit-hint lens-hint">{lens?.caption}</p> : null}
+      {editMode && !lensOn ? (
         <p className="graph-edit-hint sky-edit-hint">
           {near
             ? "Drag a person along their row to nudge their place, or into another family to move them. Drag a dot onto someone to link them. Tap a line to remove it."
@@ -1293,7 +1372,7 @@ export function FamilySky({
 
 type LabelsHandle = { update: (cam: Camera, level: ZoomLevel, vw: number) => void; reset: () => void; nudge: () => void };
 
-type LabelsProps = { sky: FamilySkyLayout; focusUnit?: string; onPick: (bucket: SkyBucket) => void };
+type LabelsProps = { sky: FamilySkyLayout; focusUnit?: string; branchTouch?: boolean; onPick: (bucket: SkyBucket) => void };
 
 const EDGE = 8;
 
@@ -1303,7 +1382,7 @@ const EDGE = 8;
  * A label whose family is on screen but would run off the left or right edge
  * is nudged back inside (through a CSS variable, without a re-render).
  */
-const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky, focusUnit, onPick }, ref) {
+const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky, focusUnit, branchTouch = false, onPick }, ref) {
   const [state, setState] = useState<{ level: ZoomLevel; ids: string[] }>({ level: "far", ids: [] });
   const last = useRef<{ s: number; level: ZoomLevel; key: string } | null>(null);
   const focusRef = useRef(focusUnit);
@@ -1383,9 +1462,12 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
             type="button"
             className={`sky-label${bucket.id === focusUnit ? " is-lit" : ""}`}
             data-unit-id={bucket.id}
+            data-branch-root={bucket.headIds[0]}
             data-level={state.level}
             style={{ left: at.x, top: at.y }}
-            aria-label={`${bucket.label} family, ${bucket.memberIds.length} ${bucket.memberIds.length === 1 ? "person" : "people"}. Zoom in`}
+            aria-label={branchTouch
+              ? `${bucket.label} branch. Include, hide, or dim`
+              : `${bucket.label} family, ${bucket.memberIds.length} ${bucket.memberIds.length === 1 ? "person" : "people"}. Zoom in`}
             onClick={(event) => {
               event.stopPropagation();
               onPick(bucket);

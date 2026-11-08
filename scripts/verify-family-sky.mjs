@@ -11,7 +11,9 @@
  * there after a reload. Gather family, not a tap, enters a personal map.
  * In Families Edit mode, close up, tapping Ada Fixture's
  * link to Eli Fixture removes that parent link, and tapping Nia Fixture's
- * couple bar asks before unlinking her from Pal Fixture. Runs at desktop
+ * couple bar asks before unlinking her from Pal Fixture. Then the visibility
+ * lens: arrange what Eli Fixture can see, preview it, and move Quinn Fixture's
+ * invite from pending to accepted to revoked. Runs at desktop
  * 1280x800 and phone 390x844.
  *
  *   npm run build && npm start
@@ -1027,6 +1029,196 @@ async function runSkyUnlink(page, viewport) {
   console.log(`${viewport.name}: edit mode unlinked a parent curve and a couple`);
 }
 
+const FIXTURE_IDS = [
+  "fx-ada", "fx-ben", "fx-cora", "fx-dee", "fx-eli", "fx-fay",
+  "fx-gran", "fx-mae", "fx-nia", "fx-pal", "fx-rex", "fx-stu",
+];
+
+async function tapLensPerson(page, personId) {
+  const card = page.locator(`.portrait-card[data-person-id="${personId}"]`);
+  await card.waitFor({ timeout: 8000 });
+  try {
+    await card.click({ timeout: 1500 });
+  } catch {
+    await card.click({ force: true });
+  }
+}
+
+async function resolved(page) {
+  return (await page.locator(".family-sky").getAttribute("data-resolved")) ?? "";
+}
+
+async function readAccess(page) {
+  return page.evaluate(
+    () =>
+      new Promise((resolve, reject) => {
+        const request = indexedDB.open("familytree");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          if (!db.objectStoreNames.contains("access")) {
+            resolve(null);
+            return;
+          }
+          const get = db.transaction("access", "readonly").objectStore("access").get("living");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+      }),
+  );
+}
+
+async function runVisibilityLens(page, viewport) {
+  if ((await page.locator("html").getAttribute("data-theme")) !== "dark") {
+    fail(`${viewport.name}: lens check expected the dark theme`);
+  }
+  const done = page.locator(".graph-toolbar").getByRole("button", { name: "Done", exact: true });
+  if (await done.count()) await done.click();
+  await revealSkyPerson(page, viewport, "fx-fay");
+  await page.getByRole("button", { name: "Lens", exact: true }).click();
+  await page.locator('.family-sky.is-lens[data-lens-phase="working"]').waitFor();
+  const everyone = (await resolved(page)).split(" ").filter(Boolean).sort();
+  if (JSON.stringify(everyone) !== JSON.stringify([...FIXTURE_IDS].sort())) {
+    fail(`${viewport.name}: the working view is not the full fixture tree (${everyone.join(" ")})`);
+  }
+  await page.getByRole("button", { name: "Look as Eli Fixture", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="arrange"]').waitFor();
+  await tapLensPerson(page, "fx-dee");
+  await page.locator('[data-person-id="fx-dee"][data-lens="include"]').waitFor();
+  await tapLensPerson(page, "fx-fay");
+  await tapLensPerson(page, "fx-fay");
+  await page.locator('[data-person-id="fx-fay"][data-lens="dim"][data-draw="shown"]').waitFor();
+  await tapLensPerson(page, "fx-rex");
+  await tapLensPerson(page, "fx-rex");
+  await tapLensPerson(page, "fx-rex");
+  await page.locator('[data-person-id="fx-rex"][data-lens="hide"][data-draw="ghost"]').waitFor();
+  if ((await page.locator(".family-sky").getAttribute("data-layout")) !== "sky") {
+    fail(`${viewport.name}: arranging a lens gathered the sky`);
+  }
+  if (await page.getByRole("dialog").count()) fail(`${viewport.name}: arranging a lens opened the editor`);
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-arrange.png`) });
+
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  if ((await resolved(page)) !== "fx-dee fx-fay") {
+    fail(`${viewport.name}: Eli's preview is ${JSON.stringify(await resolved(page))}, expected Dee shown and Fay dimmed`);
+  }
+  const fay = page.locator('.portrait-card[data-person-id="fx-fay"]');
+  const dee = page.locator('.portrait-card[data-person-id="fx-dee"]');
+  await fay.waitFor();
+  if (!(await fay.getAttribute("class"))?.includes("is-lens-dim")) {
+    fail(`${viewport.name}: dimmed Fay is not visually reduced`);
+  }
+  if ((await fay.getAttribute("data-details")) !== "withheld") {
+    fail(`${viewport.name}: Fay's living details were opened for Eli`);
+  }
+  const opacity = await fay.evaluate((el) => Number(getComputedStyle(el).opacity));
+  const deeOpacity = await dee.evaluate((el) => Number(getComputedStyle(el).opacity));
+  if (!(opacity < 0.5) || !(deeOpacity > 0.85)) {
+    fail(`${viewport.name}: dimmed opacity ${opacity} should sit below Dee's ${deeOpacity}`);
+  }
+  if (await page.locator('[data-person-id="fx-rex"]').count()) {
+    fail(`${viewport.name}: hidden Rex is still on the sky`);
+  }
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-preview.png`) });
+
+  const quinn = page.getByRole("button", { name: "Look as Quinn Fixture, pending", exact: true });
+  await quinn.scrollIntoViewIfNeeded();
+  await quinn.click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  if ((await resolved(page)) !== "") fail(`${viewport.name}: a pending invite showed ${JSON.stringify(await resolved(page))}`);
+  if (await page.locator(".portrait-card, .sky-avatar").count()) {
+    fail(`${viewport.name}: a pending invite still drew people`);
+  }
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-guest-pending.png`) });
+
+  await page.getByRole("button", { name: "Accept invite for Quinn Fixture", exact: true }).click();
+  await page.locator('.invite-card[data-invite-status="accepted"]').waitFor();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  if ((await resolved(page)) !== "fx-dee fx-eli") {
+    fail(`${viewport.name}: accepted invite showed ${JSON.stringify(await resolved(page))}`);
+  }
+  for (const id of ["fx-dee", "fx-eli"]) {
+    if ((await page.locator(`[data-person-id="${id}"]`).getAttribute("data-details")) !== "withheld") {
+      fail(`${viewport.name}: ${id} details were open to the guest`);
+    }
+  }
+  if (await page.locator('[data-person-id="fx-fay"]').count()) {
+    fail(`${viewport.name}: the invite showed Fay, who was not granted`);
+  }
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-guest-accepted.png`) });
+
+  await page.getByRole("button", { name: "Revoke invite for Quinn Fixture", exact: true }).click();
+  await page.locator('.invite-card[data-invite-status="revoked"]').waitFor();
+  if ((await resolved(page)) !== "") fail(`${viewport.name}: a revoked invite showed ${JSON.stringify(await resolved(page))}`);
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-guest-revoked.png`) });
+
+  await page.getByRole("button", { name: "You", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="working"]').waitFor();
+  const restored = (await resolved(page)).split(" ").filter(Boolean).sort();
+  if (JSON.stringify(restored) !== JSON.stringify([...FIXTURE_IDS].sort())) {
+    fail(`${viewport.name}: switching back did not restore the working view (${restored.join(" ")})`);
+  }
+  const fayHome = page.locator('.portrait-card[data-person-id="fx-fay"]');
+  if (await fayHome.count()) {
+    if ((await fayHome.getAttribute("data-details")) !== "open") {
+      fail(`${viewport.name}: the working view withheld Fay's details`);
+    }
+    if ((await fayHome.getAttribute("class"))?.includes("is-lens-dim")) {
+      fail(`${viewport.name}: the working view left Fay dimmed`);
+    }
+  }
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-owner.png`) });
+
+  await page.waitForFunction(async () => {
+    const access = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        if (!db.objectStoreNames.contains("access")) {
+          resolve(null);
+          return;
+        }
+        const get = db.transaction("access", "readonly").objectStore("access").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    const invite = access?.links?.find((link) => link.id === "fx-invite-quinn");
+    const lens = access?.lenses?.find((item) => item.viewer?.personId === "fx-eli");
+    const fay = lens?.rules?.find((rule) => rule.personId === "fx-fay");
+    const rex = lens?.rules?.find((rule) => rule.personId === "fx-rex");
+    return invite?.status === "revoked" && fay?.effect === "dim" && rex?.effect === "hide";
+  });
+  const before = await readAccess(page);
+  const treeBefore = await readTree(page);
+  if (!before || before.links?.find((link) => link.id === "fx-invite-quinn")?.status !== "revoked") {
+    fail(`${viewport.name}: the invite was not saved as revoked`);
+  }
+  if ("access" in treeBefore) fail(`${viewport.name}: access was stored inside the tree`);
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /menu/i }).waitFor({ timeout: 20000 });
+  await openVisualize(page);
+  await turnFamiliesOn(page, viewport);
+  await page.getByRole("button", { name: "Lens", exact: true }).click();
+  await page.getByRole("button", { name: "Look as Eli Fixture", exact: true }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  if ((await resolved(page)) !== "fx-dee fx-fay") {
+    fail(`${viewport.name}: Eli's lens did not survive reload (${JSON.stringify(await resolved(page))})`);
+  }
+  await page.getByRole("button", { name: "Look as Quinn Fixture, revoked", exact: true }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  if ((await resolved(page)) !== "") fail(`${viewport.name}: the revoked invite did not survive reload`);
+  const after = await readAccess(page);
+  if (after?.links?.find((link) => link.id === "fx-invite-quinn")?.status !== "revoked") {
+    fail(`${viewport.name}: reloaded access lost the revoked invite`);
+  }
+  console.log(`${viewport.name}: visibility lens arranged, previewed, and reloaded`);
+}
+
 async function runViewport(browser, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -1184,7 +1376,8 @@ async function runViewport(browser, viewport) {
     }
     await runSkyPlace(page, viewport);
     await runSkyUnlink(page, viewport);
-    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, place, and unlink passed`);
+    await runVisibilityLens(page, viewport);
+    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, place, unlink, and lens passed`);
   } catch (error) {
     await page.screenshot({ path: shot("failed") }).catch(() => undefined);
     throw error;
