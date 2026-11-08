@@ -2,18 +2,35 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useAccess } from "@/hooks/useAccess";
 import { useNarrow } from "@/hooks/useNarrow";
 import { useTree } from "@/hooks/useTree";
+import {
+  acceptInviteCard,
+  addGuestCard,
+  asInviteId,
+  asPersonId,
+  DEVICE_TREE_ID,
+  ensureDeviceOwner,
+  graphForViewer,
+  marksForViewer,
+  revokeInviteCard,
+  separateAccess,
+  touchBranch,
+  touchPerson,
+  type LookingAs,
+} from "@/lib/access";
 import { parseGedcom, serializeGedcom } from "@/lib/gedcom";
 import type { Person } from "@/lib/types";
 import { displayName } from "@/lib/types";
-import { relatedTree } from "@/lib/tree";
+import { parseTreeJson, relatedTree } from "@/lib/tree";
 import { DEFAULT_LINE_FILTER, type LineFilter } from "@/lib/kinFilter";
 import { BrandMark } from "./BrandMark";
 import { AppMenu } from "./AppMenu";
 import { FamilySky } from "./FamilySky";
 import { FocusFamily } from "./FocusFamily";
 import { GraphLineFilter } from "./GraphLineFilter";
+import { LensBar } from "./LensBar";
 import { PeopleList } from "./PeopleList";
 import { PersonSheet } from "./PersonSheet";
 import { StartScreen } from "./StartScreen";
@@ -25,6 +42,7 @@ const VIEW_KEY = "familytree-mobile-view";
 
 export function TreeApp() {
   const treeState = useTree();
+  const accessState = useAccess();
   const narrow = useNarrow();
   const [highlighted, setHighlighted] = useState<Person | undefined>();
   const [sheetPerson, setSheetPerson] = useState<Person | undefined>();
@@ -36,6 +54,9 @@ export function TreeApp() {
   const [familyOpen, setFamilyOpen] = useState(true);
   const [graphEdit, setGraphEdit] = useState(false);
   const [lineFilter, setLineFilter] = useState<LineFilter>(DEFAULT_LINE_FILTER);
+  const [lensOn, setLensOn] = useState(false);
+  const [lensPreview, setLensPreview] = useState(false);
+  const [lensViewer, setLensViewer] = useState<LookingAs>({ kind: "owner" });
   const [graphAddName, setGraphAddName] = useState<string | null>(null);
   const [relatedRootId, setRelatedRootId] = useState<string | undefined>();
   const [relatedHighlight, setRelatedHighlight] = useState<Person | undefined>();
@@ -127,6 +148,29 @@ export function TreeApp() {
     return () => window.removeEventListener("keydown", onKey);
   }, [sheetPerson, relatedRootId, graphOpen, familyOpen]);
 
+  const accessNow = accessState.access;
+  const accessReady = accessState.ready;
+  const replaceAccess = accessState.replace;
+  useEffect(() => {
+    if (!treeState.ready || !accessReady) return;
+    const next = ensureDeviceOwner(accessNow, treeState.tree);
+    if (next === accessNow) return;
+    void replaceAccess(next);
+  }, [accessNow, accessReady, replaceAccess, treeState.ready, treeState.tree]);
+
+  useEffect(() => {
+    if (!lineFilter.families && lensOn) setLensOn(false);
+  }, [lineFilter.families, lensOn]);
+
+  useEffect(() => {
+    if (lensViewer.kind === "member" && !treeState.tree.people.some((person) => person.id === lensViewer.personId)) {
+      setLensViewer({ kind: "owner" });
+    }
+    if (lensViewer.kind === "guest" && !accessState.access.links.some((link) => link.id === lensViewer.inviteId)) {
+      setLensViewer({ kind: "owner" });
+    }
+  }, [accessState.access.links, lensViewer, treeState.tree.people]);
+
   useEffect(() => {
     if (!relatedRootId) return;
     if (treeState.tree.people.some((person) => person.id === relatedRootId)) return;
@@ -162,6 +206,9 @@ export function TreeApp() {
     setRelatedEdit(false);
     setGraphOpen(false);
     setGraphEdit(false);
+    setLensOn(false);
+    setLensPreview(false);
+    setLensViewer({ kind: "owner" });
     chooseView("family");
   };
 
@@ -215,6 +262,47 @@ export function TreeApp() {
   const relatedName = relatedRoot
     ? relatedRoot.givenName.trim() || displayName(relatedRoot)
     : "";
+  const ensuredAccess = ensureDeviceOwner(accessState.access, treeState.tree);
+  const lensPhase: "working" | "arrange" | "preview" = lensViewer.kind === "owner" ? "working" : lensPreview ? "preview" : "arrange";
+  const lensViewerName = lensViewer.kind === "member"
+    ? displayName(treeState.tree.people.find((person) => person.id === lensViewer.personId) ?? { id: "", givenName: "Them", createdAt: "", updatedAt: "" })
+    : lensViewer.kind === "guest"
+      ? accessState.access.links.find((link) => link.id === lensViewer.inviteId)?.guestLabel?.trim() || "This guest"
+      : "you";
+  const guestStatus = lensViewer.kind === "guest"
+    ? accessState.access.links.find((link) => link.id === lensViewer.inviteId)?.status
+    : undefined;
+  const lensCaption = lensPhase === "working"
+    ? "Your working view. Choose who is looking."
+    : lensPhase === "preview"
+      ? `Previewing ${lensViewerName}. Hidden people stay off the sky.`
+      : guestStatus === "pending"
+        ? `Arranging ${lensViewerName}'s invite. They see no one until you accept.`
+        : guestStatus === "revoked"
+          ? `${lensViewerName}'s invite is revoked. They see no one.`
+          : `Arranging for ${lensViewerName}. Touch a person, or a family name for their branch.`;
+  const lensMarks = Object.fromEntries(
+    marksForViewer(treeState.tree, ensuredAccess, lensViewer, lensPreview).map((mark) => [mark.personId as string, mark]),
+  );
+  const resolvedIds = graphForViewer(treeState.tree, ensuredAccess, lensViewer).people.map((person) => person.personId as string).sort();
+  const arrangeFor = (personId: string, kind: "person" | "branch") => {
+    void accessState.update((current) => {
+      const ready = ensureDeviceOwner(current, treeState.tree);
+      const id = asPersonId(personId);
+      return kind === "person" ? touchPerson(treeState.tree, ready, lensViewer, id) : touchBranch(treeState.tree, ready, lensViewer, id);
+    });
+  };
+  const lensSky = lensOn && lineFilter.families
+    ? {
+        active: true as const,
+        phase: lensPhase,
+        marks: lensMarks,
+        resolvedIds,
+        caption: lensCaption,
+        onPerson: (personId: string) => arrangeFor(personId, "person"),
+        onBranch: (personId: string) => arrangeFor(personId, "branch"),
+      }
+    : undefined;
 
   return (
     <div className={narrow ? "app-shell tree-shell is-narrow" : "app-shell tree-shell is-wide"}>
@@ -244,6 +332,9 @@ export function TreeApp() {
         onReset={async () => {
           if (confirm("Clear the tree saved on this device?")) {
             await treeState.reset();
+            await accessState.clear();
+            setLensOn(false);
+            setLensViewer({ kind: "owner" });
             setHighlighted(undefined);
             setSheetPerson(undefined);
             setGraphOpen(false);
@@ -313,10 +404,29 @@ export function TreeApp() {
               type="button"
               className={graphEdit ? "btn primary" : "btn"}
               aria-pressed={graphEdit}
-              onClick={() => setGraphEdit((v) => !v)}
+              onClick={() => {
+                setGraphEdit((value) => !value);
+                setLensOn(false);
+              }}
             >
               {graphEdit ? "Done" : "Edit"}
             </button>
+            {lineFilter.families ? (
+              <button
+                type="button"
+                className={lensOn ? "btn primary" : "btn"}
+                aria-pressed={lensOn}
+                onClick={() => {
+                  setGraphEdit(false);
+                  setHighlighted(undefined);
+                  setLensPreview(false);
+                  setLensViewer({ kind: "owner" });
+                  setLensOn((value) => !value);
+                }}
+              >
+                Lens
+              </button>
+            ) : null}
             <button type="button" className="btn" onClick={exportGedcom}>
               Export
             </button>
@@ -343,6 +453,39 @@ export function TreeApp() {
               </button>
             ) : null}
             <GraphLineFilter value={lineFilter} onChange={changeLines} />
+            {lensSky ? (
+              <LensBar
+                people={treeState.tree.people.map((person) => ({
+                  id: person.id,
+                  label: person.givenName.trim() || displayName(person),
+                  name: displayName(person),
+                }))}
+                invites={accessState.access.links}
+                looking={lensViewer.kind === "owner" ? "owner" : lensViewer.kind === "member" ? lensViewer.personId : lensViewer.inviteId}
+                preview={lensPreview}
+                onLookOwner={() => { setLensViewer({ kind: "owner" }); setLensPreview(false); }}
+                onLookPerson={(personId) => { setLensViewer({ kind: "member", personId: asPersonId(personId) }); setLensPreview(false); }}
+                onLookGuest={(inviteId) => { setLensViewer({ kind: "guest", inviteId: asInviteId(inviteId) }); setLensPreview(false); }}
+                onPreview={setLensPreview}
+                onAccept={(inviteId) => {
+                  const id = asInviteId(inviteId);
+                  void accessState.update((current) => acceptInviteCard(ensureDeviceOwner(current, treeState.tree), id));
+                  setLensViewer({ kind: "guest", inviteId: id });
+                  setLensPreview(true);
+                }}
+                onRevoke={(inviteId) => {
+                  const id = asInviteId(inviteId);
+                  void accessState.update((current) => revokeInviteCard(current, id));
+                  setLensViewer({ kind: "guest", inviteId: id });
+                  setLensPreview(true);
+                }}
+                onAddGuest={(name) => {
+                  const owner = ensuredAccess.trees.find((row) => row.treeId === DEVICE_TREE_ID)?.ownerPersonId;
+                  if (!owner) return;
+                  void accessState.update((current) => addGuestCard(ensureDeviceOwner(current, treeState.tree), name, owner));
+                }}
+              />
+            ) : null}
             {highlighted ? (
               <button type="button" className="btn primary their-tree-btn" onClick={() => openRelatedTree(highlighted)}>
                 Their tree
@@ -358,7 +501,8 @@ export function TreeApp() {
               fitKey={graphOpen}
               lineFilter={lineFilter}
               hold={Boolean(sheetPerson)}
-              editMode={graphEdit}
+              editMode={graphEdit && !lensOn}
+              lens={lensSky}
               onLink={treeState.link}
               onUnlink={treeState.unlink}
               onMoveToUnit={(personId, unitRootId) => treeState.familyUnit(personId, { unitOf: unitRootId })}
@@ -487,12 +631,21 @@ export function TreeApp() {
         event.target.value = "";
         if (!file) return;
         await treeState.replace(parseGedcom(await file.text()));
+        await accessState.clear();
+        setLensOn(false);
+        setLensViewer({ kind: "owner" });
       }} />
       <input ref={jsonRef} className="sr-only" type="file" accept="application/json,.json" aria-label="Import backup JSON" onChange={async (event) => {
         const file = event.target.files?.[0];
         event.target.value = "";
         if (!file) return;
-        await treeState.importJson(await file.text());
+        const split = separateAccess(parseTreeJson(await file.text()));
+        await treeState.replace(split.tree);
+        if (split.access) await accessState.replace(split.access);
+        else await accessState.clear();
+        setLensOn(false);
+        setLensViewer({ kind: "owner" });
+        setLensPreview(false);
       }} />
     </div>
   );

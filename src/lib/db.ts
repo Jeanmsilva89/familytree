@@ -5,11 +5,16 @@ import type { TreeData } from "./types";
 import { emptyTree } from "./types";
 
 const DB_NAME = "familytree";
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 const TREE_STORE = "tree";
 const TREE_KEY = "living";
+const ACCESS_STORE = "access";
+const ACCESS_KEY = "living";
 
-type FamilyTreeDB = IDBPDatabase<{ tree: { key: string; value: TreeData } }>;
+type FamilyTreeDB = IDBPDatabase<{
+  tree: { key: string; value: TreeData };
+  access: { key: string; value: unknown };
+}>;
 
 export type TreeBackend = {
   get(): Promise<TreeData | undefined>;
@@ -27,6 +32,9 @@ function getDb(): Promise<FamilyTreeDB> {
       upgrade(db) {
         if (!db.objectStoreNames.contains(TREE_STORE)) {
           db.createObjectStore(TREE_STORE);
+        }
+        if (!db.objectStoreNames.contains(ACCESS_STORE)) {
+          db.createObjectStore(ACCESS_STORE);
         }
       },
     }) as Promise<FamilyTreeDB>;
@@ -97,4 +105,22 @@ export async function saveTree(tree: TreeData, backend: TreeBackend = idbBackend
 export async function clearTree(backend: TreeBackend = idbBackend): Promise<void> {
   memory = emptyTree();
   await enqueueWrite(() => backend.del());
+}
+
+export async function readAccessRecord(): Promise<unknown> {
+  if (typeof indexedDB === "undefined") return undefined;
+  const db = await getDb();
+  return db.get(ACCESS_STORE, ACCESS_KEY);
+}
+
+export async function writeAccessRecord(value: unknown): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const db = await getDb();
+  await db.put(ACCESS_STORE, value, ACCESS_KEY);
+}
+
+export async function deleteAccessRecord(): Promise<void> {
+  if (typeof indexedDB === "undefined") return;
+  const db = await getDb();
+  await db.delete(ACCESS_STORE, ACCESS_KEY);
 }

@@ -89,6 +89,11 @@ export type AccessState = {
   deceasedPersonIds: { treeId: TreeId; personId: PersonId }[];
   links: TreeLink[];
   lenses: VisibilityLens[];
+  /**
+   * Grant arranged for an invite that is still pending. Accepted links carry
+   * their own grant; this offer is what Accept writes onto the card.
+   */
+  offers?: { inviteId: InviteId; grant: LinkGrant }[];
 };
 
 export function emptyAccess(): AccessState {
