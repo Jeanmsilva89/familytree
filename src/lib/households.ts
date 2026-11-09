@@ -3,7 +3,8 @@ import { kinOf, strongestKin } from "./types";
 
 /**
  * A household is a couple (a married or partnered union), or a single parent,
- * plus their children who do not yet have a household of their own.
+ * plus the children who still live there. Blood and adopted children count
+ * before foster. A step link does not move a child into that household.
  *
  * Households are derived, never stored: `deriveHouseholds` is a pure function
  * of the people, unions and child links already on the tree.
@@ -143,25 +144,27 @@ export function deriveHouseholds(tree: TreeData): Households {
     headOf.set(parentId, household);
   }
 
-  // 3. Everyone who heads nothing lives with a parent who heads a household:
-  //    the one where most of their parents are heads, then blood over step,
-  //    then the household found first.
+  // 3. Everyone who heads nothing lives with a line parent who heads a household.
+  //    Blood and adopted outrank foster. A step parent does not claim the child,
+  //    so step alone leaves them outside that household.
   const homeOf: Record<string, string> = {};
   for (const household of households) for (const id of household.headIds) homeOf[id] = household.id;
   for (const person of peopleInOrder) {
     if (headOf.has(person.id)) continue;
-    const candidates = new Map<string, { household: Household; count: number; blood: number }>();
+    const candidates = new Map<string, { household: Household; count: number; line: number }>();
     for (const parentId of parents(person.id)) {
+      if (kin(person.id, parentId) === "step") continue;
       const household = headOf.get(parentId);
       if (!household) continue;
-      const entry = candidates.get(household.id) ?? { household, count: 0, blood: 0 };
+      const entry = candidates.get(household.id) ?? { household, count: 0, line: 0 };
       entry.count += 1;
-      if (kin(person.id, parentId) === "blood") entry.blood += 1;
+      const kind = kin(person.id, parentId);
+      if (kind === "blood" || kind === "adopted") entry.line += 1;
       candidates.set(household.id, entry);
     }
     const best = [...candidates.values()].sort(
       (a, b) =>
-        b.count - a.count || b.blood - a.blood || households.indexOf(a.household) - households.indexOf(b.household),
+        b.line - a.line || b.count - a.count || households.indexOf(a.household) - households.indexOf(b.household),
     )[0];
     if (!best) continue;
     best.household.childIds.push(person.id);

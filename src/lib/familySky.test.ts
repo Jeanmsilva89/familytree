@@ -523,4 +523,35 @@ describe("family sky stability (FIXTURE trees)", () => {
     const target = half.cards.find((c) => c.id === link.toPersonId)!;
     assert.equal(link.x2 - target.x, after.links[0].x2 - after.cards.find((c) => c.id === link.toPersonId)!.x);
   });
+
+  it("keeps a step-only child out of the step-parent bucket and draws foster as foster", () => {
+    const person = (id: string, givenName: string): Person => ({
+      id,
+      givenName,
+      familyName: "FIXTURE",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    });
+    const tree: TreeData = {
+      people: [person("stu", "Stu"), person("mae", "Mae"), person("wynn", "Wynn"), person("vic", "Vic"), person("kit", "Kit")],
+      unions: [{ id: "u-ms", partnerIds: ["mae", "stu"], kind: "married" }],
+      childLinks: [
+        { id: "c-wynn", childId: "wynn", parentIds: ["stu"], roles: { stu: "father" }, kin: { stu: "step" } },
+        { id: "c-kit", childId: "kit", parentIds: ["vic"], roles: { vic: "mother" }, kin: { vic: "foster" } },
+      ],
+    };
+    const sky = layoutFamilySky(tree);
+    const bucket = (id: string) => sky.buckets.find((item) => item.memberIds.includes(id))!;
+    assert.deepEqual(bucket("wynn").memberIds, ["wynn"]);
+    assert.ok(!bucket("stu").memberIds.includes("wynn"));
+    const step = sky.links.find((link) => link.fromPersonId === "stu" && link.toPersonId === "wynn");
+    assert.equal(step?.kind, "step");
+    assert.notEqual(step?.fromUnitId, step?.toUnitId);
+    const foster = sky.forks.find((fork) => fork.childIds.includes("kit"));
+    assert.ok(foster, "the foster child has a line inside the foster parent's bucket");
+    assert.equal(foster?.kin, "foster");
+    assert.ok(foster?.parentDrops.every((drop) => drop.kin === "foster"));
+    assert.equal(bucket("kit").id, bucket("vic").id);
+    assert.equal(sky.links.some((link) => link.toPersonId === "kit" && link.kind === "blood"), false);
+  });
 });

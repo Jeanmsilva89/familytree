@@ -21,7 +21,8 @@ import {
   FIXTURE_UNKNOWN,
   fuId,
 } from "./familyUnits.fixtures";
-import type { TreeData } from "./types";
+import { parseTreeJson } from "./tree";
+import type { KinKind, ParentRole, TreeData } from "./types";
 
 const ids = (names: string[]) => names.map(fuId).sort();
 
@@ -252,6 +253,258 @@ describe("bucket rule (FIXTURE_BUCKET_RULE)", () => {
     assert.equal(aside.unitOf[fuId("orphan")], aside.unitOf[fuId("lone")]);
     assert.notEqual(aside.unitOf[fuId("orphan")], aside.unitOf[fuId("stu")]);
     assert.deepEqual(aside.via[fuId("orphan")], { kind: "override", personId: fuId("lone") });
+  });
+});
+
+/**
+ * FIXTURE people only. Ids are `kin-fx-` and every family name is FIXTURE.
+ * Each case is one invented shape, so the bucket a person lands in is the
+ * thing under test.
+ */
+function kinTree(
+  people: string[],
+  kids: { child: string; parents: [string, ParentRole | "", KinKind?][] }[],
+  unions: [string, string][] = [],
+): TreeData {
+  return {
+    people: people.map((id) => ({
+      id: `kin-fx-${id}`,
+      givenName: id,
+      familyName: "FIXTURE",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    })),
+    unions: unions.map(([a, b], i) => ({
+      id: `kin-fx-u-${i}`,
+      partnerIds: [`kin-fx-${a}`, `kin-fx-${b}`],
+      kind: "married" as const,
+    })),
+    childLinks: kids.map((kid, i) => {
+      const roles: Partial<Record<string, ParentRole>> = {};
+      const kin: Partial<Record<string, KinKind>> = {};
+      for (const [id, role, kind] of kid.parents) {
+        if (role) roles[`kin-fx-${id}`] = role;
+        if (kind && kind !== "blood") kin[`kin-fx-${id}`] = kind;
+      }
+      return {
+        id: `kin-fx-c-${i}`,
+        childId: `kin-fx-${kid.child}`,
+        parentIds: kid.parents.map(([id]) => (id.startsWith("missing") ? id : `kin-fx-${id}`)),
+        ...(Object.keys(roles).length ? { roles } : {}),
+        ...(Object.keys(kin).length ? { kin } : {}),
+      };
+    }),
+  };
+}
+
+function bucketOf(tree: TreeData, name: string, overrides?: { personId: string; unitOf: string | null }[]) {
+  const result = deriveFamilyUnits(
+    tree,
+    overrides?.map((row) => ({
+      personId: row.personId.startsWith("kin-fx-") ? row.personId : `kin-fx-${row.personId}`,
+      unitOf: row.unitOf === null ? null : row.unitOf.startsWith("kin-fx-") ? row.unitOf : `kin-fx-${row.unitOf}`,
+    })),
+  );
+  const id = `kin-fx-${name}`;
+  const unit = unitOfPerson(result, id);
+  assert.ok(unit, `${name} should belong to a unit`);
+  return {
+    members: [...unit!.memberIds].sort(),
+    label: unit!.label,
+    via: result.via[id],
+    links: result.links.filter((link) => link.fromPersonId === id || link.toPersonId === id),
+  };
+}
+
+const kinId = (name: string) => `kin-fx-${name}`;
+
+describe("parent-link kinds decide the bucket (FIXTURE)", () => {
+  it("step-only: a child with no partner stays out of the step-parent's bucket", () => {
+    const placed = kinTree(
+      ["Gran", "Mae", "Stu", "Wynn"],
+      [
+        { child: "Mae", parents: [["Gran", "mother"]] },
+        { child: "Wynn", parents: [["Stu", "father", "step"]] },
+      ],
+      [["Mae", "Stu"]],
+    );
+    const wynn = bucketOf(placed, "Wynn");
+    assert.deepEqual(wynn.members, [kinId("Wynn")]);
+    assert.equal(wynn.label, "Wynn");
+    assert.deepEqual(wynn.via, { kind: "root" });
+    assert.equal(wynn.links.length, 1);
+    assert.equal(wynn.links[0].kind, "step");
+    assert.equal(wynn.links[0].fromPersonId, kinId("Stu"));
+    assert.ok(!bucketOf(placed, "Stu").members.includes(kinId("Wynn")));
+  });
+
+  it("step-only with a partner: the couple stays together, not in the step-parent's bucket", () => {
+    const tree = kinTree(
+      ["Stu", "Nia", "Pal"],
+      [{ child: "Nia", parents: [["Stu", "father", "step"]] }],
+      [["Nia", "Pal"]],
+    );
+    const nia = bucketOf(tree, "Nia");
+    assert.deepEqual(nia.members, [kinId("Nia"), kinId("Pal")].sort());
+    assert.ok(!nia.members.includes(kinId("Stu")));
+    assert.equal(nia.links.find((link) => link.fromPersonId === kinId("Stu"))?.kind, "step");
+  });
+
+  it("foster-only: the child sits with the foster parent, and that is not a blood claim", () => {
+    const tree = kinTree(["Vic", "Kit"], [{ child: "Kit", parents: [["Vic", "mother", "foster"]] }]);
+    const kit = bucketOf(tree, "Kit");
+    assert.deepEqual(kit.members, [kinId("Kit"), kinId("Vic")].sort());
+    assert.deepEqual(kit.via, { kind: "parent", personId: kinId("Vic") });
+    assert.equal(kit.links.length, 0, "same bucket, so the foster line is inside the family, not a blood link across");
+  });
+
+  it("adopted: the child sits with the adoptive parent", () => {
+    const tree = kinTree(["Ada", "Kit"], [{ child: "Kit", parents: [["Ada", "mother", "adopted"]] }]);
+    const kit = bucketOf(tree, "Kit");
+    assert.deepEqual(kit.members, [kinId("Ada"), kinId("Kit")].sort());
+    assert.deepEqual(kit.via, { kind: "parent", personId: kinId("Ada") });
+  });
+
+  it("mixed blood and step in different families: the child follows the blood parent", () => {
+    const fixed = kinTree(
+      ["Dad", "Step", "Kid"],
+      [{ child: "Kid", parents: [["Step", "mother", "step"], ["Dad", "father"]] }],
+    );
+    const kid = bucketOf(fixed, "Kid");
+    assert.deepEqual(kid.members, [kinId("Dad"), kinId("Kid")].sort());
+    assert.deepEqual(kid.via, { kind: "parent", personId: kinId("Dad") });
+    assert.equal(kid.links.find((link) => link.fromPersonId === kinId("Step"))?.kind, "step");
+    assert.ok(!bucketOf(fixed, "Step").members.includes(kinId("Kid")));
+  });
+
+  it("mixed blood and step in one couple: the child follows the blood parent into that household", () => {
+    const tree = kinTree(
+      ["Gran", "Dad", "Step", "Kid", "Wynn"],
+      [
+        { child: "Dad", parents: [["Gran", "mother"]] },
+        { child: "Kid", parents: [["Dad", "father"], ["Step", "mother", "step"]] },
+        { child: "Wynn", parents: [["Step", "father", "step"]] },
+      ],
+      [["Dad", "Step"]],
+    );
+    const kid = bucketOf(tree, "Kid");
+    const step = bucketOf(tree, "Step");
+    assert.equal(kid.members.includes(kinId("Dad")), true);
+    assert.equal(kid.members.includes(kinId("Step")), true);
+    assert.deepEqual(kid.via, { kind: "parent", personId: kinId("Dad") });
+    assert.equal(kid.links.length, 0, "the step parent shares the blood parent's bucket, so no cross-bucket step claim");
+    const wynn = bucketOf(tree, "Wynn");
+    assert.deepEqual(wynn.members, [kinId("Wynn")]);
+    assert.ok(!step.members.includes(kinId("Wynn")));
+    assert.equal(wynn.links.find((link) => link.fromPersonId === kinId("Step"))?.kind, "step");
+  });
+
+  it("blood beats foster, and foster beats a step parent who is listed first", () => {
+    const blood = kinTree(
+      ["Bio", "Fos", "Kid"],
+      [{ child: "Kid", parents: [["Fos", "mother", "foster"], ["Bio", "father"]] }],
+    );
+    assert.deepEqual(bucketOf(blood, "Kid").via, { kind: "parent", personId: kinId("Bio") });
+    assert.equal(bucketOf(blood, "Kid").links.find((link) => link.fromPersonId === kinId("Fos"))?.kind, "foster");
+
+    const foster = kinTree(
+      ["Fos", "Step", "Kid"],
+      [{ child: "Kid", parents: [["Step", "mother", "step"], ["Fos", "father", "foster"]] }],
+    );
+    assert.deepEqual(bucketOf(foster, "Kid").via, { kind: "parent", personId: kinId("Fos") });
+  });
+
+  it("adopted and blood are equal, so the mother role still decides", () => {
+    const tree = kinTree(
+      ["AdoptMom", "BloodDad", "Kid"],
+      [{ child: "Kid", parents: [["AdoptMom", "mother", "adopted"], ["BloodDad", "father"]] }],
+    );
+    assert.deepEqual(bucketOf(tree, "Kid").via, { kind: "parent", personId: kinId("AdoptMom") });
+    assert.equal(bucketOf(tree, "Kid").links.find((link) => link.fromPersonId === kinId("BloodDad"))?.kind, "blood");
+  });
+
+  it("unknown parents are ignored, including when the only real parent is a step-parent", () => {
+    const tree = kinTree(
+      ["Step", "Kid", "Lone"],
+      [{ child: "Kid", parents: [["missing-a", "mother"], ["missing-b", "father"], ["Step", "father", "step"]] }],
+    );
+    const kid = bucketOf(tree, "Kid");
+    assert.deepEqual(kid.members, [kinId("Kid")]);
+    assert.equal(kid.links.find((link) => link.fromPersonId === kinId("Step"))?.kind, "step");
+    assert.deepEqual(bucketOf(tree, "Lone").members, [kinId("Lone")]);
+    assert.equal(JSON.stringify(deriveFamilyUnits(tree)).includes("missing"), false);
+  });
+
+  it("two mothers: the partner with family on the tree anchors, and the child is in that bucket", () => {
+    const tree = kinTree(
+      ["Miamom", "Mia", "Noa", "Tot"],
+      [
+        { child: "Mia", parents: [["Miamom", "mother"]] },
+        { child: "Tot", parents: [["Noa", "mother"], ["Mia", "mother"]] },
+      ],
+      [["Noa", "Mia"]],
+    );
+    const tot = bucketOf(tree, "Tot");
+    assert.deepEqual(tot.members, [kinId("Mia"), kinId("Miamom"), kinId("Noa"), kinId("Tot")].sort());
+    assert.equal(tot.via.kind, "parent");
+  });
+
+  it("two fathers: the same rule, with no gender to break the tie", () => {
+    const tree = kinTree(
+      ["Leomom", "Leo", "Max", "Tot"],
+      [
+        { child: "Leo", parents: [["Leomom", "mother"]] },
+        { child: "Tot", parents: [["Max", "father"], ["Leo", "father"]] },
+      ],
+      [["Max", "Leo"]],
+    );
+    const tot = bucketOf(tree, "Tot");
+    assert.deepEqual(tot.members, [kinId("Leo"), kinId("Leomom"), kinId("Max"), kinId("Tot")].sort());
+    const listedFirst = kinTree(
+      ["Leomom", "Leo", "Max", "Tot"],
+      [
+        { child: "Leo", parents: [["Leomom", "mother"]] },
+        { child: "Tot", parents: [["Leo", "father"], ["Max", "father"]] },
+      ],
+      [["Leo", "Max"]],
+    );
+    assert.deepEqual(bucketOf(listedFirst, "Tot").members, bucketOf(tree, "Tot").members);
+  });
+
+  it("a missing kin kind is blood, so an old tree without kin still places the child", () => {
+    const legacy = {
+      people: [
+        { id: "old-mom", givenName: "Mom", familyName: "FIXTURE", createdAt: "t", updatedAt: "t" },
+        { id: "old-kid", givenName: "Kid", familyName: "FIXTURE", createdAt: "t", updatedAt: "t" },
+      ],
+      unions: [],
+      childLinks: [{ id: "old-c", childId: "old-kid", parentIds: ["old-mom"] }],
+    };
+    const text = JSON.stringify(legacy);
+    const loaded = parseTreeJson(text);
+    assert.equal(loaded.childLinks[0].kin, undefined);
+    assert.equal(loaded.familyUnitOverrides, undefined);
+    assert.equal(JSON.stringify(loaded), text);
+    const result = deriveFamilyUnits(loaded);
+    assert.equal(result.unitOf["old-kid"], result.unitOf["old-mom"]);
+    assert.deepEqual(result.via["old-kid"], { kind: "parent", personId: "old-mom" });
+  });
+
+  it("a manual override wins over a step link and over the maternal default", () => {
+    const tree = kinTree(
+      ["Gran", "Mae", "Stu", "Wynn"],
+      [
+        { child: "Mae", parents: [["Gran", "mother"]] },
+        { child: "Wynn", parents: [["Stu", "father", "step"]] },
+      ],
+      [["Mae", "Stu"]],
+    );
+    const intoStep = bucketOf(tree, "Wynn", [{ personId: "Wynn", unitOf: "Stu" }]);
+    assert.ok(intoStep.members.includes(kinId("Stu")));
+    assert.deepEqual(intoStep.via, { kind: "override", personId: kinId("Stu") });
+    const aside = bucketOf(tree, "Mae", [{ personId: "Mae", unitOf: null }]);
+    assert.deepEqual(aside.members, [kinId("Mae"), kinId("Stu")].sort());
+    assert.ok(!aside.members.includes(kinId("Gran")));
   });
 });
 
