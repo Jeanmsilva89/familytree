@@ -13,8 +13,10 @@
  * link to Eli Fixture removes that parent link, and tapping Nia Fixture's
  * couple bar asks before unlinking her from Pal Fixture. Then the visibility
  * lens: arrange what Eli Fixture can see, preview it, and move Quinn Fixture's
- * invite from pending to accepted to revoked. Runs at desktop
- * 1280x800 and phone 390x844.
+ * invite from pending to accepted to revoked. Then, still on the fixture,
+ * divorce Dee Fixture and Eli Fixture from Dee's editor and marry Dee to
+ * Rema Fixture. The sky shows a quiet divorced line and a remarried bar.
+ * Remarried is not stored. Runs at desktop 1280x800 and phone 390x844.
  *
  *   npm run build && npm start
  *   npm run verify
@@ -1219,6 +1221,65 @@ async function runVisibilityLens(page, viewport) {
   console.log(`${viewport.name}: visibility lens arranged, previewed, and reloaded`);
 }
 
+async function runPartnerStatus(page, viewport) {
+  const lens = page.getByRole("button", { name: "Lens", exact: true });
+  if ((await lens.getAttribute("aria-pressed")) === "true") await lens.click();
+  const done = page.getByRole("button", { name: "Done", exact: true });
+  if (await done.count()) await done.click();
+  await page.locator(".family-sky[data-layout='sky']").waitFor();
+
+  await openFamilyNear(page, viewport, "Dee & Eli");
+  const sheet = await openPerson(page, "fx-dee");
+  const couple = sheet.getByLabel("Couple type for Eli Fixture");
+  await couple.scrollIntoViewIfNeeded();
+  await couple.selectOption("divorced");
+  await sheet.getByText("Partner · Divorced").waitFor();
+
+  await sheet.getByRole("tab", { name: "Partner" }).click();
+  await sheet.locator("#rel-name").fill("Rema Fixture");
+  await sheet.locator("#union-kind").selectOption("married");
+  await sheet.getByRole("button", { name: "Add", exact: true }).click();
+  await sheet.getByText("Partner · Remarried").waitFor();
+  await sheet.getByText("Remarried. An earlier union is divorced.").waitFor();
+  await sheet.getByRole("button", { name: "Close" }).click();
+  await sheet.waitFor({ state: "detached" });
+  await waitSkySettled(page);
+
+  const saved = await readTree(page);
+  const ended = saved.unions.find((union) => union.partnerIds.includes("fx-dee") && union.partnerIds.includes("fx-eli"));
+  if (ended?.kind !== "divorced") fail(`${viewport.name}: Dee and Eli were not saved as divorced`);
+  const rema = saved.people.find((person) => person.givenName === "Rema Fixture");
+  if (!rema) fail(`${viewport.name}: Rema Fixture was not added`);
+  const next = saved.unions.find((union) => union.partnerIds.includes("fx-dee") && union.partnerIds.includes(rema.id));
+  if (next?.kind !== "married") fail(`${viewport.name}: the new union was not saved as married`);
+  if (JSON.stringify(saved).includes("remarried")) fail(`${viewport.name}: remarried was stored on the tree`);
+
+  await page.locator('.sky-link.is-divorced[data-status="divorced"]').waitFor({ state: "attached", timeout: 8000 });
+  const remarried = page.locator('button.partner-status[data-status="remarried"]');
+  await remarried.waitFor({ state: "attached", timeout: 8000 });
+  await remarried.click({ force: true });
+  if ((await remarried.getAttribute("data-open")) !== "true") fail(`${viewport.name}: the remarried label did not open`);
+  if (!(await remarried.innerText()).includes("Remarried")) fail(`${viewport.name}: the remarried label was blank`);
+  const divorced = page.locator('button.partner-status[data-status="divorced"]');
+  await divorced.click({ force: true });
+  if (!(await divorced.innerText()).includes("Divorced")) fail(`${viewport.name}: the divorced label was blank`);
+  await page.screenshot({ path: path.join(outDir, `partner-status-${viewport.name}.png`) });
+
+  await page.reload({ waitUntil: "networkidle" });
+  await page.getByRole("button", { name: /menu/i }).waitFor({ timeout: 20000 });
+  await openVisualize(page);
+  await turnFamiliesOn(page, viewport);
+  await revealSkyPerson(page, viewport, "fx-dee");
+  await page.locator('.sky-link.is-divorced[data-status="divorced"]').waitFor({ state: "attached", timeout: 8000 });
+  await page.locator('[data-status="remarried"]').first().waitFor({ state: "attached", timeout: 8000 });
+  const again = await readTree(page);
+  const againNext = again.unions.find((union) => union.partnerIds.includes("fx-dee") && union.partnerIds.includes(rema.id));
+  if (againNext?.kind !== "married" || again.unions.find((union) => union.id === ended.id)?.kind !== "divorced") {
+    fail(`${viewport.name}: partner status did not survive reload`);
+  }
+  console.log(`${viewport.name}: divorce and remarriage saved, shown, and reloaded`);
+}
+
 async function runViewport(browser, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -1377,7 +1438,8 @@ async function runViewport(browser, viewport) {
     await runSkyPlace(page, viewport);
     await runSkyUnlink(page, viewport);
     await runVisibilityLens(page, viewport);
-    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, place, unlink, and lens passed`);
+    await runPartnerStatus(page, viewport);
+    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, place, unlink, lens, and partner status passed`);
   } catch (error) {
     await page.screenshot({ path: shot("failed") }).catch(() => undefined);
     throw error;

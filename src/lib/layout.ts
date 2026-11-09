@@ -1,4 +1,4 @@
-import type { KinKind, Person, TreeData, Union, UnionKind } from "./types";
+import type { KinKind, PartnerStatus, Person, TreeData, Union, UnionKind } from "./types";
 import { displayName } from "./types";
 import { kidsUnderUnion, parentsOf, unionsFor } from "./tree";
 
@@ -34,6 +34,8 @@ export type LaidCouple = {
   id: string;
   partnerIds: string[];
   kind?: UnionKind;
+  /** Derived. A first marriage stays `married`; `remarried` is not stored on the union. */
+  status?: PartnerStatus;
   bar: boolean;
   cx: number;
   cy: number;

@@ -9,7 +9,8 @@ import {
   cleanExtras,
   displayName,
   kinKindLabel,
-  unionKindLabel,
+  partnerStatus,
+  partnerStatusLabel,
 } from "@/lib/types";
 import { childrenOfPerson, kinBetween, parentRoleOf, parentsOf, unionsFor } from "@/lib/tree";
 import { personToVCard, vcardFilename } from "@/lib/vcard";
@@ -336,22 +337,28 @@ export function PersonSheet({
               .map((id) => tree.people.find((p) => p.id === id))
               .filter(Boolean) as Person[];
             const withNames = others.map(displayName).join(", ") || (otherIds.length ? "Unknown person" : "someone");
+            const status = partnerStatus(tree, u);
             return (
               <article className="rel-row" key={u.id}>
                 <header>
                   <strong>{withNames}</strong>
-                  <span>Partner · {unionKindLabel(u.kind)}</span>
+                  <span>Partner · {partnerStatusLabel(status)}</span>
                 </header>
                 <div className="rel-fields">
                   <label>
                     Couple
-                    <select value={u.kind} onChange={(e) => onSetUnionKind(u.id, e.target.value as UnionKind)}>
+                    <select
+                      aria-label={`Couple type for ${withNames}`}
+                      value={u.kind}
+                      onChange={(e) => onSetUnionKind(u.id, e.target.value as UnionKind)}
+                    >
                       {UNION_KIND_OPTIONS.map((option) => (
                         <option key={option.value} value={option.value}>{option.label}</option>
                       ))}
                     </select>
                   </label>
                 </div>
+                {status === "remarried" ? <p className="hint">Remarried. An earlier union is divorced.</p> : null}
                 <button type="button" className="btn ghost danger-text" onClick={() => void unlinkCouple(u.id, otherIds[0], withNames)}>
                   Unlink
                 </button>

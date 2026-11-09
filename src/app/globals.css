@@ -860,6 +860,34 @@ select {
   border: 2px solid color-mix(in srgb, var(--graph-spouse) 72%, var(--line-ink));
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--graph-spouse) 24%, transparent);
 }
+.couple-tint.is-remarried {
+  outline: 1px solid color-mix(in srgb, var(--graph-spouse) 55%, transparent);
+  outline-offset: 4px;
+}
+.sky-link.is-divorced,
+.sky-edge.is-divorced {
+  stroke: var(--graph-spouse);
+}
+.partner-status {
+  position: absolute;
+  z-index: 5;
+  transform: translate(-50%, -50%);
+  min-width: 28px;
+  min-height: 22px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+}
+.partner-status[data-open="true"] {
+  background: color-mix(in srgb, var(--card) 90%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--line) 80%, transparent);
+}
 
 .portrait-card {
   appearance: none;

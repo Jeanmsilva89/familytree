@@ -1,5 +1,5 @@
 import type { Person, TreeData } from "./types";
-import { strongestKin, type KinKind } from "./types";
+import { partnerStatus, strongestKin, type KinKind } from "./types";
 import { kidsUnderUnion, kinBetween } from "./tree";
 import {
   AREA,
@@ -231,6 +231,7 @@ export function connectLaidCards(
       id: union.id,
       partnerIds: union.partnerIds,
       kind: union.kind,
+      status: partnerStatus(tree, union),
       bar: sittingDistance(l.x, r.x) && showsCoupleBar(union.kind, partners.length),
       cx: (l.x + r.x) / 2,
       cy: l.y + CARD.h * 0.5,

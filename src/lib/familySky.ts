@@ -1,4 +1,5 @@
 import type { TreeData } from "./types";
+import { partnerStatus } from "./types";
 import { CARD, showsCoupleBar, type GraphLayout, type LaidCard, type LaidCouple, type LaidFork } from "./layout";
 import { buildGraph } from "./layoutGraph";
 import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type JoinReason, type UnitLinkKind } from "./familyUnits";
@@ -81,7 +82,7 @@ export type FamilySky = {
   shift: { x: number; y: number };
 };
 
-export const KIND_ORDER: UnitLinkKind[] = ["blood", "adopted", "foster", "step", "partner"];
+export const KIND_ORDER: UnitLinkKind[] = ["blood", "adopted", "foster", "step", "partner", "divorced"];
 
 /** Below `far` buckets become glowing nodes; from `near` up, full cards. */
 export const SKY_ZOOM = { far: 0.13, near: 0.45, max: 2.2, hysteresis: 0.05 };
@@ -717,7 +718,16 @@ export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = 
     // Content sits below centre, leaving the label strip on top.
     const dy = node.y - localCy + LABEL_ROOM / 2;
     for (const card of l.graph.cards) cards.push({ ...card, x: card.x + dx, y: card.y + dy, unitId: l.unit.id });
-    for (const couple of l.graph.couples) couples.push({ ...couple, cx: couple.cx + dx, cy: couple.cy + dy, unitId: l.unit.id });
+    for (const couple of l.graph.couples) {
+      const union = tree.unions.find((item) => item.id === couple.id);
+      couples.push({
+        ...couple,
+        cx: couple.cx + dx,
+        cy: couple.cy + dy,
+        unitId: l.unit.id,
+        status: union ? partnerStatus(tree, union) : couple.status,
+      });
+    }
     for (const fork of l.graph.forks) forks.push(shiftFork(fork, dx, dy, l.unit.id));
     buckets.push({
       id: l.unit.id,
