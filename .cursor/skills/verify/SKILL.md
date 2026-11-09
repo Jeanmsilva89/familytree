@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Drive the Family Tree PWA in a browser and confirm the Families lens and the visibility lens with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, the visibility lens, or a production deploy of familytree-rose.vercel.app.
+description: Drive the Family Tree PWA in a browser and confirm the Families lens, the visibility lens, and divorce/remarriage with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, the visibility lens, partner status, or a production deploy of familytree-rose.vercel.app.
 ---
 
 # Verify the Families lens
@@ -70,6 +70,15 @@ Still on the Families lens, in the dark theme:
 
 Screenshots: `lens-<size>-arrange.png`, `lens-<size>-preview.png`, `lens-<size>-guest-pending.png`, `lens-<size>-guest-accepted.png`, `lens-<size>-guest-revoked.png`, `lens-<size>-owner.png`.
 
+After the lens checks, still on the Families lens, in the dark theme:
+
+36. Turn Lens off. Open Dee Fixture. Set her couple with Eli Fixture to Divorced. Add a partner named Rema Fixture as Married.
+37. The sheet says Dee is divorced from Eli and remarried to Rema. Remarried is derived. The saved union kind stays `married`, and the earlier union is `divorced`. The word `remarried` is not stored.
+38. On the sky, Dee and Eli have a quiet dashed line. Tap it and the word Divorced appears. Dee and Rema have a double couple bar. Tap it and the word Remarried appears. Nobody new is invented except the partner just added, and that partner's name says Fixture.
+39. Reload. Both facts are still there, and the sky still draws them.
+
+Screenshot: `partner-status-<size>.png`.
+
 Screenshots, one set per size:
 
 - `family-sky-<size>-links.png` — person-to-person links, none crossing an unrelated family
@@ -86,6 +95,7 @@ Screenshots, one set per size:
 - `lens-<size>-guest-accepted.png` — only Eli and Dee, the people the invite grants
 - `lens-<size>-guest-revoked.png` — the invite cleared
 - `lens-<size>-owner.png` — You, the full fixture tree again
+- `partner-status-<size>.png` — Dee Fixture divorced from Eli Fixture and remarried to Rema Fixture, labels open
 
 `<size>` is `desktop` or `phone`.
 

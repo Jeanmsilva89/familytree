@@ -24,7 +24,7 @@
  * FAM:
  *   1 HUSB / 1 WIFE / 1 CHIL            — HUSB is a father, WIFE a mother
  *   1 MARR or 1 DIV / 2 DATE
- *   1 _KIND married|partnered|separated|unspecified
+ *   1 _KIND married|partnered|separated|divorced|unspecified
  *   1 _KV / 2 _VAL
  *   1 _UID <stable id>
  */
@@ -117,11 +117,21 @@ function oneLine(value: string): string {
 
 function kindFromFam(kindTag: string | undefined, events: string[]): UnionKind {
   const tagged = (kindTag ?? "").toLowerCase();
-  if (tagged === "married" || tagged === "partnered" || tagged === "separated" || tagged === "unspecified") {
+  if (
+    tagged === "married" ||
+    tagged === "partnered" ||
+    tagged === "separated" ||
+    tagged === "divorced" ||
+    tagged === "unspecified"
+  ) {
     return tagged;
   }
+  if (tagged === "remarried") return "married";
   const joined = events.join(" ").toUpperCase();
-  if (joined.includes("DIV") || joined.includes("SEPARAT")) return "separated";
+  // A bare DIV is a divorce. Files this app used to write put DIV next to
+  // `_KIND separated`; the tag above keeps those as separated.
+  if (joined.includes("DIV")) return "divorced";
+  if (joined.includes("SEPARAT")) return "separated";
   if (joined.includes("MARR") || joined.includes("MARRIED")) return "married";
   return "partnered";
 }
@@ -497,7 +507,7 @@ export function serializeGedcom(tree: TreeData): string {
       lines.push("1 MARR");
       const ged = dateToGed(fam.union?.marriedOn);
       if (ged) lines.push(`2 DATE ${ged}`);
-    } else if (fam.kind === "separated") {
+    } else if (fam.kind === "divorced") {
       lines.push("1 DIV");
       const ged = dateToGed(fam.union?.marriedOn);
       if (ged) lines.push(`2 DATE ${ged}`);

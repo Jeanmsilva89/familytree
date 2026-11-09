@@ -2,7 +2,7 @@
 
 import { openDB, type IDBPDatabase } from "idb";
 import type { TreeData } from "./types";
-import { emptyTree } from "./types";
+import { emptyTree, migrateUnionKind } from "./types";
 
 const DB_NAME = "familytree";
 const DB_VERSION = 2;
@@ -49,7 +49,10 @@ function cloneTree(tree: TreeData): TreeData {
 function normalize(stored: TreeData): TreeData {
   return {
     people: stored.people ?? [],
-    unions: stored.unions ?? [],
+    unions: (stored.unions ?? []).map((union) => {
+      const kind = migrateUnionKind(union.kind);
+      return kind === union.kind ? union : { ...union, kind };
+    }),
     childLinks: stored.childLinks ?? [],
     focusPersonId: stored.focusPersonId,
     ...(stored.familyUnitOverrides?.length ? { familyUnitOverrides: stored.familyUnitOverrides } : {}),

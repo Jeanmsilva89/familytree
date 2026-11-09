@@ -10,8 +10,9 @@ import { kinOf } from "./types";
  *
  * 1. Couple. A person's couple is their strongest married or partnered union
  *    (married beats partnered, then more shared children, then the more
- *    recently recorded union). Separated and unspecified unions are not
- *    couples, so divorced or unmarried co-parents keep their own units.
+ *    recently recorded union). Separated, divorced, and unspecified unions
+ *    are not couples, so a former couple keeps two units. A divorced union
+ *    still draws a quiet line between those people. A separation does not.
  * 2. Anchor. In a couple, the woman anchors: her partner joins her unit. A
  *    person counts as a woman only when the tree records them as someone's
  *    mother. When that does not decide it (two women, two men, or no roles
@@ -60,7 +61,7 @@ export type FamilyUnit = {
   label: string;
 };
 
-export type UnitLinkKind = KinKind | "partner";
+export type UnitLinkKind = KinKind | "partner" | "divorced";
 
 /** A person-to-person tie that crosses from one unit into another. */
 export type UnitLink = {
@@ -280,13 +281,16 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
     for (const parent of parentsOf.get(person.id) ?? []) push(parent.kin, parent.id, person.id);
   }
   for (const union of tree.unions) {
+    // Separated is two households and draws no couple line. Divorce is the
+    // same for membership, and still draws a quiet line of its own.
     if (union.kind === "separated") continue;
+    const linkKind: UnitLinkKind = union.kind === "divorced" ? "divorced" : "partner";
     const partners = [...new Set(union.partnerIds.filter(known))];
     for (let i = 0; i < partners.length; i++) {
       for (let j = i + 1; j < partners.length; j++) {
         const [a, b] = [partners[i], partners[j]];
-        if (seen.has(`partner:${b}>${a}`)) continue;
-        push("partner", a, b);
+        if (seen.has(`${linkKind}:${b}>${a}`)) continue;
+        push(linkKind, a, b);
       }
     }
   }

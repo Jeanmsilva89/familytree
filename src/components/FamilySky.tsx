@@ -3,6 +3,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
+import { PartnerStatusMark } from "./PartnerStatusMark";
 import { CARD, ageLabel, lineageIds } from "@/lib/layout";
 import { GeneratedAvatar } from "./GeneratedAvatar";
 import { centerTransform, fitContentScale, superellipsePath, type Camera } from "@/lib/graphView";
@@ -98,10 +99,19 @@ const DASH: Record<UnitLinkKind, string | undefined> = {
   step: "2 6",
   foster: "8 4 2 4",
   partner: undefined,
+  divorced: "2 7",
 };
 
 function allows(filter: LineFilter, kind: UnitLinkKind) {
-  return kind === "partner" ? lineFilterAllowsCouples(filter) : lineFilterAllows(filter, kind);
+  if (kind === "partner" || kind === "divorced") return lineFilterAllowsCouples(filter);
+  return lineFilterAllows(filter, kind);
+}
+
+function curveMid(curve: { x1: number; y1: number; cx: number; cy: number; x2: number; y2: number }) {
+  return {
+    x: 0.25 * curve.x1 + 0.5 * curve.cx + 0.25 * curve.x2,
+    y: 0.25 * curve.y1 + 0.5 * curve.cy + 0.25 * curve.y2,
+  };
 }
 
 function easeOut(t: number) {
@@ -855,6 +865,10 @@ export function FamilySky({
   }
 
   function linkStyle(kind: UnitLinkKind, lit: boolean) {
+    if (kind === "divorced") {
+      if (lit) return { width: 1.4, opacity: 0.5 };
+      return { width: 1.15, opacity: linked ? 0.2 : 0.34 };
+    }
     const quiet = kind !== "blood";
     if (lit) return { width: 2.4, opacity: 0.92 };
     if (linked) return { width: 1.2, opacity: 0.16 };
@@ -984,6 +998,7 @@ export function FamilySky({
                         className={`sky-link is-${link.kind}${lit ? " is-lit" : ""}`}
                         data-from={link.fromPersonId}
                         data-to={link.toPersonId}
+                        data-status={link.kind === "divorced" ? "divorced" : undefined}
                         d={d}
                         strokeWidth={w.width}
                         strokeOpacity={w.opacity}
@@ -1106,20 +1121,38 @@ export function FamilySky({
                 );
                 if (!geom?.showBar) return null;
                 const lit = Boolean(linked && couple.partnerIds.every((id) => linked.has(id)));
+                const width = (lit ? 2.6 : 1.6) + (couple.kind === "married" ? 1.6 : 0.4);
+                const opacity = lit ? 0.9 : linked ? 0.12 : 0.4;
                 return (
-                  <line
-                    key={couple.id}
-                    data-couple={couple.id}
-                    data-partners={couple.partnerIds.join(" ")}
-                    x1={geom.x1}
-                    y1={geom.y}
-                    x2={geom.x2}
-                    y2={geom.y}
-                    stroke="var(--graph-spouse)"
-                    strokeWidth={(lit ? 2.6 : 1.6) + (couple.kind === "married" ? 1.6 : 0.4)}
-                    strokeOpacity={lit ? 0.9 : linked ? 0.12 : 0.4}
-                    strokeLinecap="round"
-                  />
+                  <g key={couple.id}>
+                    <line
+                      data-couple={couple.id}
+                      data-partners={couple.partnerIds.join(" ")}
+                      data-status={couple.status}
+                      x1={geom.x1}
+                      y1={geom.y}
+                      x2={geom.x2}
+                      y2={geom.y}
+                      stroke="var(--graph-spouse)"
+                      strokeWidth={width}
+                      strokeOpacity={opacity}
+                      strokeLinecap="round"
+                    />
+                    {couple.status === "remarried" ? (
+                      <line
+                        data-status="remarried"
+                        data-couple={couple.id}
+                        x1={geom.x1}
+                        y1={geom.y + 4}
+                        x2={geom.x2}
+                        y2={geom.y + 4}
+                        stroke="var(--graph-spouse)"
+                        strokeWidth={1}
+                        strokeOpacity={Math.min(0.7, opacity)}
+                        strokeLinecap="round"
+                      />
+                    ) : null}
+                  </g>
                 );
               })
             : null}
@@ -1136,14 +1169,28 @@ export function FamilySky({
                 couple.cy,
               );
               if (!geom) return null;
+              const showStatus = !editMode && !lensOn && couple.status === "remarried";
               return (
-                <div
-                  key={`${couple.id}-tint`}
-                  data-couple={couple.id}
-                  className={`couple-tint${couple.kind === "married" ? " is-married" : ""}`}
-                  style={{ left: geom.tint.left, top: geom.tint.top, width: geom.tint.width, height: geom.tint.height }}
-                />
+                <div key={`${couple.id}-tint`}>
+                  <div
+                    data-couple={couple.id}
+                    data-status={couple.status}
+                    className={`couple-tint${couple.kind === "married" ? " is-married" : ""}${couple.status === "remarried" ? " is-remarried" : ""}`}
+                    style={{ left: geom.tint.left, top: geom.tint.top, width: geom.tint.width, height: geom.tint.height }}
+                  />
+                  {showStatus ? (
+                    <PartnerStatusMark status="remarried" left={(geom.x1 + geom.x2) / 2} top={geom.y - CARD.h / 2 - 8} />
+                  ) : null}
+                </div>
               );
+            })
+          : null}
+
+        {near && !personal && !editMode && !lensOn
+          ? sky.links.filter((link) => link.kind === "divorced" && lensShows(link.fromPersonId) && lensShows(link.toPersonId)).map((link) => {
+              const mid = curveMid(link);
+              if (!Number.isFinite(mid.x) || !Number.isFinite(mid.y)) return null;
+              return <PartnerStatusMark key={`${link.id}-status`} status="divorced" left={mid.x} top={mid.y} />;
             })
           : null}
 

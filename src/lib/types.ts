@@ -3,16 +3,51 @@ export type ExtraField = {
   value: string;
 };
 
-export type UnionKind = "unspecified" | "partnered" | "married" | "separated";
+export type UnionKind = "unspecified" | "partnered" | "married" | "separated" | "divorced";
+/** What the tree says about a union. `remarried` is derived from a divorce plus a later marriage. It is never stored. */
+export type PartnerStatus = UnionKind | "remarried";
 export type ParentRole = "father" | "mother";
 export type KinKind = "blood" | "adopted" | "step" | "foster";
 
 export const UNION_KIND_OPTIONS: { value: UnionKind; label: string }[] = [
   { value: "married", label: "Married" },
   { value: "partnered", label: "Partnered" },
+  { value: "divorced", label: "Divorced" },
   { value: "separated", label: "Two households / separated" },
   { value: "unspecified", label: "Unspecified" },
 ];
+
+const STORED_UNION_KINDS = new Set<string>(UNION_KIND_OPTIONS.map((option) => option.value));
+
+/**
+ * A stored couple kind. A missing kind, and the derived word `remarried`,
+ * become a real stored kind. Separation is not rewritten as divorce.
+ */
+export function migrateUnionKind(kind: unknown): UnionKind {
+  if (kind === "remarried") return "married";
+  if (typeof kind === "string" && STORED_UNION_KINDS.has(kind)) return kind as UnionKind;
+  return "unspecified";
+}
+
+/**
+ * Married, divorced, or remarried. Remarried means this union is married and
+ * one of these people has another union that is divorced. A separation does
+ * not count: that would invent a divorce. Roles and gender are ignored.
+ */
+export function partnerStatus(tree: { unions: Union[] }, union: Union): PartnerStatus {
+  const kind = migrateUnionKind(union.kind);
+  if (kind !== "married") return kind;
+  const again = tree.unions.some((other) => {
+    if (other.id === union.id) return false;
+    return migrateUnionKind(other.kind) === "divorced" && other.partnerIds.some((id) => union.partnerIds.includes(id));
+  });
+  return again ? "remarried" : "married";
+}
+
+export function partnerStatusLabel(status: PartnerStatus): string {
+  if (status === "remarried") return "Remarried";
+  return unionKindLabel(status);
+}
 
 export const KIN_KIND_OPTIONS: { value: KinKind; label: string }[] = [
   { value: "blood", label: "Blood" },

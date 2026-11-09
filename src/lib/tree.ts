@@ -1,6 +1,5 @@
 import type { ChildLink, KinKind, LinkRole, ParentRole, Person, TreeData, Union, UnionKind } from "./types";
-import { kinOf } from "./types";
-import { emptyTree } from "./types";
+import { emptyTree, kinOf, migrateUnionKind } from "./types";
 import { newId, nowIso } from "./ids";
 
 function stamp(): Pick<Person, "createdAt" | "updatedAt"> {
@@ -544,6 +543,17 @@ export function serializeTreeJson(tree: TreeData): string {
   return JSON.stringify(tree);
 }
 
+function migrateUnions(unions: Union[]): Union[] {
+  let changed = false;
+  const next = unions.map((union) => {
+    const kind = migrateUnionKind(union.kind);
+    if (kind === union.kind) return union;
+    changed = true;
+    return { ...union, kind };
+  });
+  return changed ? next : unions;
+}
+
 export function parseTreeJson(text: string): TreeData {
   let data: unknown;
   try {
@@ -560,5 +570,7 @@ export function parseTreeJson(text: string): TreeData {
   ) {
     throw new Error("Not a Family Tree backup.");
   }
-  return data as TreeData;
+  const tree = data as TreeData;
+  const unions = migrateUnions(tree.unions);
+  return unions === tree.unions ? tree : { ...tree, unions };
 }

@@ -3,8 +3,8 @@ import { unlinkExisting } from "./tree";
 import type { KinKind, LinkRole, Person, TreeData } from "./types";
 import { displayName } from "./types";
 
-/** Kin drawn on a sky curve or a parent/child fork. Partner is its own mark. */
-export type SkyKinKind = Exclude<UnitLinkKind, "partner">;
+/** Kin drawn on a sky curve or a parent/child fork. A couple, including a divorce, is its own mark. */
+export type SkyKinKind = Exclude<UnitLinkKind, "partner" | "divorced">;
 
 /**
  * One sky mark that names exactly one relationship.
@@ -37,7 +37,7 @@ export function curveUnlinkMark(link: {
   fromPersonId: string;
   toPersonId: string;
 }): SkyUnlinkMark | null {
-  if (link.kind === "partner") {
+  if (link.kind === "partner" || link.kind === "divorced") {
     const partnerIds = pair(link.fromPersonId, link.toPersonId);
     return partnerIds ? { mark: "curve", kind: "partner", partnerIds } : null;
   }

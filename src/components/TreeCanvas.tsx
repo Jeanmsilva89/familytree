@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
+import { PartnerStatusMark } from "./PartnerStatusMark";
 import { CARD, ageLabel, buildGraph, lineageIds, type GraphLayout } from "@/lib/layout";
 import { GeneratedAvatar } from "./GeneratedAvatar";
 import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
@@ -725,6 +726,8 @@ export function TreeCanvas({
             return (
               <g key={couple.id}>
                 <line
+                  data-couple={couple.id}
+                  data-status={couple.status}
                   x1={x1}
                   y1={couple.cy}
                   x2={x2}
@@ -734,6 +737,20 @@ export function TreeCanvas({
                   strokeOpacity={w.opacity}
                   strokeLinecap="round"
                 />
+                {couple.status === "remarried" ? (
+                  <line
+                    data-status="remarried"
+                    data-couple={couple.id}
+                    x1={x1}
+                    y1={couple.cy + 4}
+                    x2={x2}
+                    y2={couple.cy + 4}
+                    stroke="var(--graph-spouse)"
+                    strokeWidth={1}
+                    strokeOpacity={Math.min(0.7, w.opacity)}
+                    strokeLinecap="round"
+                  />
+                ) : null}
                 {editMode ? (
                   <line
                     className="graph-hit"
@@ -779,6 +796,36 @@ export function TreeCanvas({
               strokeLinecap="round"
             />
           ) : null}
+          {lineFilterAllowsCouples(lineFilter)
+            ? tree.unions.filter((union) => union.kind === "divorced").map((union) => {
+                const pair = union.partnerIds
+                  .map((id) => cards.find((card) => card.id === id))
+                  .filter((card): card is (typeof cards)[number] => Boolean(card));
+                if (pair.length < 2) return null;
+                const [a, b] = pair;
+                const x1 = a.x;
+                const y1 = a.y + CARD.h + 6;
+                const x2 = b.x;
+                const y2 = b.y + CARD.h + 6;
+                if (!isFiniteBox(x1, y1, x2, y2)) return null;
+                return (
+                  <line
+                    key={`${union.id}-divorced`}
+                    data-status="divorced"
+                    data-couple={union.id}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="var(--graph-spouse)"
+                    strokeWidth={1.15}
+                    strokeOpacity={0.4}
+                    strokeDasharray="2 7"
+                    strokeLinecap="round"
+                  />
+                );
+              })
+            : null}
         </svg>
 
         {layout.couples.filter((c) => c.bar).map((couple) => {
@@ -787,14 +834,40 @@ export function TreeCanvas({
           const box = coupleTintBox(pair);
           if (!box || !isFiniteBox(box.left, box.top, box.width, box.height)) return null;
           const isHome = pair.every((c) => household.has(c.person.id));
+          const left = pair.reduce((a, b) => (a.x < b.x ? a : b));
+          const right = pair.reduce((a, b) => (a.x > b.x ? a : b));
           return (
-            <div
-              key={`${couple.id}-tint`}
-              className={`couple-tint${isHome ? " is-home" : ""}${couple.kind === "married" ? " is-married" : ""}`}
-              style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
-            />
+            <div key={`${couple.id}-tint`}>
+              <div
+                data-couple={couple.id}
+                data-status={couple.status}
+                className={`couple-tint${isHome ? " is-home" : ""}${couple.kind === "married" ? " is-married" : ""}${couple.status === "remarried" ? " is-remarried" : ""}`}
+                style={{ left: box.left, top: box.top, width: box.width, height: box.height }}
+              />
+              {!editMode && couple.status === "remarried" ? (
+                <PartnerStatusMark status="remarried" left={(left.x + right.x) / 2} top={left.y - 8} />
+              ) : null}
+            </div>
           );
         })}
+
+        {!editMode && lineFilterAllowsCouples(lineFilter)
+          ? tree.unions.filter((union) => union.kind === "divorced").map((union) => {
+              const pair = union.partnerIds
+                .map((id) => cards.find((card) => card.id === id))
+                .filter((card): card is (typeof cards)[number] => Boolean(card));
+              if (pair.length < 2) return null;
+              const [a, b] = pair;
+              return (
+                <PartnerStatusMark
+                  key={`${union.id}-status`}
+                  status="divorced"
+                  left={(a.x + b.x) / 2}
+                  top={Math.max(a.y, b.y) + CARD.h + 6}
+                />
+              );
+            })
+          : null}
 
         {cards.map((card) => {
           const isHome = household.has(card.person.id);
