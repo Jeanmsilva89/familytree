@@ -19,18 +19,25 @@ import { kinOf } from "./types";
  *    recorded), the partner whose own parent is on the tree anchors, and if
  *    both or neither have one, the partner listed first in the union does.
  * 3. Parents. Someone who is not joining a partner joins their line parent.
- *    A line parent is a blood, adopted, or foster parent on the tree: blood
- *    and adopted before foster, then the mother before a parent with no role
- *    before the father, then the parent listed first. A step relationship is
- *    not a line parent. Step alone never places someone in a bucket, and it
- *    never makes their partner count as having family on the tree. Children
- *    follow their mother, daughters stay with their family, a son who marries
- *    out goes with his wife, and a single son stays with his parents.
+ *    Which parent links pull a child into a parent's bucket, strongest first:
+ *    blood and adopted are equal, then foster. A step link never does. Among
+ *    equal links, the mother comes before a parent with no role, before the
+ *    father, before the parent listed first. Role is the recorded parent
+ *    role, not a gender; two mothers, or two fathers, use the same rule.
+ *    A missing kin kind is blood, so a backup from before kin kinds still
+ *    places that child with that parent.
+ *    Step alone never places someone in a bucket, and it never counts as
+ *    that person having a parent on the tree when a couple needs an anchor.
+ *    Foster does place the child, and it does count as family for that
+ *    anchor, but it loses to a blood or adopted parent. The line drawn for
+ *    a foster child stays foster. A step-only child, or a child whose only
+ *    other parent ids are not on the tree, heads their own unit (with their
+ *    partner, if they have one) and the step link is drawn between buckets.
+ *    Children follow their mother, daughters stay with their family, a son
+ *    who marries out goes with his wife, and a single son stays with his
+ *    parents. That maternal placement still wins over a step link.
  * 4. Root. Someone with no anchoring partner and no line parent heads a unit.
- *    That is a person whose parents are not on the tree, including someone
- *    whose only recorded parent is a step-parent: they belong with their own
- *    partner, or alone when they have none. The unit is named after them and
- *    their couple partner.
+ *    The unit is named after them and their couple partner.
  *
  * Overrides then point a person at another person's unit (or at a unit of
  * their own). Everyone who belongs through that person moves with them, and
@@ -85,7 +92,8 @@ export type FamilyUnits = {
   ignoredOverrides: FamilyUnitOverride[];
 };
 
-const KIN_RANK: Record<KinKind, number> = { blood: 0, adopted: 0, foster: 1, step: 1 };
+/** Blood and adopted place a child. Foster places them only after those. Step is not a rank: it never places. */
+const LINE_RANK: Record<Exclude<KinKind, "step">, number> = { blood: 0, adopted: 0, foster: 1 };
 const ROLE_RANK = (role?: ParentRole) => (role === "mother" ? 0 : role === "father" ? 2 : 1);
 
 export const unitIdFor = (rootId: string) => `fu-${rootId}`;
@@ -117,9 +125,9 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
   // not membership. Blood and adopted outrank foster; role breaks the rest.
   const lineParent = (id: string): string | undefined =>
     [...(parentsOf.get(id) ?? [])]
-      .filter((parent) => parent.kin !== "step")
+      .filter((parent): parent is { id: string; role?: ParentRole; kin: Exclude<KinKind, "step">; order: number } => parent.kin !== "step")
       .sort(
-        (a, b) => KIN_RANK[a.kin] - KIN_RANK[b.kin] || ROLE_RANK(a.role) - ROLE_RANK(b.role) || a.order - b.order,
+        (a, b) => LINE_RANK[a.kin] - LINE_RANK[b.kin] || ROLE_RANK(a.role) - ROLE_RANK(b.role) || a.order - b.order,
       )[0]?.id;
 
   // 1. Each person's couple.

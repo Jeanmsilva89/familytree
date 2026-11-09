@@ -20,7 +20,7 @@ At desktop (1280×800) and phone (390×844), in the dark theme:
 5. Zoom out to the star view (`data-level="far"`) and confirm the "Tap a family to zoom in" hint.
 6. Tap the Ada & Ben star and confirm the sky zooms back in.
 7. Open Cora Fixture's person sheet and move her into Dee Fixture's family unit. The choice must stick in IndexedDB.
-8. Confirm Nia Fixture and Pal Fixture share a family, and that family is not Stu Fixture's. Nia's only parent on the tree is Stu, as a step-parent. Pal's parents are not on the tree.
+8. Confirm Nia Fixture and Pal Fixture share a family, and that family is not Stu Fixture's. Nia's only parent on the tree is Stu, as a step-parent. Pal's parents are not on the tree. Wynn Fixture's only parent is Stu, as step, and Wynn has no partner: Wynn is a family of one, not a member of Stu's bucket. Zoom to Wynn and confirm the step link from Stu.
 9. Move Rex Fixture (no partner, parent of Eli) into Dee's family and confirm Rex sits on Dee's row.
 10. Reload and confirm the star positions match.
 
@@ -84,6 +84,7 @@ Screenshots, one set per size:
 - `family-sky-<size>-links.png` — person-to-person links, none crossing an unrelated family
 - `family-sky-<size>-buckets.png`
 - `family-sky-<size>-stars.png`
+- `family-sky-<size>-step.png` — Wynn Fixture alone in their bucket, with the step link from Stu Fixture
 - `family-sky-<size>-zoomed.png`
 - `family-sky-<size>-unit.png`
 - `family-sky-<size>-row.png` — Rex on Dee's row, after the move

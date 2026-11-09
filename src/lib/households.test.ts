@@ -140,6 +140,26 @@ describe("deriveHouseholds", () => {
     assert.equal(result.households.length, 1);
   });
 
+  it("step alone does not put the child in the step-parent's household", () => {
+    const tree: TreeData = {
+      people: ["stu", "mae", "wynn"].map((id) => ({
+        id: `fx-${id}`,
+        givenName: id,
+        familyName: "FIXTURE",
+        createdAt: "t",
+        updatedAt: "t",
+      })),
+      unions: [{ id: "fx-u", partnerIds: ["fx-mae", "fx-stu"], kind: "married" }],
+      childLinks: [{ id: "fx-c", childId: "fx-wynn", parentIds: ["fx-stu"], kin: { "fx-stu": "step" } }],
+    };
+    const result = deriveHouseholds(tree);
+    assertWellFormed(tree, result);
+    const home = headedBy(result, "mae", "stu");
+    assert.deepEqual(home.childIds, []);
+    assert.deepEqual(result.loose, ["fx-wynn"]);
+    assert.equal(result.links.some((item) => item.personId === "fx-wynn"), false);
+  });
+
   it("unmarried co-parents: one parent heads the household, the other stays linked", () => {
     const tree = FIXTURE_COPARENTS;
     const result = deriveHouseholds(tree);

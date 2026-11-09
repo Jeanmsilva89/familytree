@@ -4,7 +4,8 @@
  * Loads the labeled fixture in scripts/fixtures/verify-family-sky.json (never
  * real relatives), opens Visualize, turns on Families, checks buckets, zooms
  * out to the star view, taps a star, and moves fixture people between family
- * units. Also checks a step-parent bucket, a partnerless move, that a
+ * units. Also checks a step-parent bucket: Wynn Fixture, whose only parent
+ * is Stu as step, sits in their own bucket with a step link. Also checks a partnerless move, that a
  * person-to-person link does not cross an unrelated family's background, and
  * that a reload draws the same stars. In Families Edit mode, close up, a
  * horizontal drag along a row nudges that person and the nudge is still
@@ -174,6 +175,7 @@ async function cardPoint(locator) {
 }
 
 async function holdCard(page, locator, viewport) {
+  await panCardIntoView(page, locator);
   const point = await cardPoint(locator);
   if (!point) fail(`${viewport.name}: no card to hold`);
   await page.mouse.move(point.x, point.y);
@@ -187,6 +189,7 @@ async function holdCard(page, locator, viewport) {
 }
 
 async function dragCard(page, locator, viewport) {
+  await panCardIntoView(page, locator);
   const point = await cardPoint(locator);
   if (!point) fail(`${viewport.name}: no card to drag`);
   await page.mouse.move(point.x, point.y);
@@ -221,6 +224,37 @@ async function assertNoMenu(page, viewport, why) {
   if (await page.getByRole("menu").count()) fail(`${viewport.name}: ${why}`);
 }
 
+async function panCardIntoView(page, locator) {
+  for (let i = 0; i < 12; i += 1) {
+    const box = await locator.boundingBox();
+    const view = page.viewportSize();
+    if (!box || !view) return;
+    const dx = box.x < 16 ? 180 : box.x + box.width > view.width - 16 ? -180 : 0;
+    const dy = box.y < 72 ? 140 : box.y + box.height > view.height - 16 ? -140 : 0;
+    if (!dx && !dy) return;
+    const point = await page.evaluate(() => {
+      const stage = document.querySelector(".graph-stage:not(.family-sky)");
+      if (!(stage instanceof HTMLElement)) return null;
+      const rect = stage.getBoundingClientRect();
+      for (let y = rect.top + 28; y < rect.bottom - 28; y += 18) {
+        for (let x = rect.left + 28; x < rect.right - 28; x += 18) {
+          const hit = document.elementFromPoint(x, y);
+          if (!(hit instanceof Element) || !stage.contains(hit)) continue;
+          if (hit.closest(".portrait-card, .graph-zoom, .graph-toolbar, .graph-port, .btn, .icon-btn")) continue;
+          return { x, y };
+        }
+      }
+      return null;
+    });
+    if (!point) return;
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.down();
+    await page.mouse.move(point.x + dx, point.y + dy, { steps: 6 });
+    await page.mouse.up();
+    await page.waitForTimeout(60);
+  }
+}
+
 async function runPersonalMap(page, viewport, shot) {
   await turnFamiliesOff(page);
   await waitMapSettled(page);
@@ -229,6 +263,7 @@ async function runPersonalMap(page, viewport, shot) {
   await page.screenshot({ path: shot("before") });
 
   const eli = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-eli"]');
+  await panCardIntoView(page, eli);
   await eli.click();
   if (await page.getByRole("dialog").count()) fail(`${viewport.name}: first tap opened edit`);
   await page.waitForTimeout(250);
@@ -330,6 +365,7 @@ async function runPersonalMap(page, viewport, shot) {
   await page.screenshot({ path: shot("after") });
 
   const cora = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-cora"]');
+  await panCardIntoView(page, cora);
   await cora.click();
   await page.waitForTimeout(200);
   if ((await page.locator('.graph-stage:not(.family-sky)').getAttribute("data-layout")) !== "tree") {
@@ -603,6 +639,40 @@ async function assertLinksStayClear(page, viewport) {
   if (crossed.hits.length) {
     fail(`${viewport.name}: a link crosses an unrelated family (${JSON.stringify(crossed.hits)})`);
   }
+}
+
+async function assertStepOnlyChild(page, viewport) {
+  await revealSkyPerson(page, viewport, "fx-wynn");
+  const members = await page.locator('.sky-bucket[data-members~="fx-wynn"]').getAttribute("data-members");
+  const ids = (members || "").split(/\s+/).filter(Boolean);
+  if (ids.length !== 1 || ids[0] !== "fx-wynn") {
+    fail(`${viewport.name}: Wynn Fixture should sit alone, saw ${members}`);
+  }
+  const stuBucket = await page.locator('.sky-bucket[data-members~="fx-stu"]').getAttribute("data-members");
+  if ((stuBucket || "").split(/\s+/).includes("fx-wynn")) {
+    fail(`${viewport.name}: Wynn Fixture landed in Stu Fixture's family (${stuBucket})`);
+  }
+  const link = page.locator('.sky-link.is-step[data-from="fx-stu"][data-to="fx-wynn"]');
+  if ((await link.count()) !== 1) fail(`${viewport.name}: expected a step link from Stu Fixture to Wynn Fixture`);
+  for (let i = 0; i < 6; i += 1) {
+    const both = await page.evaluate(() => {
+      const see = (id) => {
+        const el = document.querySelector(`.portrait-card[data-person-id="${id}"], .sky-avatar[data-person-id="${id}"]`);
+        if (!(el instanceof HTMLElement)) return false;
+        const rect = el.getBoundingClientRect();
+        return rect.right > 8 && rect.bottom > 8 && rect.left < window.innerWidth - 8 && rect.top < window.innerHeight - 8;
+      };
+      return see("fx-wynn") && see("fx-stu");
+    });
+    if (both || (await level(page)) !== "near") break;
+    await page.getByRole("button", { name: "Zoom out", exact: true }).click();
+    await page.waitForTimeout(400);
+  }
+  if ((await level(page)) === "far") {
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.waitForTimeout(400);
+  }
+  await page.screenshot({ path: path.join(outDir, `family-sky-${viewport.name}-step.png`) });
 }
 
 async function showStars(page) {
@@ -1033,7 +1103,7 @@ async function runSkyUnlink(page, viewport) {
 
 const FIXTURE_IDS = [
   "fx-ada", "fx-ben", "fx-cora", "fx-dee", "fx-eli", "fx-fay",
-  "fx-gran", "fx-mae", "fx-nia", "fx-pal", "fx-rex", "fx-stu",
+  "fx-gran", "fx-mae", "fx-nia", "fx-pal", "fx-rex", "fx-stu", "fx-wynn",
 ];
 
 async function tapLensPerson(page, personId) {
@@ -1334,8 +1404,15 @@ async function runViewport(browser, viewport) {
     if (!stu || nia.id === stu.id || stu.members.split(" ").includes("fx-pal")) {
       fail(`${viewport.name}: Pal landed in Stu's family (${stu?.members})`);
     }
+    const wynnStar = stars.find((star) => star.members.split(" ").includes("fx-wynn"));
+    if (!wynnStar || wynnStar.id === stu.id || wynnStar.members.trim() !== "fx-wynn") {
+      fail(`${viewport.name}: Wynn Fixture should be a family of one, not Stu's (${wynnStar?.members})`);
+    }
     await page.getByText("Tap a family to zoom in").waitFor();
     await page.screenshot({ path: shot("stars") });
+
+    await assertStepOnlyChild(page, viewport);
+    await showStars(page);
 
     await page.getByRole("button", { name: /Ada & Ben family/ }).click();
     await page.waitForFunction(
@@ -1439,7 +1516,7 @@ async function runViewport(browser, viewport) {
     await runSkyUnlink(page, viewport);
     await runVisibilityLens(page, viewport);
     await runPartnerStatus(page, viewport);
-    console.log(`${viewport.name}: links, buckets, stars, step family, row move, reload, place, unlink, lens, and partner status passed`);
+    console.log(`${viewport.name}: links, buckets, stars, step-only child, row move, reload, place, unlink, lens, and partner status passed`);
   } catch (error) {
     await page.screenshot({ path: shot("failed") }).catch(() => undefined);
     throw error;

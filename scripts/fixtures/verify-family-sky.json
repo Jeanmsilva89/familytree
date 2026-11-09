@@ -1,5 +1,5 @@
 {
-  "note": "FIXTURE. Invented people for the Families lens check. Not a real family. Never replace these names with real relatives. Nia's only parent here is Stu, and that link is step. Pal has no parents on this tree. Rex is a partnerless parent of Eli. The access sidecar is a local invite for Quinn Fixture, who is not a person on this tree.",
+  "note": "FIXTURE. Invented people for the Families lens check. Not a real family. Never replace these names with real relatives. Nia's only parent here is Stu, and that link is step. Pal has no parents on this tree. Wynn's only parent here is Stu, as step, and Wynn has no partner. Rex is a partnerless parent of Eli. The access sidecar is a local invite for Quinn Fixture, who is not a person on this tree.",
   "access": {
     "ownerPersonId": "fx-ada",
     "offers": [
@@ -110,6 +110,14 @@
       "updatedAt": "2024-01-01T00:00:00.000Z"
     },
     {
+      "id": "fx-wynn",
+      "givenName": "Wynn",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. Blood parents are not on this tree. Stu is a step-parent only.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
       "id": "fx-rex",
       "givenName": "Rex",
       "familyName": "Fixture",
@@ -152,6 +160,13 @@
     {
       "id": "fx-c-nia",
       "childId": "fx-nia",
+      "parentIds": ["fx-stu"],
+      "roles": { "fx-stu": "father" },
+      "kin": { "fx-stu": "step" }
+    },
+    {
+      "id": "fx-c-wynn",
+      "childId": "fx-wynn",
       "parentIds": ["fx-stu"],
       "roles": { "fx-stu": "father" },
       "kin": { "fx-stu": "step" }
