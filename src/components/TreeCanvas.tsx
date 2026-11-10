@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type PointerEvent } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
 import { PartnerStatusMark } from "./PartnerStatusMark";
@@ -8,6 +8,8 @@ import { CARD, ageLabel, buildGraph, lineageIds, type GraphLayout } from "@/lib/
 import { GeneratedAvatar } from "./GeneratedAvatar";
 import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
 import { PERSONAL_MAP_MS, graphFromPersonalMap, layoutPersonalMap, morphGraph, placesMatch, type PersonalMap } from "@/lib/personalMap";
+import { gatherCameraMs, gatherPoints, interruptGather, planGather } from "@/lib/gatherChoreography";
+import { prefersReducedMotion, runFlight, runLinesOut, type GatherSession } from "@/lib/gatherPlay";
 import { gatheredPersonId } from "@/lib/personInteraction";
 import { usePersonInteraction } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
@@ -87,8 +89,18 @@ export function TreeCanvas({
   const [shown, setShown] = useState(baseLayout);
   const shownRef = useRef(shown);
   shownRef.current = shown;
-  const glideRef = useRef<number | null>(null);
-  const animating = !placesMatch(shown, targetLayout);
+  const [animating, setAnimating] = useState(false);
+  const gatherSession = useRef<GatherSession | null>(null);
+  const pendingFlight = useRef<{
+    plan: ReturnType<typeof planGather>;
+    started: number;
+    focusId: string;
+    to: GraphLayout;
+    map: PersonalMap | null;
+  } | null>(null);
+  const prevPersonalId = useRef<string | null>(null);
+  const skipCamera = useRef(false);
+  const mapShown = Boolean(personal) && placesMatch(shown, targetLayout);
   const viewTween = useRef<number | null>(null);
   const framed = useRef(false);
   const layout = shown;
@@ -97,13 +109,13 @@ export function TreeCanvas({
     [layout.householdIds, layout.focusId],
   );
   const rings = useMemo(
-    () => new Map(personal?.seats.map((seat) => [seat.id, seat.ring]) ?? []),
-    [personal],
+    () => new Map(mapShown && personal ? personal.seats.map((seat) => [seat.id, seat.ring]) : []),
+    [mapShown, personal],
   );
   const linked = useMemo(() => {
-    if (personal) return new Set(personal.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
+    if (mapShown && personal) return new Set(personal.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
     return highlightedId ? lineageIds(tree, highlightedId) : null;
-  }, [personal, tree, highlightedId]);
+  }, [mapShown, personal, tree, highlightedId]);
   const stageRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<View>({ x: 40, y: 24, s: 1 });
@@ -181,7 +193,11 @@ export function TreeCanvas({
     return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   }
 
-  function animateCamera(target: View) {
+  function easeOut(t: number) {
+    return 1 - Math.pow(1 - t, 3);
+  }
+
+  function animateCamera(target: View, ms = PERSONAL_MAP_MS, ease: (t: number) => number = easeInOut) {
     stopViewTween();
     const from = { ...viewRef.current };
     const stage = stageRef.current;
@@ -194,8 +210,8 @@ export function TreeCanvas({
     const toWorld = { x: (cx - target.x) / target.s, y: (cy - target.y) / target.s };
     const start = performance.now();
     const step = (now: number) => {
-      const t = Math.min(1, (now - start) / PERSONAL_MAP_MS);
-      const k = easeInOut(t);
+      const t = Math.min(1, (now - start) / ms);
+      const k = ease(t);
       const s = Math.exp(Math.log(from.s || 1) + (Math.log(target.s) - Math.log(from.s || 1)) * k);
       const wx = fromWorld.x + (toWorld.x - fromWorld.x) * k;
       const wy = fromWorld.y + (toWorld.y - fromWorld.y) * k;
@@ -206,7 +222,13 @@ export function TreeCanvas({
     viewTween.current = requestAnimationFrame(step);
   }
 
-  function frameOf(next: GraphLayout, map: PersonalMap | null, animate: boolean) {
+  function frameOf(
+    next: GraphLayout,
+    map: PersonalMap | null,
+    animate: boolean,
+    ms = PERSONAL_MAP_MS,
+    ease: (t: number) => number = easeInOut,
+  ) {
     const stage = stageRef.current;
     if (!stage || next.cards.length === 0) return;
     const vw = stage.clientWidth || 360;
@@ -235,7 +257,7 @@ export function TreeCanvas({
     }
     view = { ...view, y: view.y + inset };
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (animate && !reduce) animateCamera(view);
+    if (animate && !reduce) animateCamera(view, ms, ease);
     else {
       stopViewTween();
       viewRef.current = view;
@@ -256,35 +278,139 @@ export function TreeCanvas({
     applyWorld();
     return () => {
       if (viewTween.current != null) cancelAnimationFrame(viewTween.current);
-      if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
+      gatherSession.current?.stop();
     };
   }, []);
 
-  useEffect(() => {
-    const from = shownRef.current;
+  function seatsOf(layout: GraphLayout, focusId: string, map: PersonalMap | null) {
+    const ring = new Map(map?.seats.map((seat) => [seat.id, seat.ring]));
+    return gatherPoints(layout.cards, tree, focusId, ring);
+  }
+
+  useLayoutEffect(() => {
     const to = targetLayout;
-    if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (reduce || placesMatch(from, to)) {
+    const from = shownRef.current;
+    const nextId = personal?.focusId ?? null;
+    const previousId = prevPersonalId.current;
+    if (previousId === nextId) {
+      if (gatherSession.current || pendingFlight.current) return;
+      if (placesMatch(from, to)) {
+        setAnimating(false);
+        return;
+      }
+      if (prefersReducedMotion()) {
+        shownRef.current = to;
+        setShown(to);
+        setAnimating(false);
+        return;
+      }
+      setAnimating(true);
+      const start = performance.now();
+      let raf = 0;
+      const step = (now: number) => {
+        const t = Math.min(1, (now - start) / PERSONAL_MAP_MS);
+        const next = t >= 1 ? to : morphGraph(from, to, easeInOut(t), tree);
+        shownRef.current = next;
+        setShown(next);
+        if (t < 1) raf = requestAnimationFrame(step);
+        else setAnimating(false);
+      };
+      raf = requestAnimationFrame(step);
+      return () => cancelAnimationFrame(raf);
+    }
+
+    const focusId = nextId ?? previousId;
+    const map = personal ?? (focusId ? layoutPersonalMap(tree, focusId) : null);
+    const stage = stageRef.current;
+    const world = worldRef.current;
+    if (!focusId || !map || !stage || !world) {
+      prevPersonalId.current = nextId;
+      shownRef.current = to;
       setShown(to);
       return;
     }
-    const start = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / PERSONAL_MAP_MS);
-      setShown(t >= 1 ? to : morphGraph(from, to, easeInOut(t), tree));
-      if (t < 1) glideRef.current = requestAnimationFrame(step);
-      else glideRef.current = null;
+
+    skipCamera.current = true;
+    const reduced = prefersReducedMotion();
+    const active = gatherSession.current;
+    const sampled = active?.sample();
+    active?.stop();
+    const direction = nextId ? "gather" : "release";
+    const plan = active && sampled
+      ? interruptGather(active.plan, sampled.elapsed, {
+          to: seatsOf(to, focusId, map),
+          direction,
+          reducedMotion: reduced,
+        })
+      : planGather({
+          from: seatsOf(from, focusId, map),
+          to: seatsOf(to, focusId, map),
+          direction,
+          reducedMotion: reduced,
+        });
+    const commit = (started: number) => {
+      prevPersonalId.current = nextId;
+      pendingFlight.current = { plan, started, focusId, to, map };
+      shownRef.current = to;
+      setShown(to);
+      setAnimating(true);
+      frameOf(to, nextId ? map : null, !reduced, gatherCameraMs(reduced), easeOut);
     };
-    glideRef.current = requestAnimationFrame(step);
-    return () => {
-      if (glideRef.current != null) cancelAnimationFrame(glideRef.current);
-    };
-  }, [targetLayout, tree]);
+    if (plan.linesOutMs <= 0) {
+      commit(performance.now());
+      return;
+    }
+    setAnimating(true);
+    let session: GatherSession | null = null;
+    session = runLinesOut({
+      stage,
+      world,
+      plan,
+      focusId,
+      onCommit: () => {
+        if (session) commit(session.started);
+      },
+    });
+    gatherSession.current = session;
+    return () => session?.stop();
+    // The camera and the seat list are read when the focus changes, not on every card frame.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetLayout, tree, personal]);
+
+  useLayoutEffect(() => {
+    const pending = pendingFlight.current;
+    if (!pending || !placesMatch(shown, pending.to)) return;
+    pendingFlight.current = null;
+    const stage = stageRef.current;
+    const world = worldRef.current;
+    if (!stage || !world) return;
+    const session = runFlight({
+      stage,
+      world,
+      plan: pending.plan,
+      started: pending.started,
+      focusId: pending.focusId,
+      onDone: () => {
+        if (gatherSession.current === session) gatherSession.current = null;
+        setAnimating(false);
+      },
+    });
+    gatherSession.current = session;
+    return () => session.stop();
+  }, [shown]);
+
+  useLayoutEffect(() => {
+    applyWorld();
+    gatherSession.current?.paint();
+  });
 
   useEffect(() => {
     const animate = framed.current;
     framed.current = true;
+    if (skipCamera.current) {
+      skipCamera.current = false;
+      return;
+    }
     frameOf(targetLayout, personal, animate);
     // Framing follows the settled layout, not each animation frame.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -517,16 +643,18 @@ export function TreeCanvas({
   return (
     <div
       ref={stageRef}
-      className={`graph-stage${editMode ? " is-edit" : ""}${personal ? " is-personal" : ""}`}
-      data-layout={personal ? "personal" : "tree"}
+      className={`graph-stage${editMode ? " is-edit" : ""}${mapShown ? " is-personal" : ""}`}
+      data-layout={mapShown ? "personal" : "tree"}
       data-animating={animating ? "true" : "false"}
-      aria-label={personal ? "Personal map" : editMode ? "Family graph, edit mode" : "Family graph"}
+      aria-label={mapShown ? "Personal map" : editMode ? "Family graph, edit mode" : "Family graph"}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={endPointer}
       onPointerCancel={endPointer}
     >
-      <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH, transform: "translate(40px, 24px) scale(1)" }}>
+      <div ref={worldRef} className="graph-world" style={{ width: stageW, height: stageH }}>
+        <div className="gather-glow" data-gather-glow aria-hidden="true" />
+        <div className="gather-ripple" data-gather-ripple aria-hidden="true" />
         <svg className="graph-lines" width={stageW} height={stageH} aria-hidden>
           {lineFilter.households ? (
             <g className="household-layer">

@@ -30,7 +30,7 @@ Before the Families checks, on the classic graph (Families lens off):
 12. Focus Eli and press Shift+F10. The actions menu opens and nobody moves. Escape closes it and the layout stays.
 13. Drag on Eli. The menu does not open and the layout does not gather. On phone, a touch drag does the same.
 14. Press and hold Eli. The menu opens and nobody moves. Escape closes it and the layout stays.
-15. Press and hold Eli again and choose Gather family. The graph becomes a personal map: Eli and Dee sit in the center as a couple, Fay below, Ada above, Cora on Eli's row, and Gran is dimmed farther out. The move glides.
+15. Press and hold Eli again and choose Gather family. The graph becomes a personal map: Eli and Dee sit in the center as a couple, Fay below, Ada above, Cora on Eli's row, and Gran is dimmed farther out. Lines hide while the cards glide, then draw back in. A plain tap never gathers.
 16. Tap empty space, then hold Eli, choose Gather family, and press Recenter. Both return the generation layout.
 17. Tap Cora twice and confirm the editor still opens. The first of those taps does not gather.
 
@@ -40,7 +40,7 @@ On the Families lens, after it is turned back on:
 
 18. Zoom in on Eli Fixture and tap him once. Relatives stay in the sky layout (`data-layout="sky"`).
 19. Focus Eli and press Shift+F10. The actions menu opens and nobody moves. Escape closes it. A drag does not open the menu or gather.
-20. Press and hold Eli. The menu opens and nobody moves. Dismiss it. Hold again and choose Gather family. The sky becomes his personal map (`data-layout="personal"`): Dee beside him, Fay below, Ada above, Cora on his row, Gran dimmed. The move glides (~480ms). The script samples the selected card's transform while that glide runs, so a camera move alone does not count.
+20. Press and hold Eli. The menu opens and nobody moves. Dismiss it. Hold again and choose Gather family. The sky becomes his personal map (`data-layout="personal"`): Dee beside him, Fay below, Ada above, Cora on his row, Gran dimmed. Lines hide during the glide, then draw back in. The script samples the selected card's transform while that glide runs, so a camera move alone does not count.
 21. Tap empty space. The family-sky layout returns (`data-layout="sky"`).
 22. Hold Eli, choose Gather family, then press All families (⌂). The sky layout returns.
 23. Tap Cora twice and confirm the editor still opens. The first of those taps does not gather. Turning Families off still lands on the classic generation layout.

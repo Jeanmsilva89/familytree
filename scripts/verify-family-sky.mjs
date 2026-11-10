@@ -10,6 +10,7 @@
  * that a reload draws the same stars. In Families Edit mode, close up, a
  * horizontal drag along a row nudges that person and the nudge is still
  * there after a reload. Gather family, not a tap, enters a personal map.
+ * Lines hide while relatives travel, then draw back in. A plain tap never gathers.
  * In Families Edit mode, close up, tapping Ada Fixture's
  * link to Eli Fixture removes that parent link, and tapping Nia Fixture's
  * couple bar asks before unlinking her from Pal Fixture. Then the visibility
@@ -92,6 +93,54 @@ async function turnFamiliesOff(page) {
     await page.locator(".family-sky").waitFor({ state: "detached" });
   }
   await page.locator('.graph-stage[data-layout="tree"][data-framed="true"]').waitFor();
+}
+
+async function readLines(page, selector) {
+  return page.evaluate((sel) => {
+    const stage = document.querySelector(sel);
+    const lines = stage?.querySelector(".graph-lines");
+    if (!(stage instanceof HTMLElement) || !(lines instanceof Element)) return { mode: "missing", opacity: 1 };
+    return {
+      mode: stage.getAttribute("data-lines") || "shown",
+      opacity: Number(getComputedStyle(lines).opacity),
+    };
+  }, selector);
+}
+
+function linesAreHidden(state) {
+  return state.mode === "hidden" || state.opacity < 0.08;
+}
+
+function linesAreBack(state) {
+  return state.mode !== "hidden" && state.mode !== "out" && state.opacity > 0.85;
+}
+
+async function cardShift(locator) {
+  return locator.evaluate((node) => {
+    const value = getComputedStyle(node).transform;
+    if (!value || value === "none") return "0,0";
+    const match = /matrix\(([^)]+)\)/.exec(value);
+    if (!match) return value;
+    const parts = match[1].split(",").map((part) => Number(part.trim()));
+    return `${Math.round(parts[4] || 0)},${Math.round(parts[5] || 0)}`;
+  });
+}
+
+async function watchGather(page, viewport, card, selector) {
+  const samples = [];
+  let sawHidden = false;
+  const deadline = Date.now() + 1200;
+  while (Date.now() < deadline) {
+    const layout = await page.locator(selector).getAttribute("data-layout");
+    if (layout === "personal") samples.push(await cardShift(card));
+    if (linesAreHidden(await readLines(page, selector))) sawHidden = true;
+    if (sawHidden && samples.length >= 6) break;
+    await page.waitForTimeout(32);
+  }
+  if (!sawHidden) fail(`${viewport.name}: relationship lines stayed visible while the family gathered`);
+  if (new Set(samples).size < 3) {
+    fail(`${viewport.name}: the selected card did not glide into the personal map`);
+  }
 }
 
 async function waitMapSettled(page) {
@@ -332,17 +381,13 @@ async function runPersonalMap(page, viewport, shot) {
 
   const gathering = await holdCard(page, eli, viewport);
   await gathering.getByRole("menuitem", { name: "Gather family" }).click();
+  await watchGather(page, viewport, eli, ".graph-stage:not(.family-sky)");
   await page.locator('.graph-stage[data-layout="personal"]').waitFor();
 
-  const samples = [];
-  const deadline = Date.now() + 700;
-  while (Date.now() < deadline) {
-    samples.push(await eli.evaluate((node) => node.style.left));
-    await page.waitForTimeout(35);
-  }
-  if (new Set(samples).size < 2) fail(`${viewport.name}: the selected card did not glide into the personal map`);
-
   await waitMapSettled(page);
+  if (!linesAreBack(await readLines(page, ".graph-stage:not(.family-sky)"))) {
+    fail(`${viewport.name}: relationship lines did not return after the family gathered`);
+  }
   const cards = await graphCards(page);
   const byId = new Map(cards.map((card) => [card.id, card]));
   const focus = byId.get("fx-eli");
@@ -385,6 +430,9 @@ async function runPersonalMap(page, viewport, shot) {
   await tapEmptyGraph(page, viewport);
   await page.locator('.graph-stage[data-layout="tree"]').waitFor();
   await waitMapSettled(page);
+  if (!linesAreBack(await readLines(page, ".graph-stage:not(.family-sky)"))) {
+    fail(`${viewport.name}: relationship lines did not return when the personal map closed`);
+  }
   samePlaces(before, await graphCards(page), viewport);
 
   const again = await holdCard(page, eli, viewport);
@@ -529,28 +577,13 @@ async function runFamilyPersonalMap(page, viewport) {
 
   const gathering = await holdCard(page, eli, viewport);
   await gathering.getByRole("menuitem", { name: "Gather family" }).click();
+  await watchGather(page, viewport, eli, ".family-sky");
   await page.locator('.family-sky[data-layout="personal"]').waitFor();
 
-  const samples = [];
-  const deadline = Date.now() + 700;
-  while (Date.now() < deadline) {
-    // Card transform only. left/top stay on the destination seat, and the camera
-    // moves the whole world, so neither of those is the glide.
-    samples.push(
-      await eli.evaluate((node) => {
-        const value = getComputedStyle(node).transform;
-        if (!value || value === "none") return "0,0";
-        const match = /matrix\(([^)]+)\)/.exec(value);
-        if (!match) return value;
-        const parts = match[1].split(",").map((part) => Number(part.trim()));
-        return `${Math.round(parts[4] || 0)},${Math.round(parts[5] || 0)}`;
-      }),
-    );
-    await page.waitForTimeout(35);
-  }
-  if (new Set(samples).size < 2) fail(`${viewport.name}: the selected card did not glide into the family personal map`);
-
   await waitSkySettled(page);
+  if (!linesAreBack(await readLines(page, ".family-sky"))) {
+    fail(`${viewport.name}: relationship lines did not return after the family gathered on the sky`);
+  }
   const cards = await skyCards(page);
   const byId = new Map(cards.map((card) => [card.id, card]));
   const focus = byId.get("fx-eli");
@@ -595,6 +628,9 @@ async function runFamilyPersonalMap(page, viewport) {
   await tapEmptySky(page, viewport);
   await page.locator('.family-sky[data-layout="sky"]').waitFor();
   await waitSkySettled(page);
+  if (!linesAreBack(await readLines(page, ".family-sky"))) {
+    fail(`${viewport.name}: relationship lines did not return when the family sky came back`);
+  }
   samePlaces(resting, await skyCards(page), viewport);
   await page.screenshot({ path: shot("after") });
 
@@ -1493,6 +1529,7 @@ async function runViewport(browser, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     colorScheme: "dark",
+    reducedMotion: "no-preference",
     hasTouch: viewport.name === "phone",
     isMobile: viewport.name === "phone",
   });
@@ -1664,12 +1701,73 @@ async function runViewport(browser, viewport) {
   }
 }
 
+async function recordGatherClip(browser) {
+  const context = await browser.newContext({
+    viewport: { width: 390, height: 844 },
+    recordVideo: { dir: outDir, size: { width: 390, height: 844 } },
+    colorScheme: "dark",
+    reducedMotion: "no-preference",
+    hasTouch: true,
+    isMobile: true,
+  });
+  await context.addInitScript(() => {
+    window.localStorage.setItem("familytree-theme", "dark");
+  });
+  const page = await context.newPage();
+  const video = page.video();
+  try {
+    await settle(page);
+    await page.getByLabel("Import backup JSON").setInputFiles({
+      name: "verify-family-sky.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(fixture)),
+    });
+    await page.getByText("Looking at Ada").waitFor();
+    await openVisualize(page);
+    await turnFamiliesOff(page);
+    await waitMapSettled(page);
+    const eli = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-eli"]');
+    await panCardIntoView(page, eli);
+    await page.screenshot({ path: path.join(outDir, "gather-phone-before.png") });
+    const menu = await holdCard(page, eli, { name: "phone" });
+    await menu.getByRole("menuitem", { name: "Gather family" }).click();
+    await page.waitForFunction(
+      () => document.querySelector(".graph-stage:not(.family-sky)")?.getAttribute("data-lines") === "hidden",
+      null,
+      { timeout: 2000 },
+    );
+    await page.waitForTimeout(320);
+    await page.screenshot({ path: path.join(outDir, "gather-phone-mid.png") });
+    await page.locator('.graph-stage[data-layout="personal"]').waitFor();
+    await waitMapSettled(page);
+    await page.screenshot({ path: path.join(outDir, "gather-phone-after.png") });
+    await tapEmptyGraph(page, { name: "phone" });
+    await page.locator('.graph-stage[data-layout="tree"]').waitFor();
+    await waitMapSettled(page);
+
+    await turnFamiliesOn(page, { name: "phone" });
+    const skyEli = await revealSkyPerson(page, { name: "phone" }, "fx-eli");
+    await waitSkySettled(page);
+    const skyMenu = await holdCard(page, skyEli, { name: "phone" });
+    await skyMenu.getByRole("menuitem", { name: "Gather family" }).click();
+    await page.locator('.family-sky[data-layout="personal"]').waitFor();
+    await waitSkySettled(page);
+    await tapEmptySky(page, { name: "phone" });
+    await page.locator('.family-sky[data-layout="sky"]').waitFor();
+    await waitSkySettled(page);
+  } finally {
+    await context.close();
+  }
+  if (video) await video.saveAs(path.join(outDir, "gather-phone.webm"));
+}
+
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
   for (const viewport of VIEWPORTS) {
     await runViewport(browser, viewport);
   }
+  await recordGatherClip(browser);
 } finally {
   await browser.close();
 }
