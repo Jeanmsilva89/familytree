@@ -11,11 +11,13 @@ import {
   asInviteId,
   asPersonId,
   DEVICE_TREE_ID,
+  detailToggle,
   ensureDeviceOwner,
   graphForViewer,
   marksForViewer,
   revokeInviteCard,
   separateAccess,
+  toggleDetailGrant,
   touchBranch,
   touchPerson,
   type LookingAs,
@@ -277,10 +279,10 @@ export function TreeApp() {
     : lensPhase === "preview"
       ? `Previewing ${lensViewerName}. Hidden people stay off the sky.`
       : guestStatus === "pending"
-        ? `Arranging ${lensViewerName}'s invite. They see no one until you accept.`
+        ? `Arranging ${lensViewerName}'s invite. They see no one until you accept. Hold a person to share details.`
         : guestStatus === "revoked"
           ? `${lensViewerName}'s invite is revoked. They see no one.`
-          : `Arranging for ${lensViewerName}. Touch a person, or a family name for their branch.`;
+          : `Arranging for ${lensViewerName}. Touch a person, or a family name for their branch. Hold a person to share details.`;
   const lensMarks = Object.fromEntries(
     marksForViewer(treeState.tree, ensuredAccess, lensViewer, lensPreview).map((mark) => [mark.personId as string, mark]),
   );
@@ -292,6 +294,12 @@ export function TreeApp() {
       return kind === "person" ? touchPerson(treeState.tree, ready, lensViewer, id) : touchBranch(treeState.tree, ready, lensViewer, id);
     });
   };
+  const shareDetails = (personId: string) => {
+    void accessState.update((current) => {
+      const ready = ensureDeviceOwner(current, treeState.tree);
+      return toggleDetailGrant(treeState.tree, ready, lensViewer, asPersonId(personId));
+    });
+  };
   const lensSky = lensOn && lineFilter.families
     ? {
         active: true as const,
@@ -301,6 +309,8 @@ export function TreeApp() {
         caption: lensCaption,
         onPerson: (personId: string) => arrangeFor(personId, "person"),
         onBranch: (personId: string) => arrangeFor(personId, "branch"),
+        onShareDetails: lensPhase === "arrange" ? shareDetails : undefined,
+        shareOf: (personId: string) => detailToggle(ensuredAccess, lensViewer, asPersonId(personId)),
       }
     : undefined;
 

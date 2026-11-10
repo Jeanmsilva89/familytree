@@ -659,6 +659,122 @@ describe("visibility", () => {
     assert.equal(pat.people[0].bio, "FIXTURE bio deceased");
   });
 
+  it("does not let a detail grant reveal someone outside the visible set", () => {
+    const includeAda: LensRule = { scope: "person", treeId: home, personId: pid("ada"), effect: "include" };
+    const outsideGrant = resolveVisibility(trees, emptyAccess(), ben, lens(
+      ben,
+      [includeAda],
+      [{ treeId: home, personId: pid("cam") }, { treeId: other, personId: pid("zed") }],
+    ));
+    assert.deepEqual(outsideGrant.people.map((person) => person.personId), [pid("ada")]);
+    assert.equal(outsideGrant.people[0].details, "withheld");
+    assert.equal("bio" in outsideGrant.people[0], false);
+    assert.equal(outsideGrant.people.some((person) => person.personId === pid("cam")), false);
+    assert.equal(outsideGrant.people.some((person) => person.personId === pid("zed")), false);
+    assert.equal(JSON.stringify(outsideGrant).includes("FIXTURE bio"), false);
+
+    const hidden = resolveVisibility(trees, emptyAccess(), ben, lens(
+      ben,
+      [
+        { scope: "person", treeId: home, personId: pid("ada"), effect: "include" },
+        { scope: "person", treeId: home, personId: pid("cam"), effect: "hide" },
+      ],
+      [{ treeId: home, personId: pid("cam") }],
+    ));
+    assert.equal(hidden.people.some((person) => person.personId === pid("cam")), false);
+
+    const sealed = access({ sealedPersonIds: [{ treeId: home, personId: pid("cam") }] });
+    const sealedGrant = resolveVisibility(trees, sealed, ben, lens(
+      ben,
+      [{ scope: "branch", treeId: home, branchRootId: pid("ada"), effect: "include" }],
+      [{ treeId: home, personId: pid("cam") }],
+    ));
+    assert.equal(sealedGrant.people.some((person) => person.personId === pid("cam")), false);
+  });
+
+  it("opens details for a dimmed person when a grant names them, and keeps the viewer and the deceased open", () => {
+    const dimmed = resolveVisibility(trees, emptyAccess(), ben, lens(
+      ben,
+      [{ scope: "person", treeId: home, personId: pid("ada"), effect: "dim" }],
+      [{ treeId: home, personId: pid("ada") }],
+    ));
+    assert.equal(dimmed.people[0].presence, "dimmed");
+    assert.equal(dimmed.people[0].details, "open");
+    assert.equal(dimmed.people[0].photo, "fixture-photo");
+    assert.deepEqual(dimmed.people[0].emails, ["fixture@example.com"]);
+
+    const self = resolveVisibility(trees, emptyAccess(), ada, lens(ada, [
+      { scope: "person", treeId: home, personId: pid("ada"), effect: "include" },
+    ]));
+    assert.equal(self.people[0].details, "open");
+    assert.equal(self.people[0].bio, "FIXTURE bio");
+
+    const dead = access({ deceasedPersonIds: [{ treeId: home, personId: pid("pat") }] });
+    const pat = resolveVisibility(trees, dead, ben, lens(ben, [
+      { scope: "person", treeId: home, personId: pid("pat"), effect: "dim" },
+    ]));
+    assert.equal(pat.people[0].presence, "dimmed");
+    assert.equal(pat.people[0].details, "open");
+    assert.equal(pat.people[0].bio, "FIXTURE bio deceased");
+  });
+
+  it("uses a stored detail grant, and a revoked invite shows nothing even if that grant remains", () => {
+    const stored = access({
+      lenses: [lens(
+        ben,
+        [{ scope: "person", treeId: home, personId: pid("ada"), effect: "include" }],
+        [{ treeId: home, personId: pid("ada") }],
+      )],
+    });
+    const fromState = resolveVisibility(trees, stored, ben);
+    assert.equal(fromState.people[0].details, "open");
+    assert.equal(fromState.people[0].photo, "fixture-photo");
+
+    const accepted = acceptedInvite({
+      id: inviteYan,
+      sourceTreeId: home,
+      targetTreeId: outside,
+      invitedByPersonId: pid("ada"),
+      guestLabel: "Yan FIXTURE",
+      grant: { personIds: [pid("ada")], branchRootIds: [] },
+    });
+    const guest = guestViewer(home, inviteYan);
+    const open = resolveVisibility(trees, access({
+      links: [accepted],
+      lenses: [lens(guest, [], [{ treeId: home, personId: pid("ada") }])],
+    }), guest);
+    assert.equal(open.people[0].personId, pid("ada"));
+    assert.equal(open.people[0].details, "open");
+    assert.equal(open.people[0].bio, "FIXTURE bio");
+
+    const outsider = resolveVisibility(trees, access({
+      links: [accepted],
+      lenses: [lens(guest, [], [{ treeId: home, personId: pid("cam") }])],
+    }), guest);
+    assert.equal(outsider.people.some((person) => person.personId === pid("cam")), false);
+    assert.equal(outsider.people[0].details, "withheld");
+
+    const revoked = revokedInvite({
+      id: inviteYan,
+      sourceTreeId: home,
+      targetTreeId: outside,
+      invitedByPersonId: pid("ada"),
+      guestLabel: "Yan FIXTURE",
+      grant: { personIds: [pid("ada")], branchRootIds: [] },
+    });
+    const closed = resolveVisibility(trees, access({
+      links: [revoked],
+      lenses: [lens(
+        guest,
+        [{ scope: "person", treeId: home, personId: pid("ada"), effect: "include" }],
+        [{ treeId: home, personId: pid("ada") }],
+      )],
+    }), guest);
+    assert.deepEqual(closed.people, []);
+    assert.equal(JSON.stringify(closed).includes("FIXTURE bio"), false);
+    assert.equal(JSON.stringify(closed).includes("fixture-photo"), false);
+  });
+
   it("uses a lens stored on the access state when none is passed", () => {
     const state = access({
       lenses: [lens(ben, [{ scope: "person", treeId: home, personId: pid("dee"), effect: "include" }])],

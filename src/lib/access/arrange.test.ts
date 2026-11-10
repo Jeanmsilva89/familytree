@@ -14,6 +14,7 @@ import {
   revokeInviteCard,
   separateAccess,
   serializeAccess,
+  toggleDetailGrant,
   touchBranch,
   touchPerson,
   type LookingAs,
@@ -151,6 +152,86 @@ describe("arranging a member lens", () => {
     assert.equal(view.people.find((person) => person.personId === dee.id)?.presence, "shown");
   });
 
+  it("grants and withdraws living details without revealing anyone outside the view", () => {
+    let access = withOwner({
+      deceasedPersonIds: [{ treeId: DEVICE_TREE_ID, personId: pid(rex.id) }],
+    });
+    access = touchPerson(tree, access, eliView, pid(fay.id));
+    access = touchPerson(tree, access, eliView, pid(dee.id));
+    access = touchPerson(tree, access, eliView, pid(dee.id));
+    const before = graphForViewer(tree, access, eliView);
+    assert.equal(before.people.find((person) => person.personId === fay.id)?.details, "withheld");
+    assert.equal(before.people.find((person) => person.personId === fay.id)?.photo, undefined);
+    assert.equal(before.people.some((person) => person.personId === cam.id), false);
+
+    access = toggleDetailGrant(tree, access, eliView, pid(fay.id));
+    access = toggleDetailGrant(tree, access, eliView, pid(cam.id));
+    access = toggleDetailGrant(tree, access, eliView, pid(eli.id));
+    access = toggleDetailGrant(tree, access, eliView, pid(rex.id));
+    const granted = graphForViewer(tree, access, eliView);
+    const fayCard = granted.people.find((person) => person.personId === fay.id);
+    assert.equal(fayCard?.presence, "shown");
+    assert.equal(fayCard?.details, "open");
+    assert.equal(fayCard?.bio, "Fay fixture bio");
+    assert.equal(fayCard?.birthDate, "2015-05-05");
+    assert.equal(fayCard?.photo, "fay-photo");
+    assert.equal(granted.people.some((person) => person.personId === cam.id), false);
+    assert.equal(JSON.stringify(granted).includes("Cam fixture bio"), false);
+    const self = granted.people.find((person) => person.personId === eli.id);
+    assert.equal(self, undefined);
+    const rexCard = granted.people.find((person) => person.personId === rex.id);
+    assert.equal(rexCard, undefined);
+    const stored = access.lenses.find((item) => item.viewer.kind === "member" && item.viewer.personId === eli.id);
+    assert.deepEqual(stored?.detailGrants.map((grant) => grant.personId), [fay.id, cam.id]);
+
+    const arranging = marksForViewer(tree, access, eliView, false);
+    assert.equal(arranging.find((mark) => mark.personId === fay.id)?.details, "open");
+    assert.equal(arranging.find((mark) => mark.personId === cam.id)?.details, "withheld");
+    assert.equal(arranging.find((mark) => mark.personId === cam.id)?.draw, "ghost");
+    const preview = marksForViewer(tree, access, eliView, true);
+    assert.equal(preview.find((mark) => mark.personId === fay.id)?.details, "open");
+    assert.equal(preview.some((mark) => mark.personId === cam.id), false);
+
+    access = touchPerson(tree, access, eliView, pid(fay.id));
+    const dimmed = graphForViewer(tree, access, eliView).people.find((person) => person.personId === fay.id);
+    assert.equal(dimmed?.presence, "dimmed");
+    assert.equal(dimmed?.details, "open");
+    assert.equal(dimmed?.photo, "fay-photo");
+
+    access = toggleDetailGrant(tree, access, eliView, pid(fay.id));
+    const withdrawn = graphForViewer(tree, access, eliView).people.find((person) => person.personId === fay.id);
+    assert.equal(withdrawn?.presence, "dimmed");
+    assert.equal(withdrawn?.details, "withheld");
+    assert.equal(withdrawn?.photo, undefined);
+    assert.equal(withdrawn?.birthDate, undefined);
+    assert.equal(withdrawn?.bio, undefined);
+
+    const owner = graphForViewer(tree, access, ownerView);
+    assert.equal(owner.people.every((person) => person.details === "open"), true);
+    assert.equal(toggleDetailGrant(tree, access, ownerView, pid(fay.id)), access);
+    const restored = parseAccess(serializeAccess(access));
+    assert.equal(graphForViewer(tree, restored, eliView).people.find((person) => person.personId === fay.id)?.details, "withheld");
+  });
+
+  it("keeps a viewer's own details and a deceased person's details open without a grant", () => {
+    let access = withOwner({
+      deceasedPersonIds: [{ treeId: DEVICE_TREE_ID, personId: pid(rex.id) }],
+    });
+    access = touchPerson(tree, access, eliView, pid(eli.id));
+    access = touchPerson(tree, access, eliView, pid(rex.id));
+    const self = graphForViewer(tree, access, eliView).people.find((person) => person.personId === eli.id);
+    const rexCard = graphForViewer(tree, access, eliView).people.find((person) => person.personId === rex.id);
+    assert.equal(self?.details, "open");
+    assert.equal(self?.bio, "Eli fixture bio");
+    assert.equal(rexCard?.details, "open");
+    const untouched = toggleDetailGrant(tree, access, eliView, pid(eli.id));
+    assert.equal(untouched, access);
+    const stillDead = toggleDetailGrant(tree, access, eliView, pid(rex.id));
+    assert.equal(stillDead, access);
+    assert.equal(graphForViewer(tree, stillDead, eliView).people.find((person) => person.personId === eli.id)?.details, "open");
+    assert.equal(graphForViewer(tree, stillDead, eliView).people.find((person) => person.personId === rex.id)?.details, "open");
+  });
+
   it("marks hidden people as ghosts while arranging and drops them in preview", () => {
     let access = withOwner();
     access = touchPerson(tree, access, eliView, pid(fay.id));
@@ -196,12 +277,45 @@ describe("invite cards", () => {
     access = touchPerson(tree, access, guestView, pid(fay.id));
     assert.equal(graphForViewer(tree, access, guestView).people[0].presence, "dimmed");
 
+    access = touchPerson(tree, access, eliView, pid(dee.id));
+    access = toggleDetailGrant(tree, access, eliView, pid(dee.id));
+    access = toggleDetailGrant(tree, access, guestView, pid(fay.id));
+    access = toggleDetailGrant(tree, access, guestView, pid(ben.id));
+    const shared = graphForViewer(tree, access, guestView);
+    assert.equal(shared.people[0].details, "open");
+    assert.equal(shared.people[0].photo, "fay-photo");
+    assert.equal(shared.people.some((person) => person.personId === ben.id), false);
+    assert.equal(JSON.stringify(shared).includes("Ben"), false);
+
     access = revokeInviteCard(access, quinn);
     assert.deepEqual(ids(access, guestView), []);
     assert.equal(marksForViewer(tree, access, guestView, false).length, 0);
+    const guestLens = access.lenses.find((item) => item.viewer.kind === "guest" && item.viewer.inviteId === quinn);
+    assert.deepEqual(guestLens?.detailGrants ?? [], []);
+    const memberLens = access.lenses.find((item) => item.viewer.kind === "member" && item.viewer.personId === eli.id);
+    assert.deepEqual(memberLens?.detailGrants.map((grant) => grant.personId), [dee.id]);
+    assert.equal(graphForViewer(tree, access, eliView).people.find((person) => person.personId === dee.id)?.details, "open");
+    assert.equal(toggleDetailGrant(tree, access, guestView, pid(fay.id)), access);
+    assert.equal(JSON.stringify(graphForViewer(tree, access, guestView)).includes("fay-photo"), false);
     const again = acceptInviteCard(access, quinn);
     assert.equal(again, access);
     assert.deepEqual(ids(access, ownerView), tree.people.map((person) => person.id).sort());
+  });
+
+  it("holds a detail grant quietly while an invite is pending, then opens it on accept", () => {
+    let access = pending();
+    access = touchPerson(tree, access, guestView, pid(fay.id));
+    access = toggleDetailGrant(tree, access, guestView, pid(fay.id));
+    access = toggleDetailGrant(tree, access, guestView, pid(ben.id));
+    assert.deepEqual(ids(access, guestView), []);
+    assert.equal(JSON.stringify(graphForViewer(tree, access, guestView)).includes("fay-photo"), false);
+    access = acceptInviteCard(access, quinn);
+    const view = graphForViewer(tree, access, guestView);
+    assert.deepEqual(view.people.map((person) => person.personId), [fay.id]);
+    assert.equal(view.people[0].details, "open");
+    assert.equal(view.people[0].photo, "fay-photo");
+    assert.equal(view.people[0].bio, "Fay fixture bio");
+    assert.equal(view.people.some((person) => person.personId === ben.id), false);
   });
 
   it("accepts a prepared offer and does not add anyone the offer left out", () => {

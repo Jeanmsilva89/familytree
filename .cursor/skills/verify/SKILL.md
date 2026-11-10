@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Drive the Family Tree PWA in a browser and confirm the Families lens, the visibility lens, and divorce/remarriage with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, the visibility lens, partner status, or a production deploy of familytree-rose.vercel.app.
+description: Drive the Family Tree PWA in a browser and confirm the Families lens, the visibility lens, detail grants, and divorce/remarriage with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, the visibility lens, partner status, or a production deploy of familytree-rose.vercel.app.
 ---
 
 # Verify the Families lens
@@ -61,21 +61,22 @@ Still on the Families lens, in the dark theme:
 
 28. Turn Edit off if it is on. Open Lens. The sky is the owner's working view: every fixture person, details open.
 29. Choose Eli Fixture. Touch Dee Fixture once (include), Fay Fixture twice (dim), and Rex Fixture three times (hide). A touch does not gather and does not open the editor. The layout stays `data-layout="sky"`.
-30. Turn on Preview. The sky matches that view: Dee shown, Fay visually reduced (`is-lens-dim`, lower opacity, living details withheld), Rex gone.
-31. Choose the pending guest Quinn Fixture and preview. No one is on the sky.
-32. Accept the invite. Only Eli Fixture and Dee Fixture are shown, details withheld. Fay is not, because the invite did not grant her.
-33. Revoke the invite. The sky is empty again.
-34. Choose You. The full fixture tree is back, details open, and Fay is not dimmed.
-35. Reload. Eli's arranged lens and Quinn's revoked invite are still there. The saved tree itself has no access field.
+30. Turn on Preview. The sky matches that view: Dee shown, Fay visually reduced (`is-lens-dim`, lower opacity, living details withheld), Rex gone. A tap while arranging does not open the hold menu and does not gather.
+31. Return to arrange. Dee shows only her name and a generated avatar: no photo, no date. Press and hold Dee. The menu is Share details, off, and it does not offer Gather family. The sky stays `data-layout="sky"`. Turn Share details on. Dee stays included. Preview shows her fixture photo and the date 1800-01-01. Fay stays withheld: generated avatar, no photo, no date. Turn Share details off. Preview returns Dee to name and generated avatar only. The grant is gone from IndexedDB.
+32. Choose the pending guest Quinn Fixture and preview. No one is on the sky.
+33. Accept the invite. Only Eli Fixture and Dee Fixture are shown, details withheld. Fay is not, because the invite did not grant her.
+34. Revoke the invite. The sky is empty again.
+35. Choose You. The full fixture tree is back, details open, and Fay is not dimmed.
+36. Reload. Eli's arranged lens and Quinn's revoked invite are still there. Dee's withdrawn detail grant stays off: no photo. The saved tree itself has no access field.
 
-Screenshots: `lens-<size>-arrange.png`, `lens-<size>-preview.png`, `lens-<size>-guest-pending.png`, `lens-<size>-guest-accepted.png`, `lens-<size>-guest-revoked.png`, `lens-<size>-owner.png`.
+Screenshots: `lens-<size>-arrange.png`, `lens-<size>-preview.png`, `lens-<size>-share.png`, `lens-<size>-details.png`, `lens-<size>-guest-pending.png`, `lens-<size>-guest-accepted.png`, `lens-<size>-guest-revoked.png`, `lens-<size>-owner.png`.
 
 After the lens checks, still on the Families lens, in the dark theme:
 
-36. Turn Lens off. Open Dee Fixture. Set her couple with Eli Fixture to Divorced. Add a partner named Rema Fixture as Married.
-37. The sheet says Dee is divorced from Eli and remarried to Rema. Remarried is derived. The saved union kind stays `married`, and the earlier union is `divorced`. The word `remarried` is not stored.
-38. On the sky, Dee and Eli have a quiet dashed line. Tap it and the word Divorced appears. Dee and Rema have a double couple bar. Tap it and the word Remarried appears. Nobody new is invented except the partner just added, and that partner's name says Fixture.
-39. Reload. Both facts are still there, and the sky still draws them.
+37. Turn Lens off. Open Dee Fixture. Set her couple with Eli Fixture to Divorced. Add a partner named Rema Fixture as Married.
+38. The sheet says Dee is divorced from Eli and remarried to Rema. Remarried is derived. The saved union kind stays `married`, and the earlier union is `divorced`. The word `remarried` is not stored.
+39. On the sky, Dee and Eli have a quiet dashed line. Tap it and the word Divorced appears. Dee and Rema have a double couple bar. Tap it and the word Remarried appears. Nobody new is invented except the partner just added, and that partner's name says Fixture.
+40. Reload. Both facts are still there, and the sky still draws them.
 
 Screenshot: `partner-status-<size>.png`.
 
@@ -92,6 +93,8 @@ Screenshots, one set per size:
 - `family-sky-<size>-unlinked.png` — after Ada Fixture's link to Eli Fixture is removed in Edit
 - `lens-<size>-arrange.png` — Eli Fixture's lens while Fay is dimmed and Rex is hidden but still touchable
 - `lens-<size>-preview.png` — that same view with Rex gone and Fay dialed back
+- `lens-<size>-share.png` — press-and-hold on Dee Fixture, Share details off
+- `lens-<size>-details.png` — preview after the grant: Dee's fixture photo and date, Fay still withheld
 - `lens-<size>-guest-pending.png` — Quinn Fixture's pending invite, nobody shown
 - `lens-<size>-guest-accepted.png` — only Eli and Dee, the people the invite grants
 - `lens-<size>-guest-revoked.png` — the invite cleared

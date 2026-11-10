@@ -13,7 +13,8 @@
  * In Families Edit mode, close up, tapping Ada Fixture's
  * link to Eli Fixture removes that parent link, and tapping Nia Fixture's
  * couple bar asks before unlinking her from Pal Fixture. Then the visibility
- * lens: arrange what Eli Fixture can see, preview it, and move Quinn Fixture's
+ * lens: arrange what Eli Fixture can see, preview it, hold Dee Fixture to
+ * grant and withdraw her living details, and move Quinn Fixture's
  * invite from pending to accepted to revoked. Then, still on the fixture,
  * divorce Dee Fixture and Eli Fixture from Dee's editor and marry Dee to
  * Rema Fixture. The sky shows a quiet divorced line and a remarried bar.
@@ -222,6 +223,38 @@ async function dragCard(page, locator, viewport) {
 
 async function assertNoMenu(page, viewport, why) {
   if (await page.getByRole("menu").count()) fail(`${viewport.name}: ${why}`);
+}
+
+async function bringSkyCardFullyIn(page, locator) {
+  for (let i = 0; i < 6; i += 1) {
+    const box = await locator.boundingBox();
+    const view = page.viewportSize();
+    if (!box || !view) return;
+    const margin = 16;
+    const dx = box.x < margin ? margin - box.x : box.x + box.width > view.width - margin ? view.width - margin - (box.x + box.width) : 0;
+    const dy = box.y < 120 ? 120 - box.y : box.y + box.height > view.height - 88 ? view.height - 88 - (box.y + box.height) : 0;
+    if (Math.abs(dx) < 2 && Math.abs(dy) < 2) return;
+    const point = await page.evaluate(() => {
+      const stage = document.querySelector(".family-sky");
+      if (!(stage instanceof HTMLElement)) return null;
+      const rect = stage.getBoundingClientRect();
+      for (let y = rect.top + 80; y < rect.bottom - 80; y += 18) {
+        for (let x = rect.left + 24; x < rect.right - 24; x += 18) {
+          const hit = document.elementFromPoint(x, y);
+          if (!(hit instanceof Element) || !stage.contains(hit)) continue;
+          if (hit.closest(".portrait-card, .sky-avatar, .sky-label, .graph-zoom, .graph-toolbar, .couple-tint, .person-hold-menu, .btn, .icon-btn")) continue;
+          return { x, y };
+        }
+      }
+      return null;
+    });
+    if (!point) return;
+    await page.mouse.move(point.x, point.y);
+    await page.mouse.down();
+    await page.mouse.move(point.x + dx, point.y + dy, { steps: 8 });
+    await page.mouse.up();
+    await page.waitForTimeout(80);
+  }
 }
 
 async function panCardIntoView(page, locator) {
@@ -1167,6 +1200,7 @@ async function runVisibilityLens(page, viewport) {
   if ((await page.locator(".family-sky").getAttribute("data-layout")) !== "sky") {
     fail(`${viewport.name}: arranging a lens gathered the sky`);
   }
+  if (await page.getByRole("menu").count()) fail(`${viewport.name}: a lens tap opened the hold menu`);
   if (await page.getByRole("dialog").count()) fail(`${viewport.name}: arranging a lens opened the editor`);
   await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-arrange.png`) });
 
@@ -1193,6 +1227,99 @@ async function runVisibilityLens(page, viewport) {
     fail(`${viewport.name}: hidden Rex is still on the sky`);
   }
   await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-preview.png`) });
+
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="arrange"]').waitFor();
+  const deeCard = page.locator('.portrait-card[data-person-id="fx-dee"]');
+  if ((await deeCard.getAttribute("data-details")) !== "withheld") {
+    fail(`${viewport.name}: Dee's details were open before they were shared`);
+  }
+  if (await deeCard.locator("img.portrait-photo").count()) fail(`${viewport.name}: withheld Dee showed a photo`);
+  if (await deeCard.locator(".identity em").count()) fail(`${viewport.name}: withheld Dee showed a date`);
+  if (!(await deeCard.locator(".generated-avatar").count())) fail(`${viewport.name}: withheld Dee had no generated avatar`);
+
+  const shareMenu = await holdCard(page, deeCard, viewport);
+  if (await shareMenu.getByRole("menuitem", { name: "Gather family" }).count()) {
+    fail(`${viewport.name}: the lens hold menu offered Gather family`);
+  }
+  if ((await page.locator(".family-sky").getAttribute("data-layout")) !== "sky") {
+    fail(`${viewport.name}: holding a person to share details gathered the sky`);
+  }
+  const share = shareMenu.getByRole("menuitemcheckbox", { name: "Share details" });
+  await share.waitFor();
+  if ((await share.getAttribute("aria-checked")) !== "false") {
+    fail(`${viewport.name}: Share details started on`);
+  }
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-share.png`) });
+  await share.click();
+  await page.locator('.portrait-card[data-person-id="fx-dee"][data-details="open"][data-lens="include"]').waitFor();
+  if ((await page.locator(".family-sky").getAttribute("data-layout")) !== "sky") {
+    fail(`${viewport.name}: sharing details gathered the sky`);
+  }
+  await page.keyboard.press("Escape");
+  await shareMenu.waitFor({ state: "detached" });
+
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  const grantedDee = page.locator('.portrait-card[data-person-id="fx-dee"]');
+  await grantedDee.locator("img.portrait-photo").waitFor();
+  const grantedDate = (await grantedDee.locator(".identity em").innerText()).trim();
+  if (!grantedDate.includes("1800-01-01")) fail(`${viewport.name}: granted Dee showed ${JSON.stringify(grantedDate)}`);
+  if ((await grantedDee.getAttribute("data-details")) !== "open") fail(`${viewport.name}: granted Dee stayed withheld`);
+  const fayStill = page.locator('.portrait-card[data-person-id="fx-fay"]');
+  if ((await fayStill.getAttribute("data-details")) !== "withheld") fail(`${viewport.name}: Fay's details opened with Dee's grant`);
+  if (await fayStill.locator("img.portrait-photo").count()) fail(`${viewport.name}: Fay's photo leaked into the preview`);
+  if (await fayStill.locator(".identity em").count()) fail(`${viewport.name}: Fay's date leaked into the preview`);
+  if (!(await fayStill.locator(".generated-avatar").count())) fail(`${viewport.name}: withheld Fay lost the generated avatar`);
+  await bringSkyCardFullyIn(page, grantedDee);
+  await bringSkyCardFullyIn(page, fayStill);
+  await page.waitForFunction(async () => {
+    const access = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const get = db.transaction("access", "readonly").objectStore("access").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    const lens = access?.lenses?.find((item) => item.viewer?.personId === "fx-eli");
+    return lens?.detailGrants?.some((grant) => grant.personId === "fx-dee");
+  });
+  await page.screenshot({ path: path.join(outDir, `lens-${viewport.name}-details.png`) });
+
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="arrange"]').waitFor();
+  const withdrawMenu = await holdCard(page, page.locator('.portrait-card[data-person-id="fx-dee"]'), viewport);
+  const withdraw = withdrawMenu.getByRole("menuitemcheckbox", { name: "Share details" });
+  if ((await withdraw.getAttribute("aria-checked")) !== "true") fail(`${viewport.name}: Share details did not stay on`);
+  await withdraw.click();
+  await page.locator('.portrait-card[data-person-id="fx-dee"][data-details="withheld"][data-lens="include"]').waitFor();
+  await page.keyboard.press("Escape");
+  await withdrawMenu.waitFor({ state: "detached" });
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  const closedDee = page.locator('.portrait-card[data-person-id="fx-dee"]');
+  if (await closedDee.locator("img.portrait-photo").count()) fail(`${viewport.name}: withdrawing the grant left Dee's photo up`);
+  if (await closedDee.locator(".identity em").count()) fail(`${viewport.name}: withdrawing the grant left Dee's date up`);
+  if (!(await closedDee.locator(".generated-avatar").count())) fail(`${viewport.name}: Dee lost the generated avatar when details were withdrawn`);
+  const strong = (await closedDee.locator(".identity strong").innerText()).trim();
+  if (strong !== "Dee") fail(`${viewport.name}: withheld Dee did not keep her name`);
+  await page.waitForFunction(async () => {
+    const access = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const get = db.transaction("access", "readonly").objectStore("access").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    const lens = access?.lenses?.find((item) => item.viewer?.personId === "fx-eli");
+    return lens && !lens.detailGrants?.some((grant) => grant.personId === "fx-dee");
+  });
 
   const quinn = page.getByRole("button", { name: "Look as Quinn Fixture, pending", exact: true });
   await quinn.scrollIntoViewIfNeeded();
@@ -1280,6 +1407,18 @@ async function runVisibilityLens(page, viewport) {
   await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
   if ((await resolved(page)) !== "fx-dee fx-fay") {
     fail(`${viewport.name}: Eli's lens did not survive reload (${JSON.stringify(await resolved(page))})`);
+  }
+  const reloadedDee = page.locator('.portrait-card[data-person-id="fx-dee"]');
+  for (let i = 0; i < 8 && !(await reloadedDee.count()); i += 1) {
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.waitForTimeout(450);
+  }
+  if (!(await reloadedDee.count())) fail(`${viewport.name}: could not zoom to Dee after reload`);
+  if ((await reloadedDee.getAttribute("data-details")) !== "withheld") {
+    fail(`${viewport.name}: a withdrawn detail grant came back after reload`);
+  }
+  if (await reloadedDee.locator("img.portrait-photo").count()) {
+    fail(`${viewport.name}: Dee's photo came back after the grant was withdrawn`);
   }
   await page.getByRole("button", { name: "Look as Quinn Fixture, revoked", exact: true }).click();
   await page.getByRole("button", { name: "Preview", exact: true }).click();

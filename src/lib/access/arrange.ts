@@ -77,18 +77,75 @@ function lensIdFor(viewer: Viewer): LensId {
   return asLensId(`lens:${key}`);
 }
 
-function writeRules(access: AccessState, viewer: Viewer, rules: readonly LensRule[]): AccessState {
+function writeLens(
+  access: AccessState,
+  viewer: Viewer,
+  rules: readonly LensRule[],
+  detailGrants: VisibilityLens["detailGrants"],
+): AccessState {
   const previous = lensFor(access, viewer);
   const next: VisibilityLens = {
     id: previous?.id ?? lensIdFor(viewer),
     viewer,
     rules,
-    detailGrants: previous?.detailGrants ?? [],
+    detailGrants,
   };
   return {
     ...access,
     lenses: [...access.lenses.filter((lens) => !sameViewer(lens.viewer, viewer)), next],
   };
+}
+
+function writeRules(access: AccessState, viewer: Viewer, rules: readonly LensRule[]): AccessState {
+  return writeLens(access, viewer, rules, lensFor(access, viewer)?.detailGrants ?? []);
+}
+
+function deceased(access: AccessState, personId: PersonId): boolean {
+  return access.deceasedPersonIds.some((row) => row.treeId === DEVICE_TREE_ID && row.personId === personId);
+}
+
+/**
+ * Whether the Share details toggle is on, and whether it can move.
+ * The viewer and a deceased person stay open, so the toggle is held on.
+ * A revoked invite cannot grant anything.
+ */
+export function detailToggle(access: AccessState, looking: LookingAs, personId: PersonId): { shared: boolean; locked: boolean } {
+  const self = looking.kind === "member" && looking.personId === personId;
+  if (looking.kind === "owner" || self || deceased(access, personId)) return { shared: true, locked: true };
+  if (looking.kind === "guest") {
+    const link = linkFor(access, looking.inviteId);
+    if (!link || link.status === "revoked") return { shared: false, locked: true };
+  }
+  const viewer = viewerFor(access, looking);
+  const shared = Boolean(
+    viewer && lensFor(access, viewer)?.detailGrants.some((grant) => grant.treeId === DEVICE_TREE_ID && grant.personId === personId),
+  );
+  return { shared, locked: false };
+}
+
+/**
+ * Grant or withdraw living details for one person on the viewer's lens.
+ * A grant does not add anyone to the visible set. The viewer's own details
+ * and a deceased person's details stay open, so those toggles do nothing.
+ * A revoked invite does nothing. The owner's working view is unchanged.
+ */
+export function toggleDetailGrant(tree: TreeData, access: AccessState, looking: LookingAs, personId: PersonId): AccessState {
+  if (looking.kind === "owner" || !onTree(tree, personId)) return access;
+  if (deceased(access, personId)) return access;
+  if (looking.kind === "member" && looking.personId === personId) return access;
+  if (looking.kind === "guest") {
+    const link = linkFor(access, looking.inviteId);
+    if (!link || link.status === "revoked") return access;
+  }
+  const viewer = viewerFor(access, looking);
+  if (!viewer) return access;
+  const previous = lensFor(access, viewer);
+  const grants = previous?.detailGrants ?? [];
+  const has = grants.some((grant) => grant.treeId === DEVICE_TREE_ID && grant.personId === personId);
+  const detailGrants = has
+    ? grants.filter((grant) => !(grant.treeId === DEVICE_TREE_ID && grant.personId === personId))
+    : [...grants, { treeId: DEVICE_TREE_ID, personId }];
+  return writeLens(access, viewer, previous?.rules ?? [], detailGrants);
 }
 
 function replaceRule(rules: readonly LensRule[], next: LensRule): LensRule[] {
@@ -270,7 +327,7 @@ export function acceptInviteCard(access: AccessState, inviteId: InviteId): Acces
   return { ...access, links: access.links.map((item) => (item.id === inviteId ? next : item)) };
 }
 
-/** Accepted or pending becomes revoked. A revoked card stays revoked. */
+/** Accepted or pending becomes revoked. A revoked card stays revoked. Detail grants for that guest are cleared. */
 export function revokeInviteCard(access: AccessState, inviteId: InviteId): AccessState {
   const link = access.links.find((item) => item.id === inviteId);
   if (!link || link.status === "revoked") return access;
@@ -278,7 +335,12 @@ export function revokeInviteCard(access: AccessState, inviteId: InviteId): Acces
     ...draftOf(link),
     ...(link.status === "accepted" ? { grant: link.grant } : {}),
   });
-  return { ...access, links: access.links.map((item) => (item.id === inviteId ? next : item)) };
+  const viewer = guestViewer(DEVICE_TREE_ID, inviteId);
+  return {
+    ...access,
+    links: access.links.map((item) => (item.id === inviteId ? next : item)),
+    lenses: access.lenses.map((lens) => (sameViewer(lens.viewer, viewer) ? { ...lens, detailGrants: [] } : lens)),
+  };
 }
 
 function ghostEffect(tree: TreeData, access: AccessState, viewer: Viewer, personId: string): "hide" | "unset" {
