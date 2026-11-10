@@ -9,7 +9,7 @@ import { GeneratedAvatar } from "./GeneratedAvatar";
 import { bridgePath, centerTransform, coupleTintBox, fitContentScale, pinchCamera, scaleAround, superellipsePath } from "@/lib/graphView";
 import { PERSONAL_MAP_MS, graphFromPersonalMap, layoutPersonalMap, morphGraph, placesMatch, type PersonalMap } from "@/lib/personalMap";
 import { gatherCameraMs, gatherPoints, interruptGather, planGather } from "@/lib/gatherChoreography";
-import { prefersReducedMotion, runFlight, runLinesOut, type GatherSession } from "@/lib/gatherPlay";
+import { gatherCameraRunning, playGatherCamera, prefersReducedMotion, runFlight, runLinesOut, takeGatherCamera, type GatherSession } from "@/lib/gatherPlay";
 import { gatheredPersonId } from "@/lib/personInteraction";
 import { usePersonInteraction } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
@@ -137,7 +137,7 @@ export function TreeCanvas({
 
   function applyWorld() {
     const el = worldRef.current;
-    if (!el) return;
+    if (!el || gatherCameraRunning(el)) return;
     const { x, y, s } = viewRef.current;
     el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
   }
@@ -187,6 +187,10 @@ export function TreeCanvas({
   function stopViewTween() {
     if (viewTween.current != null) cancelAnimationFrame(viewTween.current);
     viewTween.current = null;
+    const world = worldRef.current;
+    if (!world) return;
+    const view = takeGatherCamera(world);
+    if (view) viewRef.current = view;
   }
 
   function easeInOut(t: number) {
@@ -197,7 +201,7 @@ export function TreeCanvas({
     return 1 - Math.pow(1 - t, 3);
   }
 
-  function animateCamera(target: View, ms = PERSONAL_MAP_MS, ease: (t: number) => number = easeInOut) {
+  function animateCamera(target: View, ms = PERSONAL_MAP_MS, ease: (t: number) => number = easeInOut, compositor = false) {
     stopViewTween();
     const from = { ...viewRef.current };
     const stage = stageRef.current;
@@ -206,6 +210,19 @@ export function TreeCanvas({
     const inset = stage ? stageInset(stage, vh) : 0;
     const cx = vw / 2;
     const cy = inset + (vh - inset) / 2;
+    if (compositor) {
+      const world = worldRef.current;
+      if (!world) {
+        viewRef.current = target;
+        applyWorld();
+        return;
+      }
+      playGatherCamera(world, from, target, { cx, cy }, ms, () => {
+        viewRef.current = target;
+        applyWorld();
+      });
+      return;
+    }
     const fromWorld = { x: (cx - from.x) / (from.s || 1), y: (cy - from.y) / (from.s || 1) };
     const toWorld = { x: (cx - target.x) / target.s, y: (cy - target.y) / target.s };
     const start = performance.now();
@@ -228,6 +245,7 @@ export function TreeCanvas({
     animate: boolean,
     ms = PERSONAL_MAP_MS,
     ease: (t: number) => number = easeInOut,
+    compositor = false,
   ) {
     const stage = stageRef.current;
     if (!stage || next.cards.length === 0) return;
@@ -257,7 +275,7 @@ export function TreeCanvas({
     }
     view = { ...view, y: view.y + inset };
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    if (animate && !reduce) animateCamera(view, ms, ease);
+    if (animate && !reduce) animateCamera(view, ms, ease, compositor);
     else {
       stopViewTween();
       viewRef.current = view;
@@ -354,7 +372,7 @@ export function TreeCanvas({
       shownRef.current = to;
       setShown(to);
       setAnimating(true);
-      frameOf(to, nextId ? map : null, !reduced, gatherCameraMs(reduced), easeOut);
+      frameOf(to, nextId ? map : null, !reduced, gatherCameraMs(reduced), easeOut, true);
     };
     if (plan.linesOutMs <= 0) {
       commit(performance.now());

@@ -10,7 +10,7 @@ import { centerTransform, fitContentScale, superellipsePath, type Camera } from 
 import { skyFromPersonalMap } from "@/lib/familySkyFocus";
 import { layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
 import { gatherCameraMs, gatherPoints, interruptGather, planGather } from "@/lib/gatherChoreography";
-import { prefersReducedMotion, runFlight, runLinesOut, type GatherSession } from "@/lib/gatherPlay";
+import { gatherCameraRunning, playGatherCamera, prefersReducedMotion, runFlight, runLinesOut, takeGatherCamera, type GatherSession } from "@/lib/gatherPlay";
 import { gatheredPersonId } from "@/lib/personInteraction";
 import { usePersonInteraction } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
@@ -497,7 +497,7 @@ export function FamilySky({
 
   function applyWorld() {
     const el = worldRef.current;
-    if (!el) return;
+    if (!el || gatherCameraRunning(el)) return;
     const { x, y, s } = viewRef.current;
     el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
     el.style.setProperty("--inv", String(1 / s));
@@ -528,6 +528,28 @@ export function FamilySky({
   function stopTween() {
     if (tween.current != null) window.cancelAnimationFrame(tween.current);
     tween.current = null;
+    const world = worldRef.current;
+    if (!world) return;
+    const view = takeGatherCamera(world);
+    if (view) viewRef.current = view;
+  }
+
+  /** Gather camera: one compositor transform. The counter-scale is set once, while the labels are hidden. */
+  function animateGatherCamera(target: Camera, ms: number) {
+    stopTween();
+    const world = worldRef.current;
+    if (!world) {
+      viewRef.current = target;
+      applyWorld();
+      return;
+    }
+    const { vw, vh, inset } = stageSize();
+    const from = { ...viewRef.current };
+    world.style.setProperty("--inv", String(1 / (target.s || 1)));
+    playGatherCamera(world, from, target, { cx: vw / 2, cy: inset + (vh - inset) / 2 }, ms, () => {
+      viewRef.current = target;
+      applyWorld();
+    });
   }
 
   function animateTo(target: Camera, ms = 420) {
@@ -560,7 +582,7 @@ export function FamilySky({
   }
 
   /** The star-sky overview: every family at once, drawn as stars. */
-  function fitAll(animate = false, ms = 420) {
+  function fitAll(animate = false, ms = 420, compositor = false) {
     const box = skyBounds(sky);
     const { vw, vh, inset } = stageSize();
     const overview = overviewZoom(vw, vh - inset, sky);
@@ -571,7 +593,8 @@ export function FamilySky({
       y: inset + (vh - inset) / 2 - ((box.minY + box.maxY) / 2) * s,
       s,
     };
-    if (animate) animateTo(target, ms);
+    if (animate && compositor) animateGatherCamera(target, ms);
+    else if (animate) animateTo(target, ms);
     else {
       stopTween();
       viewRef.current = target;
@@ -606,7 +629,7 @@ export function FamilySky({
       applyWorld();
       return;
     }
-    animateTo(target, gatherCameraMs(prefersReducedMotion()));
+    animateGatherCamera(target, gatherCameraMs(prefersReducedMotion()));
   }
 
   function zoomToBucket(bucket: SkyBucket, focusId?: string) {
@@ -675,8 +698,8 @@ export function FamilySky({
       savedCam.current = null;
       refitAfter.current = false;
       const ms = gatherCameraMs(prefersReducedMotion());
-      if (refit || !back) fitAll(true, ms);
-      else animateTo(back, ms);
+      if (refit || !back) fitAll(true, ms, true);
+      else animateGatherCamera(back, ms);
       return;
     }
     // While editing, stay at this zoom and let the change glide; keep a person
@@ -1646,6 +1669,8 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
   );
   // Measure each label once it renders (its on-screen width does not change with zoom).
   useLayoutEffect(() => {
+    // Measuring labels forces layout. Skip it while the family is traveling; the labels are hidden.
+    if (document.querySelector(".family-sky.is-gathering")) return;
     widths.current.clear();
     for (const [id, el] of els.current) widths.current.set(id, el.offsetWidth);
     nudge();
