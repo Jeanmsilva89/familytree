@@ -8,7 +8,9 @@ import { CARD, ageLabel, lineageIds } from "@/lib/layout";
 import { GeneratedAvatar } from "./GeneratedAvatar";
 import { centerTransform, fitContentScale, superellipsePath, type Camera } from "@/lib/graphView";
 import { skyFromPersonalMap } from "@/lib/familySkyFocus";
-import { PERSONAL_MAP_MS, layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
+import { layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
+import { gatherCameraMs, gatherPoints, interruptGather, planGather } from "@/lib/gatherChoreography";
+import { prefersReducedMotion, runFlight, runLinesOut, type GatherSession } from "@/lib/gatherPlay";
 import { gatheredPersonId } from "@/lib/personInteraction";
 import { usePersonInteraction } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
@@ -174,6 +176,7 @@ export function FamilySky({
     [baseSky, personal, tree],
   );
   const focusKey = personal?.focusId ?? "";
+  const personalNow = Boolean(personal);
   const [laid, setLaid] = useState<{
     tree: TreeData;
     sky: FamilySkyLayout;
@@ -181,26 +184,43 @@ export function FamilySky({
     personal: boolean;
     from?: FamilySkyLayout;
     fromPersonal?: boolean;
+    fromFocusKey?: string;
   } | null>(null);
+  const holdGather = useRef(false);
+  const flyingGather = useRef(false);
+  const gatherSession = useRef<GatherSession | null>(null);
+  const savedCam = useRef<Camera | null>(null);
+  const reducedNow = prefersReducedMotion();
   const fresh = !laid || ((laid.tree !== tree || laid.focusKey !== focusKey) && !(hold && laid.tree !== tree));
-  const sky = fresh ? targetSky : laid.sky;
-  if (fresh) {
+  const personalSwap = Boolean(
+    fresh && laid && (laid.personal || personalNow) && (laid.focusKey !== focusKey || laid.personal !== personalNow),
+  );
+  if (personalSwap && !reducedNow && !flyingGather.current) holdGather.current = true;
+  const deferGather = holdGather.current && fresh && !flyingGather.current;
+  const sky = deferGather && laid ? laid.sky : fresh ? targetSky : laid.sky;
+  if (fresh && !deferGather) {
     setLaid({
       tree,
-      sky,
+      sky: targetSky,
       focusKey,
-      personal: Boolean(personal),
+      personal: personalNow,
       from: laid?.sky,
       fromPersonal: laid?.personal,
+      fromFocusKey: laid?.focusKey ?? "",
     });
   }
+  const committedMap = personalNow && Boolean(laid?.personal) && laid?.focusKey === focusKey;
+  const pictureMap = committedMap || (deferGather && Boolean(laid?.personal));
   // True only at the ends of a layout glide. Frames in between paint through refs, not state.
   const [animating, setAnimating] = useState(false);
-  const rings = useMemo(() => new Map(personal?.seats.map((seat) => [seat.id, seat.ring]) ?? []), [personal]);
+  const rings = useMemo(
+    () => new Map(pictureMap && personal ? personal.seats.map((seat) => [seat.id, seat.ring]) : []),
+    [pictureMap, personal],
+  );
   const linked = useMemo(() => {
-    if (personal) return new Set(personal.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
+    if (pictureMap && personal) return new Set(personal.seats.filter((seat) => seat.ring !== "dim").map((seat) => seat.id));
     return highlightedId ? lineageIds(tree, highlightedId) : null;
-  }, [personal, tree, highlightedId]);
+  }, [pictureMap, personal, tree, highlightedId]);
   const stageRef = useRef<HTMLDivElement>(null);
   const worldRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<Camera>({ x: 0, y: 0, s: 0.2 });
@@ -267,14 +287,125 @@ export function FamilySky({
   }
 
   useLayoutEffect(() => {
+    if (!holdGather.current || flyingGather.current) return;
+    const stage = stageRef.current;
+    const world = worldRef.current;
+    if (!stage || !world || !laid) return;
+    const focusId = personal?.focusId || laid.focusKey || laid.fromFocusKey || "";
+    if (!focusId) return;
+    const map = personal ?? layoutPersonalMap(tree, focusId);
+    if (!map) return;
+    if (personal && !savedCam.current) savedCam.current = { ...viewRef.current };
+    const rings = new Map(map.seats.map((seat) => [seat.id, seat.ring]));
+    const previous = gatherSession.current;
+    const lineHide0 = previous ? previous.sample().lineHide : 0;
+    previous?.stop();
+    glideRef.current = null;
+    const plan = planGather({
+      from: gatherPoints(laid.sky.cards, tree, focusId, rings),
+      to: gatherPoints(targetSky.cards, tree, focusId, rings),
+      direction: personal ? "gather" : "release",
+      lineHide0,
+    });
+    setAnimating(true);
+    let cancelled = false;
+    const session = runLinesOut({
+      stage,
+      world,
+      plan,
+      focusId,
+      onCommit: () => {
+        if (cancelled) return;
+        flyingGather.current = true;
+        holdGather.current = false;
+        setLaid({
+          tree,
+          sky: targetSky,
+          focusKey,
+          personal: Boolean(personal),
+          from: laid.sky,
+          fromPersonal: laid.personal,
+          fromFocusKey: laid.focusKey,
+        });
+      },
+    });
+    gatherSession.current = session;
+    return () => {
+      cancelled = true;
+      session.stop();
+    };
+    // Retarget only when the focused person changes. The clock itself does not re-render the sky.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKey, personal, tree]);
+
+  useLayoutEffect(() => {
     const from = laid?.from;
     const to = laid?.sky;
     if (!from || !to) {
       glideRef.current = null;
       return;
     }
+    const gatherMove =
+      laid.personal !== Boolean(laid.fromPersonal) ||
+      (Boolean(laid.fromFocusKey) && laid.fromFocusKey !== laid.focusKey && (laid.personal || Boolean(laid.fromPersonal)));
+    if (gatherMove) {
+      const focusId = (laid.personal ? laid.focusKey : laid.fromFocusKey) || "";
+      const stage = stageRef.current;
+      const world = worldRef.current;
+      if (!focusId || !stage || !world) return;
+      glideRef.current = null;
+      const continued = gatherSession.current?.phase === "lines-out" ? gatherSession.current : null;
+      let plan = continued?.plan;
+      let started = continued?.started ?? performance.now();
+      if (!continued && gatherSession.current?.phase === "flight") {
+        const previous = gatherSession.current;
+        const frame = previous.sample();
+        previous.stop();
+        const map = layoutPersonalMap(tree, focusId);
+        const rings = new Map(map?.seats.map((seat) => [seat.id, seat.ring]));
+        plan = interruptGather(previous.plan, frame.elapsed, {
+          to: gatherPoints(to.cards, tree, focusId, rings),
+          direction: laid.personal ? "gather" : "release",
+          reducedMotion: prefersReducedMotion(),
+        });
+        started = performance.now();
+      } else if (!continued) {
+        const map = layoutPersonalMap(tree, focusId);
+        const rings = new Map(map?.seats.map((seat) => [seat.id, seat.ring]));
+        const shift = to.shift;
+        plan = planGather({
+          from: gatherPoints(
+            from.cards.map((card) => ({ id: card.id, x: card.x + shift.x, y: card.y + shift.y })),
+            tree,
+            focusId,
+            rings,
+          ),
+          to: gatherPoints(to.cards, tree, focusId, rings),
+          direction: laid.personal ? "gather" : "release",
+          reducedMotion: prefersReducedMotion(),
+        });
+        started = performance.now();
+      }
+      if (!plan) return;
+      flyingGather.current = true;
+      setAnimating(true);
+      const session = runFlight({
+        stage,
+        world,
+        plan,
+        started,
+        focusId,
+        onDone: () => {
+          if (gatherSession.current === session) gatherSession.current = null;
+          flyingGather.current = false;
+          setAnimating(false);
+        },
+      });
+      gatherSession.current = session;
+      return () => session.stop();
+    }
     const world = worldRef.current;
-    const glideMs = laid.personal || laid.fromPersonal ? PERSONAL_MAP_MS : MORPH_MS;
+    const glideMs = MORPH_MS;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
       glideRef.current = null;
       if (world) {
@@ -326,6 +457,13 @@ export function FamilySky({
   // A camera or zoom update can re-render mid-glide. Put the current frame back
   // before paint so React's destination picture does not flash through.
   useLayoutEffect(() => {
+    applyWorld();
+    const session = gatherSession.current;
+    if (session && (session.phase === "flight" || session.phase === "lines-out")) {
+      session.paint();
+      labelsRef.current?.nudge();
+      return;
+    }
     const glide = glideRef.current;
     const world = worldRef.current;
     if (!glide || !world) return;
@@ -422,7 +560,7 @@ export function FamilySky({
   }
 
   /** The star-sky overview: every family at once, drawn as stars. */
-  function fitAll(animate = false) {
+  function fitAll(animate = false, ms = 420) {
     const box = skyBounds(sky);
     const { vw, vh, inset } = stageSize();
     const overview = overviewZoom(vw, vh - inset, sky);
@@ -433,7 +571,7 @@ export function FamilySky({
       y: inset + (vh - inset) / 2 - ((box.minY + box.maxY) / 2) * s,
       s,
     };
-    if (animate) animateTo(target);
+    if (animate) animateTo(target, ms);
     else {
       stopTween();
       viewRef.current = target;
@@ -468,7 +606,7 @@ export function FamilySky({
       applyWorld();
       return;
     }
-    animateTo(target, PERSONAL_MAP_MS);
+    animateTo(target, gatherCameraMs(prefersReducedMotion()));
   }
 
   function zoomToBucket(bucket: SkyBucket, focusId?: string) {
@@ -514,9 +652,12 @@ export function FamilySky({
   // selected person to their redrawn bucket; otherwise show every family.
   const firstSky = useRef(true);
   // Camera from before this personal map, so clearing the selection returns there.
-  const savedCam = useRef<Camera | null>(null);
   const refitAfter = useRef(false);
   useEffect(() => {
+    if (holdGather.current) {
+      if (personal && !savedCam.current) savedCam.current = { ...viewRef.current };
+      return;
+    }
     if (firstSky.current) {
       firstSky.current = false;
       if (!personal) return;
@@ -533,8 +674,9 @@ export function FamilySky({
       const refit = refitAfter.current;
       savedCam.current = null;
       refitAfter.current = false;
-      if (refit || !back) fitAll(true);
-      else animateTo(back, PERSONAL_MAP_MS);
+      const ms = gatherCameraMs(prefersReducedMotion());
+      if (refit || !back) fitAll(true, ms);
+      else animateTo(back, ms);
       return;
     }
     // While editing, stay at this zoom and let the change glide; keep a person
@@ -930,10 +1072,10 @@ export function FamilySky({
   return (
     <div
       ref={stageRef}
-      className={`graph-stage family-sky is-${level}${editMode ? " is-editing" : ""}${personal ? " is-personal" : ""}${lensOn ? " is-lens" : ""}`}
-      aria-label={`Family sky, ${personal ? sky.units.units.length : sky.buckets.length} families, ${level === "far" ? "overview" : level === "mid" ? "families" : "people"}`}
+      className={`graph-stage family-sky is-${level}${editMode ? " is-editing" : ""}${pictureMap ? " is-personal" : ""}${lensOn ? " is-lens" : ""}`}
+      aria-label={`Family sky, ${pictureMap ? sky.units.units.length : sky.buckets.length} families, ${level === "far" ? "overview" : level === "mid" ? "families" : "people"}`}
       data-level={level}
-      data-layout={personal ? "personal" : "sky"}
+      data-layout={pictureMap ? "personal" : "sky"}
       data-lens-phase={lensOn ? lens?.phase : undefined}
       data-resolved={lensOn ? lens?.resolvedIds.join(" ") : undefined}
       data-animating={animating ? "true" : "false"}
@@ -943,6 +1085,8 @@ export function FamilySky({
       onPointerCancel={endPointer}
     >
       <div ref={worldRef} className="graph-world sky-world" style={{ width: sky.width, height: sky.height }}>
+        <div className="gather-glow" data-gather-glow aria-hidden="true" />
+        <div className="gather-ripple" data-gather-ripple aria-hidden="true" />
         <svg className="graph-lines" width={sky.width} height={sky.height} aria-hidden>
           <defs>
             <radialGradient id="sky-glow">
@@ -976,7 +1120,7 @@ export function FamilySky({
               })
             : null}
 
-          {!far && !personal
+          {!far && !pictureMap
             ? sky.buckets.filter((bucket) => !lensOn || bucket.memberIds.some((id) => lensDraws(id))).map((bucket) => {
                 const lit = bucket.id === focusUnit;
                 const drop = carried?.over === bucket.id && sky.units.unitOf[carried.id] !== bucket.id;
@@ -994,7 +1138,7 @@ export function FamilySky({
             : null}
 
           {/* Links run above the bucket fills and break around any card in their way; the selected person's links come last, on top. */}
-          {!far && !personal
+          {!far && !pictureMap
             ? [...sky.links]
                 .map((link) => ({ link, lit: Boolean(linked && linked.has(link.fromPersonId) && linked.has(link.toPersonId)) }))
                 .sort((a, b) => Number(a.lit) - Number(b.lit))
@@ -1041,7 +1185,7 @@ export function FamilySky({
                 })
             : null}
 
-          {far && !personal
+          {far && !pictureMap
             ? sky.buckets.filter((bucket) => !lensOn || bucket.memberIds.some((id) => lensDraws(id))).map((bucket) => (
                 <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} data-members={bucket.memberIds.join(" ")} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}`}>
                   <circle cx={bucket.cx} cy={bucket.cy} r={bucket.glow} fill="url(#sky-glow)" />
@@ -1050,8 +1194,8 @@ export function FamilySky({
               ))
             : null}
 
-          {near || personal
-            ? sky.forks.filter((fork) => personal || shown.has(fork.unitId)).map((fork) => {
+          {near || pictureMap
+            ? sky.forks.filter((fork) => pictureMap || shown.has(fork.unitId)).map((fork) => {
                 const parents = fork.parentDrops.filter((d) => lineFilterAllows(lineFilter, d.kin) && lensShows(d.parentId));
                 const kids = fork.childDrops.filter((d) => lineFilterAllows(lineFilter, d.kin) && lensShows(d.childId));
                 if (!parents.length || !kids.length) return null;
@@ -1124,8 +1268,8 @@ export function FamilySky({
               })
             : null}
 
-          {(near || personal) && lineFilterAllowsCouples(lineFilter)
-            ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
+          {(near || pictureMap) && lineFilterAllowsCouples(lineFilter)
+            ? sky.couples.filter((c) => c.bar && (pictureMap || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
                 const geom = coupleBarGeometry(
                   couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
                   couple.partnerIds,
@@ -1173,8 +1317,8 @@ export function FamilySky({
           ) : null}
         </svg>
 
-        {near || personal
-          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
+        {near || pictureMap
+          ? sky.couples.filter((c) => c.bar && (pictureMap || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
               const geom = coupleBarGeometry(
                 couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
                 couple.partnerIds,
@@ -1198,7 +1342,7 @@ export function FamilySky({
             })
           : null}
 
-        {near && !personal && !editMode && !lensOn
+        {near && !pictureMap && !editMode && !lensOn
           ? sky.links.filter((link) => link.kind === "divorced" && lensShows(link.fromPersonId) && lensShows(link.toPersonId)).map((link) => {
               const mid = curveMid(link);
               if (!Number.isFinite(mid.x) || !Number.isFinite(mid.y)) return null;
@@ -1206,8 +1350,8 @@ export function FamilySky({
             })
           : null}
 
-        {near || personal
-          ? sky.cards.filter((card) => (personal || shown.has(card.unitId) || card.id === carried?.id) && lensDraws(card.id)).map((card) => {
+        {near || pictureMap
+          ? sky.cards.filter((card) => (pictureMap || shown.has(card.unitId) || card.id === carried?.id) && lensDraws(card.id)).map((card) => {
               const connected = Boolean(linked?.has(card.id));
               const selected = card.id === highlightedId;
               const dim = Boolean(linked && !connected) && !lensOn;
@@ -1256,7 +1400,7 @@ export function FamilySky({
             })
           : null}
 
-        {mid && !personal
+        {mid && !pictureMap
           ? sky.cards.filter((card) => shown.has(card.unitId) && lensDraws(card.id)).map((card) => {
               const mark = lensOn ? lens?.marks[card.id] : undefined;
               const withheld = mark?.details === "withheld";
@@ -1331,8 +1475,8 @@ export function FamilySky({
               })
           : null}
 
-        {unlinkArmed && (near || personal) && lineFilterAllowsCouples(lineFilter)
-          ? sky.couples.filter((c) => c.bar && (personal || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
+        {unlinkArmed && (near || pictureMap) && lineFilterAllowsCouples(lineFilter)
+          ? sky.couples.filter((c) => c.bar && (pictureMap || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
               const mark = coupleUnlinkMark(couple.partnerIds);
               const geom = coupleBarGeometry(
                 couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
@@ -1376,7 +1520,7 @@ export function FamilySky({
         />
       </div>
 
-      {far && peopleCount > 0 && !editMode && !personal ? <p className="sky-hint">Tap a family to zoom in</p> : null}
+      {far && peopleCount > 0 && !editMode && !pictureMap ? <p className="sky-hint">Tap a family to zoom in</p> : null}
       {lensOn ? <p className="graph-edit-hint sky-edit-hint lens-hint">{lens?.caption}</p> : null}
       {editMode && !lensOn ? (
         <p className="graph-edit-hint sky-edit-hint">

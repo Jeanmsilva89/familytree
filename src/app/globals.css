@@ -798,6 +798,54 @@ select {
   z-index: 0;
 }
 
+/* Gather: lines leave, people travel, lines draw back. One opacity and one dash on the world. */
+.gather-glow,
+.gather-ripple {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 168px;
+  height: 168px;
+  margin-left: -84px;
+  margin-top: -84px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0;
+  z-index: 1;
+}
+.gather-glow {
+  background: radial-gradient(circle, color-mix(in srgb, var(--accent) 46%, transparent) 0%, transparent 68%);
+}
+.gather-ripple {
+  border: 1.5px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 14%, transparent);
+}
+.graph-stage[data-lines="out"] .graph-lines,
+.graph-stage[data-lines="hidden"] .graph-lines,
+.graph-stage[data-lines="in"] .graph-lines,
+.graph-stage[data-lines="out"] .couple-tint,
+.graph-stage[data-lines="hidden"] .couple-tint,
+.graph-stage[data-lines="in"] .couple-tint,
+.graph-stage[data-lines="out"] .partner-status,
+.graph-stage[data-lines="hidden"] .partner-status,
+.graph-stage[data-lines="in"] .partner-status,
+.graph-stage[data-lines="out"] .sky-label,
+.graph-stage[data-lines="hidden"] .sky-label,
+.graph-stage[data-lines="in"] .sky-label {
+  opacity: var(--line-opacity, 1);
+}
+.graph-stage[data-lines="out"] [data-gather-solid],
+.graph-stage[data-lines="hidden"] [data-gather-solid],
+.graph-stage[data-lines="in"] [data-gather-solid] {
+  stroke-dasharray: calc(var(--gather-len) * 1px);
+  stroke-dashoffset: calc(var(--gather-len) * var(--line-off, 0) * 1px);
+}
+.graph-stage[data-lines="out"] .household-area,
+.graph-stage[data-lines="hidden"] .household-area,
+.graph-stage[data-lines="in"] .household-area {
+  transition: none;
+}
+
 /* Household areas: a soft superellipse behind each household, a quiet label,
    and one connector into each grown child's own household. */
 .household-area {
