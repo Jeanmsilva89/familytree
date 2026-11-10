@@ -8,8 +8,10 @@ import {
   GATHER_REDUCED_MS,
   GATHER_TOTAL_MS,
   frameAt,
+  gatherCameraAt,
   gatherEase,
   gatherRole,
+  trackPose,
   interruptGather,
   planGather,
   type GatherPoint,
@@ -200,6 +202,23 @@ describe("gather choreography", () => {
       assert.ok(Math.abs(landed.x - seat.x) < 1e-6, seat.id);
       assert.ok(Math.abs(landed.y - seat.y) < 1e-6, seat.id);
     }
+    const child = plan.tracks.find((track) => track.role === "child");
+    assert.ok(child);
+    const startPose = trackPose(child, 0, "gather");
+    const endPose = trackPose(child, 1, "gather");
+    assert.equal(startPose.x, child.fromX);
+    assert.equal(startPose.y, child.fromY);
+    assert.equal(endPose.x, child.toX);
+    assert.equal(endPose.y, child.toY);
+    assert.ok(trackPose(child, 0.5, "gather").scale > 1);
+    const cam = { x: 12, y: 40, s: 0.4 };
+    const next = { x: 80, y: -10, s: 1.2 };
+    const view = { cx: 195, cy: 360 };
+    const opened = gatherCameraAt(cam, next, view, 0);
+    const closed = gatherCameraAt(cam, next, view, 1);
+    assert.ok(Math.abs(opened.x - cam.x) < 1e-6 && Math.abs(opened.y - cam.y) < 1e-6 && Math.abs(opened.s - cam.s) < 1e-6);
+    assert.ok(Math.abs(closed.x - next.x) < 1e-6 && Math.abs(closed.y - next.y) < 1e-6 && Math.abs(closed.s - next.s) < 1e-6);
+
     const again = interruptGather(back, 40, { to, direction: "gather" });
     const retarget = frameAt(again, 0);
     const mid = frameAt(back, 40);

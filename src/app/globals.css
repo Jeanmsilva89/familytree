@@ -817,33 +817,27 @@ select {
   background: radial-gradient(circle, color-mix(in srgb, var(--accent) 46%, transparent) 0%, transparent 68%);
 }
 .gather-ripple {
-  border: 1.5px solid color-mix(in srgb, var(--accent) 72%, transparent);
-  box-shadow: 0 0 0 10px color-mix(in srgb, var(--accent) 14%, transparent);
+  border: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
 }
-.graph-stage[data-lines="out"] .graph-lines,
+/* One lines layer. Hidden travel is a single opacity; the clip itself is a transform. */
+.graph-stage.is-gathering .portrait-card,
+.graph-stage.is-gathering .sky-avatar,
+.graph-stage.is-gathering .graph-lines,
+.graph-stage.is-gathering .gather-glow,
+.graph-stage.is-gathering .gather-ripple {
+  will-change: transform, opacity;
+}
+.graph-stage.is-gathering .portrait-card,
+.graph-stage.is-gathering .sky-avatar,
+.graph-stage.is-gathering .gather-ripple {
+  box-shadow: none;
+  filter: none;
+}
 .graph-stage[data-lines="hidden"] .graph-lines,
-.graph-stage[data-lines="in"] .graph-lines,
-.graph-stage[data-lines="out"] .couple-tint,
 .graph-stage[data-lines="hidden"] .couple-tint,
-.graph-stage[data-lines="in"] .couple-tint,
-.graph-stage[data-lines="out"] .partner-status,
 .graph-stage[data-lines="hidden"] .partner-status,
-.graph-stage[data-lines="in"] .partner-status,
-.graph-stage[data-lines="out"] .sky-label,
-.graph-stage[data-lines="hidden"] .sky-label,
-.graph-stage[data-lines="in"] .sky-label {
-  opacity: var(--line-opacity, 1);
-}
-.graph-stage[data-lines="out"] [data-gather-solid],
-.graph-stage[data-lines="hidden"] [data-gather-solid],
-.graph-stage[data-lines="in"] [data-gather-solid] {
-  stroke-dasharray: calc(var(--gather-len) * 1px);
-  stroke-dashoffset: calc(var(--gather-len) * var(--line-off, 0) * 1px);
-}
-.graph-stage[data-lines="out"] .household-area,
-.graph-stage[data-lines="hidden"] .household-area,
-.graph-stage[data-lines="in"] .household-area {
-  transition: none;
+.graph-stage[data-lines="hidden"] .sky-label {
+  opacity: 0;
 }
 
 /* Household areas: a soft superellipse behind each household, a quiet label,
@@ -1524,8 +1518,8 @@ html[data-theme="dark"] .generated-avatar {
   transform: translate(calc(var(--dx, 0px) * var(--glide-u, 0)), calc(var(--dy, 0px) * var(--glide-u, 0))) translate(-50%, -50%) scale(max(1, calc(var(--inv) * 0.7)));
 }
 /* Personal-map glide: one variable on the world moves every card. React stays on the destination layout. */
-.family-sky[data-animating="true"] .portrait-card:not(.is-carried):not(.is-placing),
-.family-sky[data-animating="true"] .sky-avatar {
+.family-sky[data-animating="true"]:not(.is-gathering) .portrait-card:not(.is-carried):not(.is-placing),
+.family-sky[data-animating="true"]:not(.is-gathering) .sky-avatar {
   transform: translate(calc(var(--dx, 0px) * var(--glide-u, 0)), calc(var(--dy, 0px) * var(--glide-u, 0)));
 }
 .family-sky.is-editing.is-near .graph-lines { pointer-events: auto; }

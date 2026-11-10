@@ -218,6 +218,39 @@ function place(track: GatherTrack, travel: number) {
   return { x: x + (-dy / len) * bow * sign, y: y + (dx / len) * bow * sign };
 }
 
+/** One sample of a person's travel. The compositor plays these as keyframes. */
+export function trackPose(track: GatherTrack, travel: number, direction: GatherDirection) {
+  const at = place(track, travel);
+  return {
+    x: at.x,
+    y: at.y,
+    scale: scaleFor(track.role, travel, direction),
+    opacity: opacityFor(track.role, travel, direction),
+  };
+}
+
+export type GatherCamera = { x: number; y: number; s: number };
+
+/**
+ * Camera sample for the gather glide. `t` is 0 at the first frame and 1 at
+ * the last. The world point under the view centre and the log of the scale
+ * ease out together, so a zoom does not drift sideways.
+ */
+export function gatherCameraAt(
+  from: GatherCamera,
+  to: GatherCamera,
+  view: { cx: number; cy: number },
+  t: number,
+): GatherCamera {
+  const k = t <= 0 ? 0 : t >= 1 ? 1 : 1 - (1 - t) ** 3;
+  const fromS = from.s || 1;
+  const toS = to.s || 1;
+  const s = Math.exp(Math.log(fromS) + (Math.log(toS) - Math.log(fromS)) * k);
+  const wx = (view.cx - from.x) / fromS + ((view.cx - to.x) / toS - (view.cx - from.x) / fromS) * k;
+  const wy = (view.cy - from.y) / fromS + ((view.cy - to.y) / toS - (view.cy - from.y) / fromS) * k;
+  return { x: view.cx - wx * s, y: view.cy - wy * s, s };
+}
+
 function scaleFor(role: GatherRole, travel: number, direction: GatherDirection) {
   if (role === "dim") {
     const far = 0.92;
@@ -273,7 +306,7 @@ export function frameAt(plan: GatherChoreography, elapsed: number): GatherFrame 
   const glow = glowFor(plan, t);
   const people = plan.tracks.map((track) => {
     const travel = done ? 1 : trackTravel(track, t, plan.travelStart);
-    const at = place(track, travel);
+    const at = trackPose(track, travel, plan.direction);
     return {
       id: track.id,
       role: track.role,
@@ -282,8 +315,8 @@ export function frameAt(plan: GatherChoreography, elapsed: number): GatherFrame 
       toX: track.toX,
       toY: track.toY,
       travel,
-      scale: scaleFor(track.role, travel, plan.direction),
-      opacity: opacityFor(track.role, travel, plan.direction),
+      scale: at.scale,
+      opacity: at.opacity,
     };
   });
   return {
