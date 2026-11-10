@@ -65,7 +65,11 @@ A lens is data for one viewer: branch and person rules, each `include`, `hide`, 
 
 A guest starts from the accepted invite. A lens can hide or dim inside that set, and cannot add people the invite did not grant. Revoking the invite clears the set.
 
-Living details stay withheld unless the viewer is that person, a detail grant names them, or they are deceased.
+Living details stay withheld unless the viewer is that person, a detail grant names them, or they are deceased. A detail grant never adds a person. Someone outside the viewer's visible set stays off the graph, photo and dates included, even when a grant names them. Hiding or sealing them does the same. A dimmed person can still have details open.
+
+A viewer always sees their own living details when they are shown. A person marked deceased stays open without a grant, including when dimmed. Withdrawing a grant does not close either of those.
+
+Revoking an invite clears that guest's visible set and clears the detail grants stored on their lens. A grant that is still sitting on the lens after a revoke, or a grant left on the revoked link, reveals nothing. Another viewer's grants stay where they are.
 
 `ownerWorkingView` is the exception for the person who already holds the tree on their device: every person on that tree, details open, including sealed people. It does not include a linked tree. Anyone else gets an empty graph. A lens is how that owner decides what another viewer sees.
 
@@ -73,6 +77,8 @@ Living details stay withheld unless the viewer is that person, a detail grant na
 
 `TreeData` is unchanged. `loadTree` and `parseTreeJson` do not add access fields. A backup written before this module loads with the same people, unions, child links, focus, and family-unit overrides.
 
-## Next UI step
+## On the sky
 
-The next screen is a lens the owner arranges on the family sky, not a settings form. They choose a viewer — a person on the tree, or a guest named on an invite — and touch a branch or a person to include, hide, or dim them. An invite card moves from pending to accepted to revoked. This module is the data and the rules that screen will call. Accounts and a server come after that, not before.
+The owner arranges a lens on the family sky, not in a settings form. They choose a viewer — a person on the tree, or a guest named on an invite — and touch a branch or a person to include, hide, or dim them. An invite card moves from pending to accepted to revoked.
+
+Holding a person while arranging opens Share details. That toggles a detail grant for the viewer. It does not gather the sky and it does not open the editor. In the preview, a withheld person shows only their name and generated avatar. A granted person shows the photo and dates already stored for them. Accounts and a server come after that, not before.

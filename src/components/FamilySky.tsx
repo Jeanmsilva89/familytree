@@ -67,8 +67,8 @@ type Props = {
   /** Persist a place along the family row. `x` is pixels to the right of the automatic place. */
   onPlace?: (personId: string, x: number) => void | Promise<void>;
   /**
-   * Arranging a visibility lens. Touches include, hide, or dim. They do not
-   * gather, drag, or open the editor.
+   * Arranging a visibility lens. Touches include, hide, or dim. A hold toggles
+   * Share details. Neither gathers, drags, nor opens the editor.
    */
   lens?: {
     active: boolean;
@@ -78,6 +78,8 @@ type Props = {
     caption: string;
     onPerson: (personId: string) => void;
     onBranch: (rootId: string) => void;
+    onShareDetails?: (personId: string) => void;
+    shareOf?: (personId: string) => { shared: boolean; locked: boolean };
   };
 };
 
@@ -139,11 +141,17 @@ export function FamilySky({
   onPlace,
   lens,
 }: Props) {
+  const arrangingLens = Boolean(lens?.active && lens.phase === "arrange" && lens.onShareDetails);
   const interaction = usePersonInteraction({
     people: tree.people,
     selectedId: highlightedId,
     editMode,
-    onSelect: onHighlight,
+    shareDetails: arrangingLens ? {
+      shared: (personId) => lens?.shareOf?.(personId)?.shared ?? false,
+      locked: (personId) => lens?.shareOf?.(personId)?.locked ?? true,
+      onToggle: (personId) => lens?.onShareDetails?.(personId),
+    } : undefined,
+    onSelect: arrangingLens ? () => undefined : onHighlight,
     onOpen,
   });
   const clearInteraction = interaction.clear;
@@ -151,6 +159,10 @@ export function FamilySky({
     if (!lens?.active) return;
     clearInteraction();
   }, [clearInteraction, lens?.active]);
+  useEffect(() => {
+    if (!lens?.active || lens.phase === "arrange") return;
+    clearInteraction();
+  }, [clearInteraction, lens?.active, lens?.phase]);
   const baseSky = useMemo(() => layoutFamilySky(tree, routePersonLink), [tree]);
   const gatheredId = gatheredPersonId(interaction.focus, editMode);
   const personal = useMemo(
@@ -1221,12 +1233,13 @@ export function FamilySky({
                   onClick={(event) => {
                     event.stopPropagation();
                     if (lensOn) {
+                      if (arrangingLens && interaction.consumeTap(card.id)) return;
                       lens?.onPerson(card.id);
                       return;
                     }
                     tapCard(card.person);
                   }}
-                  {...(lensOn ? {} : interaction.bindPerson(card.id))}
+                  {...(arrangingLens || !lensOn ? interaction.bindPerson(card.id) : {})}
                   aria-pressed={lensOn ? undefined : selected}
                 >
                   {photo ? (
@@ -1264,6 +1277,7 @@ export function FamilySky({
                   onClick={(event) => {
                     event.stopPropagation();
                     if (lensOn) {
+                      if (arrangingLens && interaction.consumeTap(card.id)) return;
                       lens?.onPerson(card.id);
                       return;
                     }
@@ -1275,7 +1289,7 @@ export function FamilySky({
                     interaction.selectOnly(card.id);
                     zoomToPerson(card.id);
                   }}
-                  {...(lensOn ? {} : interaction.bindPerson(card.id))}
+                  {...(arrangingLens || !lensOn ? interaction.bindPerson(card.id) : {})}
                 >
                   {photo ? (
                     <img src={photo} alt="" />

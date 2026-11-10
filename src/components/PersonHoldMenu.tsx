@@ -13,11 +13,19 @@ import {
   type PersonInteraction,
 } from "@/lib/personInteraction";
 
+type ShareDetails = {
+  shared: (personId: string) => boolean;
+  locked: (personId: string) => boolean;
+  onToggle: (personId: string) => void;
+};
+
 type Options = {
   people: Person[];
   selectedId?: string;
   editMode?: boolean;
   canGather?: boolean;
+  /** While arranging a lens, the hold menu is Share details instead of gather. */
+  shareDetails?: ShareDetails;
   onSelect: (person?: Person) => void;
   onOpen: (person: Person) => void;
 };
@@ -28,7 +36,7 @@ function personPoint(target: EventTarget) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-export function usePersonInteraction({ people, selectedId, editMode = false, canGather = true, onSelect, onOpen }: Options) {
+export function usePersonInteraction({ people, selectedId, editMode = false, canGather = true, shareDetails, onSelect, onOpen }: Options) {
   const [state, setState] = useState<PersonInteraction>(initialInteraction);
   const stateRef = useRef(state);
   const selectedRef = useRef(selectedId);
@@ -133,25 +141,38 @@ export function usePersonInteraction({ people, selectedId, editMode = false, can
   const dismiss = useCallback(() => apply({ type: "dismiss-menu" }), [apply]);
   const gather = useCallback(() => apply({ type: "gather" }), [apply]);
   const edit = useCallback(() => apply({ type: "edit-from-menu" }), [apply]);
+  const consumeTap = useCallback((personId: string) => {
+    const current = stateRef.current;
+    if (!current.swallowTap && !current.menu) return false;
+    apply({ type: "tap", personId });
+    return true;
+  }, [apply]);
 
+  const menuPerson = state.menu?.personId;
   const menu = state.menu ? (
     <PersonHoldMenu
       menu={state.menu}
       people={people}
-      canGather={canGather}
+      canGather={canGather && !shareDetails}
+      share={shareDetails && menuPerson ? {
+        shared: shareDetails.shared(menuPerson),
+        locked: shareDetails.locked(menuPerson),
+        onToggle: () => shareDetails.onToggle(menuPerson),
+      } : undefined}
       onGather={gather}
       onEdit={edit}
       onDismiss={dismiss}
     />
   ) : null;
 
-  return { focus: state.focus, bindPerson, tap, selectOnly, dropSwallow, clear, cancelHold, menu };
+  return { focus: state.focus, bindPerson, tap, selectOnly, dropSwallow, clear, cancelHold, consumeTap, menu };
 }
 
 function PersonHoldMenu({
   menu,
   people,
   canGather,
+  share,
   onGather,
   onEdit,
   onDismiss,
@@ -159,6 +180,7 @@ function PersonHoldMenu({
   menu: NonNullable<PersonInteraction["menu"]>;
   people: Person[];
   canGather: boolean;
+  share?: { shared: boolean; locked: boolean; onToggle: () => void };
   onGather: () => void;
   onEdit: () => void;
   onDismiss: () => void;
@@ -220,14 +242,34 @@ function PersonHoldMenu({
       onPointerDown={(event) => event.stopPropagation()}
       onKeyDown={onKeyDown}
     >
-      {canGather ? (
-        <button type="button" role="menuitem" onClick={onGather}>
-          Gather family
+      {share ? (
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          className="is-toggle"
+          aria-label="Share details"
+          aria-checked={share.shared}
+          disabled={share.locked}
+          onClick={() => {
+            if (share.locked) return;
+            share.onToggle();
+          }}
+        >
+          <span>Share details</span>
+          <span className="hold-toggle-state" aria-hidden="true">{share.shared ? "On" : "Off"}</span>
         </button>
-      ) : null}
-      <button type="button" role="menuitem" onClick={onEdit}>
-        Edit {name}
-      </button>
+      ) : (
+        <>
+          {canGather ? (
+            <button type="button" role="menuitem" onClick={onGather}>
+              Gather family
+            </button>
+          ) : null}
+          <button type="button" role="menuitem" onClick={onEdit}>
+            Edit {name}
+          </button>
+        </>
+      )}
     </div>,
     document.body,
   );

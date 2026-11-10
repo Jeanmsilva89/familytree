@@ -577,6 +577,7 @@ select {
   right: 72px;
   bottom: calc(12px + var(--safe-bottom));
   z-index: 5;
+  pointer-events: none;
   margin: 0;
   padding: 8px 12px;
   border-radius: 14px;
@@ -1632,4 +1633,23 @@ html[data-theme="dark"] .generated-avatar {
 .person-hold-menu button:hover,
 .person-hold-menu button:focus-visible {
   background: color-mix(in srgb, var(--accent) 22%, var(--card));
+}
+.person-hold-menu button.is-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.person-hold-menu button.is-toggle[aria-checked="true"] {
+  background: color-mix(in srgb, var(--accent) 28%, var(--card));
+}
+.person-hold-menu button:disabled {
+  opacity: 0.72;
+  cursor: default;
+}
+.person-hold-menu .hold-toggle-state {
+  font-size: 0.72rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.72;
 }
