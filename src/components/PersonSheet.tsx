@@ -16,6 +16,7 @@ import { childrenOfPerson, kinBetween, parentRoleOf, parentsOf, unionsFor } from
 import { personToVCard, vcardFilename } from "@/lib/vcard";
 import { NameAutocomplete } from "./AddNameRow";
 import { FamilyUnitPicker } from "./FamilyUnitPicker";
+import { GeneratedAvatar } from "./GeneratedAvatar";
 import { scrollFieldIntoSheet, useBodyScrollLock } from "@/hooks/useVisualViewport";
 
 type Rel = "parent" | "partner" | "child" | "sibling";
@@ -37,6 +38,13 @@ type Props = {
   onRemove: (id: string) => Promise<void>;
   onViewTree: (person: Person) => void;
   onSetFamilyUnit?: (personId: string, choice: { unitOf: string | null } | "auto") => Promise<void>;
+  /** A person from a shared family. The branch belongs to the sender. */
+  shared?: {
+    ownerName: string;
+    homePeople: { id: string; name: string }[];
+    onLink: (homePersonId: string, role: LinkRole) => void;
+    onRemove: () => void;
+  };
 };
 
 function downloadVCard(person: Person) {
@@ -77,6 +85,7 @@ export function PersonSheet({
   onRemove,
   onViewTree,
   onSetFamilyUnit,
+  shared,
 }: Props) {
   const titleId = useId();
   const [rel, setRel] = useState<Rel>("parent");
@@ -94,6 +103,8 @@ export function PersonSheet({
   const [otherDate, setOtherDate] = useState("");
   const [extras, setExtras] = useState<ExtraField[]>([{ key: "", value: "" }]);
   const [hint, setHint] = useState<string | null>(null);
+  const [linkHome, setLinkHome] = useState("");
+  const [linkRole, setLinkRole] = useState<LinkRole>("partner");
   const swipeStart = useRef<number | null>(null);
   useBodyScrollLock(Boolean(person));
 
@@ -112,6 +123,7 @@ export function PersonSheet({
     setHint(null);
     setAddKin("blood");
     setAddRole("");
+    setLinkRole("partner");
   }, [person]);
 
   function onSheetTouchStart(event: TouchEvent) {
@@ -136,6 +148,74 @@ export function PersonSheet({
   }
 
   if (!person) return null;
+
+  if (shared) {
+    const homeId = shared.homePeople.some((item) => item.id === linkHome) ? linkHome : shared.homePeople[0]?.id ?? "";
+    return (
+      <div className="sheet-backdrop" role="presentation" onClick={onClose}>
+        <div
+          className="sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby={titleId}
+          data-shared-readonly="true"
+          onClick={(event) => event.stopPropagation()}
+          onTouchStart={onSheetTouchStart}
+          onTouchEnd={onSheetTouchEnd}
+        >
+          <div className="sheet-handle" aria-hidden />
+          <div className="sheet-head">
+            <h2 id={titleId}>{displayName(person)}</h2>
+            <button type="button" className="sheet-close" onClick={onClose}>
+              Close
+            </button>
+          </div>
+          <p className="hint">Shared by {shared.ownerName}. Read only.</p>
+          <div className="share-face sheet-share-face">
+            {person.photo ? <img className="portrait-photo" src={person.photo} alt="" /> : <GeneratedAvatar person={person} />}
+          </div>
+          {person.birthDate ? <p>{person.birthDate}</p> : null}
+          {person.bio ? <p className="hint">{person.bio}</p> : null}
+          <form
+            className="share-link"
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (!homeId) return;
+              shared.onLink(homeId, linkRole);
+            }}
+          >
+            <label className="field">
+              Someone in your tree
+              <select aria-label="Someone in your tree" value={homeId} onChange={(event) => setLinkHome(event.target.value)}>
+                {shared.homePeople.map((item) => (
+                  <option key={item.id} value={item.id}>{item.name}</option>
+                ))}
+              </select>
+            </label>
+            <label className="field">
+              Relationship
+              <select aria-label="Relationship" value={linkRole} onChange={(event) => setLinkRole(event.target.value as LinkRole)}>
+                <option value="partner">Partner</option>
+                <option value="parent">Parent</option>
+                <option value="child">Child</option>
+                <option value="sibling">Sibling</option>
+              </select>
+            </label>
+            <button className="btn primary" type="submit" disabled={!homeId}>Link</button>
+          </form>
+          <button
+            type="button"
+            className="btn ghost"
+            onClick={() => {
+              if (confirm(`Remove ${shared.ownerName}'s shared family from this tree?`)) shared.onRemove();
+            }}
+          >
+            Remove this shared family
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const unions = unionsFor(tree, person.id);
   const parents = parentsOf(tree, person.id);

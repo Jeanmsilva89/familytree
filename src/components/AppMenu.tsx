@@ -15,6 +15,7 @@ type Props = {
   onImport: () => void;
   onExportJson: () => void;
   onImportJson: () => void;
+  onAddShared: () => void;
   onReset: () => void;
   canInstall: boolean;
   onInstall: () => void;
@@ -27,7 +28,7 @@ const THEMES: { id: ThemePreference; label: string }[] = [
 ];
 
 export function AppMenu({
-  open, onClose, onPeople, onVisualize, onAddSomeone, onExport, onImport, onExportJson, onImportJson, onReset, canInstall, onInstall,
+  open, onClose, onPeople, onVisualize, onAddSomeone, onExport, onImport, onExportJson, onImportJson, onAddShared, onReset, canInstall, onInstall,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null);
   const [adding, setAdding] = useState(false);
@@ -76,6 +77,7 @@ export function AppMenu({
         <button type="button" role="menuitem" onClick={onExportJson}>Export backup JSON</button>
         <button type="button" role="menuitem" onClick={onImportJson}>Import backup JSON</button>
       </details>
+      <button type="button" role="menuitem" onClick={onAddShared}>Add a shared family</button>
       {canInstall ? (
         <button type="button" role="menuitem" onClick={onInstall}>Install</button>
       ) : (

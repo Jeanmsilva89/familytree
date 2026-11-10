@@ -25,7 +25,7 @@ Empty-state art is a fictional example (Alex and Jordan, kids Sam and Riley). It
 
 ## Privacy
 
-Names never leave the device. Family Tree stores the tree in the browser IndexedDB only. There is no signup, no server database, no analytics, and no third-party trackers. A GEDCOM or vCard file is created locally and only leaves the device if you choose to share that file.
+Names never leave the device unless you send them. Family Tree stores the tree in the browser IndexedDB only. There is no signup, no server database, no analytics, and no third-party trackers. A GEDCOM, a vCard, or a share file is created locally and only leaves the device if you choose to send that file. A share file contains only what one viewer's lens is allowed to see.
 
 ## Local development
 

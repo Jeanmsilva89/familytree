@@ -81,8 +81,11 @@ type Props = {
     onPerson: (personId: string) => void;
     onBranch: (rootId: string) => void;
     onShareDetails?: (personId: string) => void;
+    onShareFile?: () => void;
     shareOf?: (personId: string) => { shared: boolean; locked: boolean };
   };
+  /** People brought in from a share file. Their bucket is marked, and they are not edited here. */
+  sharedPersonIds?: readonly string[];
 };
 
 type Port = "parent" | "partner" | "child";
@@ -142,12 +145,15 @@ export function FamilySky({
   onMoveToUnit,
   onPlace,
   lens,
+  sharedPersonIds,
 }: Props) {
   const arrangingLens = Boolean(lens?.active && lens.phase === "arrange" && lens.onShareDetails);
+  const sharedPeople = new Set(sharedPersonIds ?? []);
   const interaction = usePersonInteraction({
     people: tree.people,
     selectedId: highlightedId,
     editMode,
+    onShareFile: arrangingLens ? lens?.onShareFile : undefined,
     shareDetails: arrangingLens ? {
       shared: (personId) => lens?.shareOf?.(personId)?.shared ?? false,
       locked: (personId) => lens?.shareOf?.(personId)?.locked ?? true,
@@ -904,7 +910,9 @@ export function FamilySky({
       setWire(null);
       const pt = worldPoint(event.clientX, event.clientY);
       const to = cardAtPoint(pt.x, pt.y);
-      if (to && to.id !== fromId && event.type !== "pointercancel") setPick({ fromId, toId: to.id });
+      if (to && to.id !== fromId && !sharedPeople.has(fromId) && !sharedPeople.has(to.id) && event.type !== "pointercancel") {
+        setPick({ fromId, toId: to.id });
+      }
       return true;
     }
     const g = gesture.current;
@@ -916,7 +924,7 @@ export function FamilySky({
         carry.current = null;
         setCarried(null);
         const dx = g.placeX - g.originX;
-        if (Math.abs(dx) > 8 && event.type !== "pointercancel") {
+        if (!sharedPeople.has(g.id) && Math.abs(dx) > 8 && event.type !== "pointercancel") {
           suppressTap.current = true;
           const previous = cardOf.get(g.id)?.person.rowNudge;
           const base = typeof previous === "number" && Number.isFinite(previous) ? previous : 0;
@@ -944,7 +952,7 @@ export function FamilySky({
       }
       const from = sky.units.unitOf[c.id];
       const unit = dropped?.over ? sky.units.units.find((u) => u.id === dropped.over) : undefined;
-      if (unit && unit.id !== from && event.type !== "pointercancel") {
+      if (!sharedPeople.has(c.id) && unit && unit.id !== from && event.type !== "pointercancel") {
         followAfterDrop.current = c.id;
         void onMoveToUnit?.(c.id, unit.rootId);
       }
@@ -1086,6 +1094,7 @@ export function FamilySky({
           return [label ? { ...bucket, label } : bucket];
         }),
       };
+  const unitShared = (memberIds: string[]) => memberIds.length > 0 && memberIds.every((id) => sharedPeople.has(id));
   const near = level === "near";
   const mid = level === "mid";
   const far = level === "far";
@@ -1152,7 +1161,8 @@ export function FamilySky({
                     key={bucket.id}
                     data-unit-id={bucket.id}
                     data-members={bucket.memberIds.join(" ")}
-                    className={`sky-bucket${lit ? " is-lit" : ""}${drop ? " is-drop" : ""}`}
+                    data-shared={unitShared(bucket.memberIds) ? "true" : undefined}
+                    className={`sky-bucket${lit ? " is-lit" : ""}${drop ? " is-drop" : ""}${unitShared(bucket.memberIds) ? " is-shared" : ""}`}
                     d={superellipsePath(bucket, 120)}
                     vectorEffect="non-scaling-stroke"
                   />
@@ -1210,7 +1220,7 @@ export function FamilySky({
 
           {far && !pictureMap
             ? sky.buckets.filter((bucket) => !lensOn || bucket.memberIds.some((id) => lensDraws(id))).map((bucket) => (
-                <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} data-members={bucket.memberIds.join(" ")} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}`}>
+                <g key={`${bucket.id}-glow`} data-unit-id={bucket.id} data-members={bucket.memberIds.join(" ")} data-shared={unitShared(bucket.memberIds) ? "true" : undefined} className={`sky-star${bucket.id === focusUnit ? " is-lit" : ""}${unitShared(bucket.memberIds) ? " is-shared" : ""}`}>
                   <circle cx={bucket.cx} cy={bucket.cy} r={bucket.glow} fill="url(#sky-glow)" />
                   <circle className="sky-star-core" cx={bucket.cx} cy={bucket.cy} r={bucket.glow * 0.16} />
                 </g>
@@ -1379,7 +1389,11 @@ export function FamilySky({
               const selected = card.id === highlightedId;
               const dim = Boolean(linked && !connected) && !lensOn;
               const mark = lensOn ? lens?.marks[card.id] : undefined;
-              const withheld = mark?.details === "withheld";
+              const sharedCard = sharedPeople.has(card.id);
+              const sharedDetails = sharedCard
+                ? (card.person.photo || card.person.birthDate || card.person.bio ? "open" : "withheld")
+                : undefined;
+              const withheld = mark?.details === "withheld" || sharedDetails === "withheld";
               const photo = withheld ? undefined : card.person.photo;
               const age = withheld ? undefined : ageLabel(card.person.birthDate);
               const at = shownPoint(card);
@@ -1394,7 +1408,8 @@ export function FamilySky({
                   data-ring={rings.get(card.id)}
                   data-lens={mark?.effect}
                   data-draw={mark?.draw}
-                  data-details={mark?.details}
+                  data-details={mark?.details ?? sharedDetails}
+                  data-shared={sharedCard ? "true" : undefined}
                   className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${lensClass}${editMode && !lensOn ? " is-movable" : ""}${lifted ? " is-carried" : ""}${sliding ? " is-placing" : ""}`}
                   style={{ left: at.x - CARD.w / 2, top: at.y, width: CARD.w, height: CARD.h }}
                   onClick={(event) => {
@@ -1531,6 +1546,7 @@ export function FamilySky({
           ref={labelsRef}
           sky={labelSky}
           focusUnit={focusUnit}
+          sharedUnits={new Set(labelSky.buckets.filter((bucket) => unitShared(bucket.memberIds)).map((bucket) => bucket.id))}
           branchTouch={lensOn && lens?.phase !== "working"}
           onPick={(bucket) => {
             if (lensOn && lens?.phase !== "working") {
@@ -1600,7 +1616,13 @@ export function FamilySky({
 
 type LabelsHandle = { update: (cam: Camera, level: ZoomLevel, vw: number) => void; reset: () => void; nudge: () => void };
 
-type LabelsProps = { sky: FamilySkyLayout; focusUnit?: string; branchTouch?: boolean; onPick: (bucket: SkyBucket) => void };
+type LabelsProps = {
+  sky: FamilySkyLayout;
+  focusUnit?: string;
+  sharedUnits?: ReadonlySet<string>;
+  branchTouch?: boolean;
+  onPick: (bucket: SkyBucket) => void;
+};
 
 const EDGE = 8;
 
@@ -1610,7 +1632,7 @@ const EDGE = 8;
  * A label whose family is on screen but would run off the left or right edge
  * is nudged back inside (through a CSS variable, without a re-render).
  */
-const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky, focusUnit, branchTouch = false, onPick }, ref) {
+const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky, focusUnit, sharedUnits, branchTouch = false, onPick }, ref) {
   const [state, setState] = useState<{ level: ZoomLevel; ids: string[] }>({ level: "far", ids: [] });
   const last = useRef<{ s: number; level: ZoomLevel; key: string } | null>(null);
   const focusRef = useRef(focusUnit);
@@ -1682,6 +1704,8 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
         const bucket = byId.get(id);
         if (!bucket) return null;
         const at = labelAnchor(bucket, state.level);
+        const shared = sharedUnits?.has(bucket.id) ?? false;
+        const count = `${bucket.memberIds.length} ${bucket.memberIds.length === 1 ? "person" : "people"}`;
         return (
           <button
             key={`${bucket.id}-label`}
@@ -1690,20 +1714,22 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
               else els.current.delete(bucket.id);
             }}
             type="button"
-            className={`sky-label${bucket.id === focusUnit ? " is-lit" : ""}`}
+            className={`sky-label${bucket.id === focusUnit ? " is-lit" : ""}${shared ? " is-shared" : ""}`}
             data-unit-id={bucket.id}
             data-branch-root={bucket.headIds[0]}
             data-level={state.level}
+            data-shared={shared ? "true" : undefined}
             style={{ left: at.x, top: at.y }}
             aria-label={branchTouch
               ? `${bucket.label} branch. Include, hide, or dim`
-              : `${bucket.label} family, ${bucket.memberIds.length} ${bucket.memberIds.length === 1 ? "person" : "people"}. Zoom in`}
+              : `${bucket.label} family${shared ? ", shared, read only" : ""}, ${count}. Zoom in`}
             onClick={(event) => {
               event.stopPropagation();
               onPick(bucket);
             }}
           >
             {bucket.label}
+            {shared ? <small className="shared-mark">Shared</small> : null}
             {state.level === "far" ? <small>{bucket.memberIds.length}</small> : null}
           </button>
         );

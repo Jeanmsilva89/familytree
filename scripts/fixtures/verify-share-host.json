@@ -1,0 +1,16 @@
+{
+  "note": "FIXTURE. A second tree for the share-file check. Not a real family. Never replace this name with a real relative.",
+  "focusPersonId": "fx-host",
+  "people": [
+    {
+      "id": "fx-host",
+      "givenName": "Host",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "unions": [],
+  "childLinks": []
+}

@@ -1,16 +1,13 @@
 import { newId } from "../ids";
 import type { TreeData } from "../types";
 import { deriveBranch } from "./branch";
-import { asInviteId, asLensId, asPersonId, asTreeId, type InviteId, type LensId, type PersonId, type TreeId } from "./ids";
+import { asInviteId, asLensId, asPersonId, asTreeId, DEVICE_TREE_ID, type InviteId, type LensId, type PersonId, type TreeId } from "./ids";
 import { acceptedInvite, exposeLink, pendingInvite, revokedInvite } from "./link";
 import { emptyAccess, emptyGraph, guestViewer, memberViewer, sameViewer, type AccessState, type Forest, type LensEffect, type LensRule, type LinkGrant, type Viewer, type VisibilityLens, type VisibleGraph } from "./types";
+import { readSharedFamilies } from "./share";
 import { ownerWorkingView, resolveVisibility } from "./visibility";
 
-/**
- * The one tree on this device. Access state names it so the domain can tell
- * a member from a guest without putting access fields inside `TreeData`.
- */
-export const DEVICE_TREE_ID = asTreeId("device");
+export { DEVICE_TREE_ID } from "./ids";
 
 /** Who the owner is arranging for. `owner` is the on-device working view. */
 export type LookingAs =
@@ -596,6 +593,8 @@ export function parseAccessValue(value: unknown): AccessState {
       }
       if (offers.length) base.offers = offers;
     }
+    const sharedFamilies = readSharedFamilies(value.sharedFamilies);
+    if (sharedFamilies?.length) base.sharedFamilies = sharedFamilies;
   } catch {
     return emptyAccess();
   }

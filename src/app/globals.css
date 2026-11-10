@@ -1341,6 +1341,9 @@ html[data-theme="dark"] .generated-avatar {
   fill: color-mix(in srgb, var(--accent) 8%, var(--graph-bg));
   stroke: color-mix(in srgb, var(--accent) 52%, transparent);
 }
+.sky-bucket.is-shared {
+  stroke-dasharray: 5 4;
+}
 .family-sky.is-mid .sky-bucket {
   fill: color-mix(in srgb, var(--graph-spouse) 10%, var(--graph-bg));
   stroke-width: 1.2;
@@ -1392,6 +1395,17 @@ html[data-theme="dark"] .generated-avatar {
   font-weight: 600;
   background: transparent;
   text-shadow: 0 1px 6px var(--graph-bg);
+}
+.sky-label.is-shared {
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
+}
+.sky-label .shared-mark {
+  display: block;
+  margin: 2px 0 0;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 .sky-label small {
   margin-left: 6px;
@@ -1652,7 +1666,7 @@ html[data-theme="dark"] .generated-avatar {
   z-index: 40;
   display: grid;
   gap: 4px;
-  width: 188px;
+  width: 200px;
   margin: 0;
   padding: 8px;
   border: 1px solid var(--line);
@@ -1694,4 +1708,45 @@ html[data-theme="dark"] .generated-avatar {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   opacity: 0.72;
+}
+.share-counts {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.share-people {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 14px;
+  margin: 14px 0;
+  padding: 0;
+  list-style: none;
+}
+.share-people li {
+  display: grid;
+  justify-items: center;
+  width: 72px;
+  gap: 6px;
+  font-size: 13px;
+  text-align: center;
+}
+.share-face {
+  width: 48px;
+  height: 48px;
+}
+.sheet-share-face {
+  width: 72px;
+  height: 72px;
+  margin: 4px 0 12px;
+}
+.sheet-share-face .portrait-photo {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 50%;
+}
+.share-link {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 12px;
 }

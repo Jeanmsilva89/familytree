@@ -19,7 +19,11 @@
  * invite from pending to accepted to revoked. Then, still on the fixture,
  * divorce Dee Fixture and Eli Fixture from Dee's editor and marry Dee to
  * Rema Fixture. The sky shows a quiet divorced line and a remarried bar.
- * Remarried is not stored. Runs at desktop 1280x800 and phone 390x844.
+ * Remarried is not stored. Then a separate pair of trees: export a share
+ * file for Eli Fixture and import it into a fresh Host Fixture tree.
+ * Hidden and withheld people stay out, a chosen link joins the two records
+ * without merging them, and importing the file again does not duplicate
+ * anyone. Runs at desktop 1280x800 and phone 390x844.
  *
  *   npm run build && npm start
  *   npm run verify
@@ -35,6 +39,7 @@ import { fileURLToPath } from "node:url";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const fixturePath = path.join(here, "fixtures", "verify-family-sky.json");
 const fixture = JSON.parse(await readFile(fixturePath, "utf8"));
+const hostFixture = JSON.parse(await readFile(path.join(here, "fixtures", "verify-share-host.json"), "utf8"));
 
 const base = (process.env.VERIFY_BASE_URL || "http://127.0.0.1:3000").replace(/\/$/, "");
 const outDir = path.resolve(process.env.VERIFY_OUT || "artifacts/verify");
@@ -1761,11 +1766,247 @@ async function recordGatherClip(browser) {
   if (video) await video.saveAs(path.join(outDir, "gather-phone.webm"));
 }
 
+async function personIdByName(page, givenName) {
+  const tree = await readTree(page);
+  return tree.people.find((person) => person.givenName === givenName)?.id;
+}
+
+async function runShareBundle(browser, viewport) {
+  const ownerContext = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+    colorScheme: "dark",
+    reducedMotion: "no-preference",
+    hasTouch: viewport.name === "phone",
+    isMobile: viewport.name === "phone",
+  });
+  await ownerContext.addInitScript(() => {
+    window.localStorage.setItem("familytree-theme", "dark");
+  });
+  const owner = await ownerContext.newPage();
+  const posted = [];
+  owner.on("request", (request) => {
+    const body = request.postData() ?? "";
+    if (body.includes("familytree-share") || body.includes("fx-dee")) posted.push(request.url());
+  });
+  let bundle;
+  try {
+    await settle(owner);
+    await owner.getByLabel("Import backup JSON").setInputFiles({
+      name: "verify-family-sky.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(fixture)),
+    });
+    await owner.getByText("Looking at Ada").waitFor();
+    await openVisualize(owner);
+    await turnFamiliesOn(owner, viewport);
+    await revealSkyPerson(owner, viewport, "fx-fay");
+    await owner.getByRole("button", { name: "Lens", exact: true }).click();
+    await owner.getByRole("button", { name: "Look as Eli Fixture", exact: true }).click();
+    await owner.locator('.family-sky[data-lens-phase="arrange"]').waitFor();
+    await tapLensPerson(owner, "fx-eli");
+    await tapLensPerson(owner, "fx-dee");
+    await tapLensPerson(owner, "fx-fay");
+    await tapLensPerson(owner, "fx-fay");
+    await tapLensPerson(owner, "fx-rex");
+    await tapLensPerson(owner, "fx-rex");
+    await tapLensPerson(owner, "fx-rex");
+    await owner.locator('[data-person-id="fx-rex"][data-lens="hide"]').waitFor();
+    const deeCard = owner.locator('.portrait-card[data-person-id="fx-dee"]');
+    await bringSkyCardFullyIn(owner, deeCard);
+    const grantMenu = await holdCard(owner, deeCard, viewport);
+    await grantMenu.getByRole("menuitemcheckbox", { name: "Share details" }).click();
+    await owner.locator('[data-person-id="fx-dee"][data-details="open"]').waitFor();
+    await owner.keyboard.press("Escape");
+    await grantMenu.waitFor({ state: "detached" });
+    await bringSkyCardFullyIn(owner, deeCard);
+    const shareMenu = await holdCard(owner, deeCard, viewport);
+    const downloadPromise = owner.waitForEvent("download");
+    await shareMenu.getByRole("menuitem", { name: "Share as file" }).click();
+    const download = await downloadPromise;
+    const saved = path.join(outDir, `share-${viewport.name}.json`);
+    await download.saveAs(saved);
+    bundle = JSON.parse(await readFile(saved, "utf8"));
+  } finally {
+    await ownerContext.close();
+  }
+  if (!bundle) fail(`${viewport.name}: the share file was not saved`);
+  if (posted.length) fail(`${viewport.name}: the share file was uploaded (${posted.join(", ")})`);
+  const ids = bundle.people.map((person) => person.id).sort();
+  if (JSON.stringify(ids) !== JSON.stringify(["fx-dee", "fx-eli", "fx-fay"])) {
+    fail(`${viewport.name}: the share file contained ${ids.join(" ")}`);
+  }
+  const fay = bundle.people.find((person) => person.id === "fx-fay");
+  const dee = bundle.people.find((person) => person.id === "fx-dee");
+  const eli = bundle.people.find((person) => person.id === "fx-eli");
+  if (fay.details !== "withheld" || fay.bio || fay.photo || fay.birthDate) {
+    fail(`${viewport.name}: Fay's withheld details were in the share file`);
+  }
+  if (dee.details !== "open" || dee.birthDate !== "1800-01-01" || !String(dee.photo || "").startsWith("data:")) {
+    fail(`${viewport.name}: Dee's granted photo and date were not in the share file`);
+  }
+  if (eli.details !== "open" || !String(eli.bio || "").includes("Fixture")) {
+    fail(`${viewport.name}: Eli's own details were not open in the share file`);
+  }
+  const graphText = JSON.stringify({ people: bundle.people, unions: bundle.unions, childLinks: bundle.childLinks });
+  if (graphText.includes("fx-rex") || graphText.includes("fx-ada") || graphText.includes("Partnerless parent")) {
+    fail(`${viewport.name}: a hidden person was written into the share file`);
+  }
+  if (bundle.source.ownerName !== "Ada Fixture") fail(`${viewport.name}: the share file did not name its owner`);
+
+  const guest = await browser.newContext({
+    viewport: { width: viewport.width, height: viewport.height },
+    colorScheme: "dark",
+    reducedMotion: "no-preference",
+    hasTouch: viewport.name === "phone",
+    isMobile: viewport.name === "phone",
+  });
+  await guest.addInitScript(() => {
+    window.localStorage.setItem("familytree-theme", "dark");
+  });
+  const page = await guest.newPage();
+  try {
+    await settle(page);
+    await page.getByLabel("Import backup JSON").setInputFiles({
+      name: "verify-share-host.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(hostFixture)),
+    });
+    await page.getByText("Looking at Host").waitFor();
+    const familyClose = page.locator(".family-overlay").getByRole("button", { name: "Close", exact: true });
+    if (await familyClose.count()) await familyClose.click();
+    await page.getByRole("button", { name: "Open menu" }).click();
+    const firstFile = page.waitForEvent("filechooser");
+    await page.getByRole("menuitem", { name: "Add a shared family" }).click();
+    await (await firstFile).setFiles({
+      name: "ada-fixture-share.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(bundle)),
+    });
+    const preview = page.locator('[data-share-preview="true"]');
+    await preview.waitFor();
+    await preview.getByText("From Ada Fixture").waitFor();
+    await preview.getByText("3 people").waitFor();
+    for (const name of ["Eli", "Dee", "Fay"]) {
+      if ((await preview.getByRole("listitem", { name: `${name} Fixture` }).count()) !== 1) {
+        fail(`${viewport.name}: the preview did not show ${name} Fixture once`);
+      }
+      if ((await preview.getByRole("listitem", { name: `${name} Fixture` }).locator(".generated-avatar").count()) !== 1) {
+        fail(`${viewport.name}: ${name} Fixture had no avatar in the preview`);
+      }
+    }
+    if (await preview.getByText("Rex", { exact: true }).count()) fail(`${viewport.name}: hidden Rex appeared in the preview`);
+    await page.screenshot({ path: path.join(outDir, `share-${viewport.name}-preview.png`) });
+    await preview.getByRole("button", { name: "Add to my tree" }).click();
+    await preview.waitFor({ state: "detached" });
+    await page.locator(".family-sky").waitFor();
+    const fayId = await personIdByName(page, "Fay");
+    const deeId = await personIdByName(page, "Dee");
+    if (!fayId || !deeId || fayId === "fx-fay") fail(`${viewport.name}: imported people kept the sender's ids`);
+    const tree = await readTree(page);
+    if (tree.people.some((person) => person.givenName === "Rex" || person.givenName === "Ada")) {
+      fail(`${viewport.name}: a hidden fixture person was imported`);
+    }
+    if (tree.people.filter((person) => person.givenName === "Host").length !== 1) {
+      fail(`${viewport.name}: Host Fixture was merged or duplicated`);
+    }
+    const fayCard = await revealSkyPerson(page, viewport, fayId);
+    if ((await fayCard.getAttribute("data-shared")) !== "true") fail(`${viewport.name}: Fay is not marked shared`);
+    if ((await fayCard.getAttribute("data-details")) !== "withheld") fail(`${viewport.name}: Fay's details were open`);
+    if (await fayCard.locator("img.portrait-photo").count()) fail(`${viewport.name}: withheld Fay showed a photo`);
+    if (await fayCard.locator(".identity em").count()) fail(`${viewport.name}: withheld Fay showed a date`);
+    if (!(await fayCard.locator(".generated-avatar").count())) fail(`${viewport.name}: withheld Fay had no avatar`);
+    const deeCard = await revealSkyPerson(page, viewport, deeId);
+    await deeCard.locator("img.portrait-photo").waitFor();
+    const deeDate = (await deeCard.locator(".identity em").innerText()).trim();
+    if (!deeDate.includes("1800-01-01")) fail(`${viewport.name}: granted Dee showed ${JSON.stringify(deeDate)}`);
+    if ((await page.locator('.sky-bucket[data-shared="true"], .sky-label[data-shared="true"], .sky-star[data-shared="true"]').count()) < 1) {
+      fail(`${viewport.name}: the shared family has no marked bucket`);
+    }
+    const sheet = await openPerson(page, fayId);
+    if ((await sheet.getAttribute("data-shared-readonly")) !== "true") fail(`${viewport.name}: the shared sheet can be edited`);
+    await sheet.getByText("Shared by Ada Fixture. Read only.").waitFor();
+    if (await sheet.getByRole("button", { name: "Save name" }).count()) fail(`${viewport.name}: a shared person can be renamed`);
+    await sheet.getByLabel("Someone in your tree").selectOption({ label: "Host Fixture" });
+    await sheet.getByLabel("Relationship").selectOption("partner");
+    await sheet.getByRole("button", { name: "Link", exact: true }).click();
+    await page.waitForFunction(async () => {
+      const stored = await new Promise((resolve, reject) => {
+        const request = indexedDB.open("familytree");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const get = db.transaction("tree", "readonly").objectStore("tree").get("living");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+      });
+      const fay = stored?.people?.find((person) => person.givenName === "Fay");
+      return stored?.unions?.some((union) => union.partnerIds.includes("fx-host") && union.partnerIds.includes(fay?.id));
+    });
+    await sheet.getByRole("button", { name: "Close" }).click();
+    await sheet.waitFor({ state: "detached" });
+    await page.getByRole("button", { name: "All families" }).click();
+    await page.waitForTimeout(600);
+    for (let i = 0; i < 6 && (await level(page)) === "far"; i += 1) {
+      await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+      await page.waitForTimeout(400);
+    }
+    const link = page.locator('.sky-link.is-partner[data-from="fx-host"], .sky-link.is-partner[data-to="fx-host"]');
+    if ((await link.count()) < 1) fail(`${viewport.name}: the chosen link is not drawn between the families`);
+    const hostUnit = await page.locator('.sky-bucket[data-members="fx-host"], .sky-star[data-members="fx-host"]').count();
+    const sharedBucket = page.locator('[data-shared="true"]');
+    if ((await sharedBucket.count()) < 1) fail(`${viewport.name}: the shared family is not marked in the sky`);
+    if (!hostUnit) fail(`${viewport.name}: Host Fixture was pulled into the shared family`);
+    await page.screenshot({ path: path.join(outDir, `share-${viewport.name}-linked.png`) });
+
+    await page.locator(".graph-overlay").getByRole("button", { name: "Close", exact: true }).click();
+    const familyAgain = page.locator(".family-overlay").getByRole("button", { name: "Close", exact: true });
+    if (await familyAgain.count()) await familyAgain.click();
+    await page.getByRole("button", { name: "Open menu" }).click();
+    const secondFile = page.waitForEvent("filechooser");
+    await page.getByRole("menuitem", { name: "Add a shared family" }).click();
+    await (await secondFile).setFiles({
+      name: "ada-fixture-share.json",
+      mimeType: "application/json",
+      buffer: Buffer.from(JSON.stringify(bundle)),
+    });
+    const again = page.locator('[data-share-preview="true"]');
+    await again.waitFor();
+    await again.getByRole("button", { name: "Add to my tree" }).click();
+    await again.waitFor({ state: "detached" });
+    await page.waitForFunction(async () => {
+      const readStore = (store) => new Promise((resolve, reject) => {
+        const request = indexedDB.open("familytree");
+        request.onerror = () => reject(request.error);
+        request.onsuccess = () => {
+          const db = request.result;
+          const get = db.transaction(store, "readonly").objectStore(store).get("living");
+          get.onsuccess = () => resolve(get.result);
+          get.onerror = () => reject(get.error);
+        };
+      });
+      const stored = { tree: await readStore("tree"), access: await readStore("access") };
+      const names = stored.tree?.people?.map((person) => person.givenName).sort();
+      const fay = stored.tree?.people?.find((person) => person.givenName === "Fay");
+      const linkedStill = stored.tree?.unions?.some((union) => union.partnerIds.includes("fx-host") && union.partnerIds.includes(fay?.id));
+      return JSON.stringify(names) === JSON.stringify(["Dee", "Eli", "Fay", "Host"]) && stored.access?.sharedFamilies?.length === 1 && linkedStill;
+    });
+    console.log(`${viewport.name}: share file exported, imported, linked, and re-imported`);
+  } finally {
+    await guest.close();
+  }
+}
+
 await mkdir(outDir, { recursive: true });
 const browser = await chromium.launch({ headless: true });
 try {
-  for (const viewport of VIEWPORTS) {
-    await runViewport(browser, viewport);
+  const only = process.env.VERIFY_ONLY;
+  const sizes = process.env.VERIFY_SIZE
+    ? VIEWPORTS.filter((viewport) => viewport.name === process.env.VERIFY_SIZE)
+    : VIEWPORTS;
+  for (const viewport of sizes) {
+    if (only !== "share") await runViewport(browser, viewport);
+    if (only !== "sky") await runShareBundle(browser, viewport);
   }
   await recordGatherClip(browser);
 } finally {

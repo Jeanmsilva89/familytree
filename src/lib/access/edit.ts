@@ -2,6 +2,7 @@ import type { TreeData } from "../types";
 import { kinOf } from "../types";
 import { deriveBranch, type BranchTie } from "./branch";
 import { asPersonId, type PersonId, type TreeId } from "./ids";
+import { sharedLock } from "./share";
 import type {
   AccessState,
   BranchConflict,
@@ -173,6 +174,14 @@ export function resolveEdit(forest: Forest, access: AccessState, viewer: Viewer,
   const tree = forest[subject.treeId];
   if (!tree) return deny();
   if (subject.kind === "person" && !tree.people.some((person) => person.id === subject.personId)) return deny();
+  const locked = sharedLock(tree, access, subject);
+  if (locked) {
+    return {
+      mayEdit: false,
+      branchConflict: { kind: "none" },
+      standing: { branchRootId: locked.ownerPersonId, rank: "tree-owner", actors: [locked.ownerPersonId] },
+    };
+  }
 
   const parties =
     subject.kind === "person"
