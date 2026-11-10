@@ -21,3 +21,6 @@ export const asPersonId = (value: string): PersonId => brand(value, "person id")
 export const asTreeId = (value: string): TreeId => brand(value, "tree id");
 export const asInviteId = (value: string): InviteId => brand(value, "invite id");
 export const asLensId = (value: string): LensId => brand(value, "lens id");
+
+/** The one tree saved on this device. Access state names it; `TreeData` does not. */
+export const DEVICE_TREE_ID = asTreeId("device");

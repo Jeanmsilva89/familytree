@@ -11,6 +11,27 @@ export { acceptedInvite, exposeLink, pendingInvite, revokedInvite } from "./link
 export { ownerWorkingView, resolveVisibility } from "./visibility";
 
 export {
+  SHARE_FORMAT,
+  SHARE_NO_VERSION,
+  SHARE_NOT_BUNDLE,
+  SHARE_VERSION,
+  exportShareBundle,
+  importShareBundle,
+  linkSharedPerson,
+  parseShareBundle,
+  parseShareBundleText,
+  readSharedFamilies,
+  removeSharedFamily,
+  serializeShareBundle,
+  shareBundleFilename,
+  shareUnknownVersion,
+  sharedFamilyForPerson,
+  sharedLock,
+  summarizeShareBundle,
+} from "./share";
+export type { ShareBundle, ShareChildLink, ShareIds, SharePerson, ShareSummary, ShareUnion } from "./share";
+
+export {
   DEVICE_TREE_ID,
   acceptInviteCard,
   addGuestCard,
@@ -49,6 +70,9 @@ export type {
   LensRule,
   LinkGrant,
   TreeLink,
+  SharedBridge,
+  SharedFamily,
+  SharedMember,
   Viewer,
   VisibilityLens,
   VisibleChildLink,

@@ -80,6 +80,17 @@ After the lens checks, still on the Families lens, in the dark theme:
 
 Screenshot: `partner-status-<size>.png`.
 
+On a fresh pair of trees, still in the dark theme, at both sizes:
+
+41. Import the Families fixture. Open Visualize, turn Families on, and open Lens as Eli Fixture. Include Eli and Dee, dim Fay, and hide Rex. Hold Dee, turn Share details on, then choose Share as file. The file is a download. It is not posted anywhere.
+42. The file contains Eli, Dee, and Fay only. Fay has a name and no photo, date, or bio. Dee has the fixture photo and the date 1800-01-01. Eli's own fixture bio is open. Rex and Ada are absent.
+43. In a second browser context, import the host fixture (Host Fixture only). Choose Add a shared family, pick the file, and read the preview: Ada Fixture as the owner, 3 people, and Eli, Dee, and Fay each with an avatar. Rex is not listed.
+44. Add it. The sky shows that household as its own bucket, marked shared. Fay is a name and a generated avatar. Dee shows the fixture photo and 1800-01-01. Host Fixture is still a separate person.
+45. Open Fay. The sheet says it is shared by Ada Fixture and read only. Link Fay to Host Fixture as partners. The two records stay themselves, and a partner line joins the buckets.
+46. Import the same file again. The tree is still Host, Eli, Dee, and Fay, one shared family, and the partner link is still there.
+
+Screenshots: `share-<size>-preview.png`, `share-<size>-linked.png`.
+
 Screenshots, one set per size:
 
 - `family-sky-<size>-links.png` — person-to-person links, none crossing an unrelated family
@@ -100,6 +111,8 @@ Screenshots, one set per size:
 - `lens-<size>-guest-revoked.png` — the invite cleared
 - `lens-<size>-owner.png` — You, the full fixture tree again
 - `partner-status-<size>.png` — Dee Fixture divorced from Eli Fixture and remarried to Rema Fixture, labels open
+- `share-<size>-preview.png` — the import preview for Eli, Dee, and Fay Fixture
+- `share-<size>-linked.png` — that shared family in the sky, linked to Host Fixture
 
 `<size>` is `desktop` or `phone`.
 

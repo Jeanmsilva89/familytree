@@ -17,13 +17,23 @@ import {
   marksForViewer,
   revokeInviteCard,
   separateAccess,
+  exportShareBundle,
+  importShareBundle,
+  linkSharedPerson,
+  parseShareBundleText,
+  removeSharedFamily,
+  sharedFamilyForPerson,
+  summarizeShareBundle,
   toggleDetailGrant,
   touchBranch,
   touchPerson,
+  viewerFor,
   type LookingAs,
+  type ShareBundle,
 } from "@/lib/access";
+import { deliverShareFile } from "@/lib/deliverShare";
 import { parseGedcom, serializeGedcom } from "@/lib/gedcom";
-import type { Person } from "@/lib/types";
+import type { LinkRole, Person } from "@/lib/types";
 import { displayName } from "@/lib/types";
 import { parseTreeJson, relatedTree } from "@/lib/tree";
 import { DEFAULT_LINE_FILTER, type LineFilter } from "@/lib/kinFilter";
@@ -35,6 +45,7 @@ import { GraphLineFilter } from "./GraphLineFilter";
 import { LensBar } from "./LensBar";
 import { PeopleList } from "./PeopleList";
 import { PersonSheet } from "./PersonSheet";
+import { SharePreview } from "./SharePreview";
 import { StartScreen } from "./StartScreen";
 import { TreeCanvas } from "./TreeCanvas";
 
@@ -65,6 +76,8 @@ export function TreeApp() {
   const [relatedEdit, setRelatedEdit] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
   const jsonRef = useRef<HTMLInputElement>(null);
+  const shareRef = useRef<HTMLInputElement>(null);
+  const [shareIncoming, setShareIncoming] = useState<{ bundle: ShareBundle } | { error: string } | null>(null);
 
   useEffect(() => {
     const onPrompt = (event: Event) => {
@@ -124,6 +137,10 @@ export function TreeApp() {
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== "Escape") return;
+      if (shareIncoming) {
+        setShareIncoming(null);
+        return;
+      }
       if (sheetPerson) {
         setSheetPerson(undefined);
         return;
@@ -148,7 +165,7 @@ export function TreeApp() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [sheetPerson, relatedRootId, graphOpen, familyOpen]);
+  }, [sheetPerson, relatedRootId, graphOpen, familyOpen, shareIncoming]);
 
   const accessNow = accessState.access;
   const accessReady = accessState.ready;
@@ -300,6 +317,13 @@ export function TreeApp() {
       return toggleDetailGrant(treeState.tree, ready, lensViewer, asPersonId(personId));
     });
   };
+  const shareAsFile = () => {
+    if (lensViewer.kind === "owner") return;
+    const access = ensureDeviceOwner(accessState.access, treeState.tree);
+    const viewer = viewerFor(access, lensViewer);
+    if (!viewer) return;
+    void deliverShareFile(exportShareBundle(treeState.tree, access, viewer, new Date().toISOString()));
+  };
   const lensSky = lensOn && lineFilter.families
     ? {
         active: true as const,
@@ -310,9 +334,51 @@ export function TreeApp() {
         onPerson: (personId: string) => arrangeFor(personId, "person"),
         onBranch: (personId: string) => arrangeFor(personId, "branch"),
         onShareDetails: lensPhase === "arrange" ? shareDetails : undefined,
+        onShareFile: lensPhase === "arrange" ? shareAsFile : undefined,
         shareOf: (personId: string) => detailToggle(ensuredAccess, lensViewer, asPersonId(personId)),
       }
     : undefined;
+  const sharedPersonIds = (ensuredAccess.sharedFamilies ?? []).flatMap((family) =>
+    family.members.map((member) => member.localPersonId as string),
+  );
+  const isShared = (personId: string) => sharedPersonIds.includes(personId);
+  const addSharedFamily = () => {
+    if (!shareIncoming || !("bundle" in shareIncoming)) return;
+    const result = importShareBundle(
+      treeState.tree,
+      ensureDeviceOwner(accessState.access, treeState.tree),
+      shareIncoming.bundle,
+      { importedAt: new Date().toISOString() },
+    );
+    void treeState.replace(result.tree);
+    void accessState.replace(result.access);
+    setShareIncoming(null);
+    setLineFilter((current) => ({ ...current, families: true }));
+    setLensOn(false);
+    setLensPreview(false);
+    chooseView("graph");
+  };
+  const linkImported = (sharedPersonId: string, homePersonId: string, role: LinkRole) => {
+    const family = sharedFamilyForPerson(accessState.access, sharedPersonId);
+    if (!family) return;
+    const result = linkSharedPerson(
+      treeState.tree,
+      ensureDeviceOwner(accessState.access, treeState.tree),
+      family.id,
+      sharedPersonId,
+      homePersonId,
+      role,
+    );
+    void treeState.replace(result.tree);
+    void accessState.replace(result.access);
+  };
+  const removeImported = (familyId: string) => {
+    const result = removeSharedFamily(treeState.tree, accessState.access, familyId);
+    void treeState.replace(result.tree);
+    void accessState.replace(result.access);
+    setSheetPerson(undefined);
+  };
+  const sheetFamily = sheetPerson ? sharedFamilyForPerson(ensuredAccess, sheetPerson.id) : undefined;
 
   return (
     <div className={narrow ? "app-shell tree-shell is-narrow" : "app-shell tree-shell is-wide"}>
@@ -339,6 +405,7 @@ export function TreeApp() {
         onImport={() => { fileRef.current?.click(); setMenuOpen(false); }}
         onExportJson={exportJson}
         onImportJson={() => { jsonRef.current?.click(); setMenuOpen(false); }}
+        onAddShared={() => { shareRef.current?.click(); setMenuOpen(false); }}
         onReset={async () => {
           if (confirm("Clear the tree saved on this device?")) {
             await treeState.reset();
@@ -391,11 +458,13 @@ export function TreeApp() {
               if (person) setHighlighted(person);
             }}
             onOpen={setSheetPerson}
-            onAddParent={treeState.parent}
-            onAddPartner={treeState.partner}
-            onAddChild={treeState.child}
-            onAddSibling={treeState.sibling}
-            onLinkExisting={treeState.link}
+            onAddParent={(id, name) => (isShared(id) ? Promise.resolve() : treeState.parent(id, name))}
+            onAddPartner={(id, name, kind) => (isShared(id) ? Promise.resolve() : treeState.partner(id, name, kind))}
+            onAddChild={(parentIds, name, unionId) => (parentIds.some(isShared) ? Promise.resolve() : treeState.child(parentIds, name, unionId))}
+            onAddSibling={(id, name) => (isShared(id) ? Promise.resolve() : treeState.sibling(id, name))}
+            onLinkExisting={(personId, otherId, role) => (
+              isShared(personId) || isShared(otherId) ? Promise.resolve() : treeState.link(personId, otherId, role)
+            )}
           />
         </div>
       ) : null}
@@ -513,10 +582,23 @@ export function TreeApp() {
               hold={Boolean(sheetPerson)}
               editMode={graphEdit && !lensOn}
               lens={lensSky}
-              onLink={treeState.link}
-              onUnlink={treeState.unlink}
-              onMoveToUnit={(personId, unitRootId) => treeState.familyUnit(personId, { unitOf: unitRootId })}
-              onPlace={(id, x) => treeState.edit(id, { rowNudge: Math.round(x) })}
+              sharedPersonIds={sharedPersonIds}
+              onLink={(personId, otherId, role, kind, parentRole, kin) => {
+                if (isShared(personId) || isShared(otherId)) return;
+                return treeState.link(personId, otherId, role, kind, parentRole, kin);
+              }}
+              onUnlink={(personId, otherId, role) => {
+                if (isShared(personId) && isShared(otherId)) return;
+                return treeState.unlink(personId, otherId, role);
+              }}
+              onMoveToUnit={(personId, unitRootId) => {
+                if (isShared(personId)) return;
+                return treeState.familyUnit(personId, { unitOf: unitRootId });
+              }}
+              onPlace={(id, x) => {
+                if (isShared(id)) return;
+                return treeState.edit(id, { rowNudge: Math.round(x) });
+              }}
             />
           ) : (
             <TreeCanvas
@@ -526,7 +608,10 @@ export function TreeApp() {
               onOpen={setSheetPerson}
               fitKey={graphOpen}
               editMode={graphEdit}
-              onLink={treeState.link}
+              onLink={(personId, otherId, role, kind, parentRole, kin) => {
+              if (isShared(personId) || isShared(otherId)) return;
+              return treeState.link(personId, otherId, role, kind, parentRole, kin);
+            }}
               onUnlink={treeState.unlink}
               onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
               lineFilter={lineFilter}
@@ -601,7 +686,10 @@ export function TreeApp() {
             onOpen={setSheetPerson}
             fitKey={`related-${relatedRoot.id}`}
             editMode={relatedEdit}
-            onLink={treeState.link}
+            onLink={(personId, otherId, role, kind, parentRole, kin) => {
+              if (isShared(personId) || isShared(otherId)) return;
+              return treeState.link(personId, otherId, role, kind, parentRole, kin);
+            }}
             onUnlink={treeState.unlink}
             lineFilter={lineFilter}
             canGather={false}
@@ -633,8 +721,27 @@ export function TreeApp() {
         onEdit={treeState.edit}
         onRemove={treeState.remove}
         onViewTree={openRelatedTree}
-        onSetFamilyUnit={treeState.familyUnit}
+        onSetFamilyUnit={sheetFamily ? undefined : treeState.familyUnit}
+        shared={sheetFamily ? {
+          ownerName: sheetFamily.ownerName,
+          homePeople: treeState.tree.people
+            .filter((person) => !isShared(person.id))
+            .map((person) => ({ id: person.id, name: displayName(person) })),
+          onLink: (homePersonId, role) => {
+            if (!sheetPerson) return;
+            linkImported(sheetPerson.id, homePersonId, role);
+          },
+          onRemove: () => removeImported(sheetFamily.id),
+        } : undefined}
       />
+      {shareIncoming ? (
+        <SharePreview
+          summary={"bundle" in shareIncoming ? summarizeShareBundle(shareIncoming.bundle) : undefined}
+          error={"error" in shareIncoming ? shareIncoming.error : undefined}
+          onAdd={addSharedFamily}
+          onClose={() => setShareIncoming(null)}
+        />
+      ) : null}
 
       <input ref={fileRef} className="sr-only" type="file" accept=".ged,.gedcom,text/plain" aria-label="Import GEDCOM file" onChange={async (event) => {
         const file = event.target.files?.[0];
@@ -656,6 +763,16 @@ export function TreeApp() {
         setLensOn(false);
         setLensViewer({ kind: "owner" });
         setLensPreview(false);
+      }} />
+      <input ref={shareRef} className="sr-only" type="file" accept="application/json,.json" aria-label="Add a shared family file" onChange={async (event) => {
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        try {
+          setShareIncoming({ bundle: parseShareBundleText(await file.text()) });
+        } catch (error) {
+          setShareIncoming({ error: error instanceof Error ? error.message : "This share file is not a family bundle." });
+        }
       }} />
     </div>
   );

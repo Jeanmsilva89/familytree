@@ -81,4 +81,14 @@ Revoking an invite clears that guest's visible set and clears the detail grants 
 
 The owner arranges a lens on the family sky, not in a settings form. They choose a viewer — a person on the tree, or a guest named on an invite — and touch a branch or a person to include, hide, or dim them. An invite card moves from pending to accepted to revoked.
 
-Holding a person while arranging opens Share details. That toggles a detail grant for the viewer. It does not gather the sky and it does not open the editor. In the preview, a withheld person shows only their name and generated avatar. A granted person shows the photo and dates already stored for them. Accounts and a server come after that, not before.
+Holding a person while arranging opens Share details. That toggles a detail grant for the viewer. It does not gather the sky and it does not open the editor. In the preview, a withheld person shows only their name and generated avatar. A granted person shows the photo and dates already stored for them. The same hold menu can save Share as file.
+
+## Share file
+
+A share file is version 1 of `familytree-share`. Export runs `resolveVisibility` for the chosen viewer and writes only that graph. Hidden people are absent. A withheld living person keeps a name, and the screen draws a generated avatar from it. A detail grant, the viewer themselves, and a person marked deceased keep the details those rules already open. A parent link keeps its kin and role so the family still draws. The owner's name is on the file as provenance. Their living details are not, unless the viewer can see that person.
+
+The file is built on the device. The share sheet or a download is the only way it leaves. Nothing uploads it.
+
+Import rejects a file that is not this format, has no version, or uses a version this app does not read. The message says which. People are copied under new ids, remembered by the sender's person id. The same name and the same date do not merge anyone. Provenance — source tree, owner, and the time it was added — sits in the access state beside the tree. The sender owns that branch, so the importer cannot edit those people or the unions and parent links among them.
+
+The two trees meet only when the importer links one imported person to one person already on their tree. That link uses the existing parent, partner, child, or sibling roles. The records stay two people, and the shared household stays in its own bucket. A newer file from the same tree and owner updates that family. People the new file leaves out are removed. Removing the shared family removes the imported people and the links that name them, and leaves the importer's own people in place.

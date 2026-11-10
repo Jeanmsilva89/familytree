@@ -1,4 +1,4 @@
-import type { ExtraField, ImportantDate, TreeData, UnionKind } from "../types";
+import type { ExtraField, ImportantDate, LinkRole, TreeData, UnionKind } from "../types";
 import type { InviteId, LensId, PersonId, TreeId } from "./ids";
 
 /** Every tree the access functions can see, keyed by tree id. */
@@ -94,6 +94,39 @@ export type AccessState = {
    * their own grant; this offer is what Accept writes onto the card.
    */
   offers?: { inviteId: InviteId; grant: LinkGrant }[];
+  /**
+   * Families brought in from a share file. They live beside the tree.
+   * The people themselves are copied into `TreeData` under `localPersonId`.
+   */
+  sharedFamilies?: SharedFamily[];
+};
+
+/** One person in a shared family: the id on the sender's tree, and the id on this device. */
+export type SharedMember = {
+  sourcePersonId: PersonId;
+  localPersonId: PersonId;
+};
+
+/**
+ * An explicit join the importer chose. It does not merge the two records.
+ * `role` is the shared person's relationship to the home person.
+ */
+export type SharedBridge = {
+  homePersonId: PersonId;
+  sharedPersonId: PersonId;
+  role: LinkRole;
+};
+
+/** A family received from one source tree. A newer file from that source updates this record. */
+export type SharedFamily = {
+  id: string;
+  sourceTreeId: TreeId;
+  ownerPersonId: PersonId;
+  ownerName: string;
+  exportedAt: string;
+  importedAt: string;
+  members: SharedMember[];
+  bridges: SharedBridge[];
 };
 
 export function emptyAccess(): AccessState {

@@ -26,6 +26,8 @@ type Options = {
   canGather?: boolean;
   /** While arranging a lens, the hold menu is Share details instead of gather. */
   shareDetails?: ShareDetails;
+  /** Share the viewer's allowed tree as a file. Nothing is uploaded. */
+  onShareFile?: () => void;
   onSelect: (person?: Person) => void;
   onOpen: (person: Person) => void;
 };
@@ -36,7 +38,7 @@ function personPoint(target: EventTarget) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-export function usePersonInteraction({ people, selectedId, editMode = false, canGather = true, shareDetails, onSelect, onOpen }: Options) {
+export function usePersonInteraction({ people, selectedId, editMode = false, canGather = true, shareDetails, onShareFile, onSelect, onOpen }: Options) {
   const [state, setState] = useState<PersonInteraction>(initialInteraction);
   const stateRef = useRef(state);
   const selectedRef = useRef(selectedId);
@@ -159,6 +161,7 @@ export function usePersonInteraction({ people, selectedId, editMode = false, can
         locked: shareDetails.locked(menuPerson),
         onToggle: () => shareDetails.onToggle(menuPerson),
       } : undefined}
+      onShareFile={onShareFile}
       onGather={gather}
       onEdit={edit}
       onDismiss={dismiss}
@@ -173,6 +176,7 @@ function PersonHoldMenu({
   people,
   canGather,
   share,
+  onShareFile,
   onGather,
   onEdit,
   onDismiss,
@@ -181,6 +185,7 @@ function PersonHoldMenu({
   people: Person[];
   canGather: boolean;
   share?: { shared: boolean; locked: boolean; onToggle: () => void };
+  onShareFile?: () => void;
   onGather: () => void;
   onEdit: () => void;
   onDismiss: () => void;
@@ -188,8 +193,9 @@ function PersonHoldMenu({
   const ref = useRef<HTMLDivElement>(null);
   const person = people.find((item) => item.id === menu.personId);
   const name = person ? person.givenName.trim() || displayName(person) : "this person";
-  const left = Math.min(Math.max(8, menu.x), Math.max(8, window.innerWidth - 196));
-  const top = Math.min(Math.max(8, menu.y - 96), Math.max(8, window.innerHeight - 108));
+  const left = Math.min(Math.max(8, menu.x), Math.max(8, window.innerWidth - 216));
+  const menuHeight = share && onShareFile ? 156 : 108;
+  const top = Math.min(Math.max(8, menu.y - 96), Math.max(8, window.innerHeight - menuHeight));
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -243,21 +249,35 @@ function PersonHoldMenu({
       onKeyDown={onKeyDown}
     >
       {share ? (
-        <button
-          type="button"
-          role="menuitemcheckbox"
-          className="is-toggle"
-          aria-label="Share details"
-          aria-checked={share.shared}
-          disabled={share.locked}
-          onClick={() => {
-            if (share.locked) return;
-            share.onToggle();
-          }}
-        >
-          <span>Share details</span>
-          <span className="hold-toggle-state" aria-hidden="true">{share.shared ? "On" : "Off"}</span>
-        </button>
+        <>
+          <button
+            type="button"
+            role="menuitemcheckbox"
+            className="is-toggle"
+            aria-label="Share details"
+            aria-checked={share.shared}
+            disabled={share.locked}
+            onClick={() => {
+              if (share.locked) return;
+              share.onToggle();
+            }}
+          >
+            <span>Share details</span>
+            <span className="hold-toggle-state" aria-hidden="true">{share.shared ? "On" : "Off"}</span>
+          </button>
+          {onShareFile ? (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                onShareFile();
+                onDismiss();
+              }}
+            >
+              Share as file
+            </button>
+          ) : null}
+        </>
       ) : (
         <>
           {canGather ? (
