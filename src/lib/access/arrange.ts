@@ -324,7 +324,7 @@ export function acceptInviteCard(access: AccessState, inviteId: InviteId): Acces
   return { ...access, links: access.links.map((item) => (item.id === inviteId ? next : item)) };
 }
 
-/** Accepted or pending becomes revoked. A revoked card stays revoked. Detail grants for that guest are cleared. */
+/** Accepted or pending becomes revoked. A revoked card stays revoked. Detail grants and branch hands for that guest are cleared. */
 export function revokeInviteCard(access: AccessState, inviteId: InviteId): AccessState {
   const link = access.links.find((item) => item.id === inviteId);
   if (!link || link.status === "revoked") return access;
@@ -333,11 +333,15 @@ export function revokeInviteCard(access: AccessState, inviteId: InviteId): Acces
     ...(link.status === "accepted" ? { grant: link.grant } : {}),
   });
   const viewer = guestViewer(DEVICE_TREE_ID, inviteId);
-  return {
+  const hands = (access.branchOwners ?? []).filter((hand) => hand.inviteId !== inviteId);
+  const cleared: AccessState = {
     ...access,
     links: access.links.map((item) => (item.id === inviteId ? next : item)),
     lenses: access.lenses.map((lens) => (sameViewer(lens.viewer, viewer) ? { ...lens, detailGrants: [] } : lens)),
   };
+  if (hands.length) cleared.branchOwners = hands;
+  else delete cleared.branchOwners;
+  return cleared;
 }
 
 function ghostEffect(tree: TreeData, access: AccessState, viewer: Viewer, personId: string): "hide" | "unset" {
@@ -595,6 +599,22 @@ export function parseAccessValue(value: unknown): AccessState {
     }
     const sharedFamilies = readSharedFamilies(value.sharedFamilies);
     if (sharedFamilies?.length) base.sharedFamilies = sharedFamilies;
+    if (Array.isArray(value.branchOwners)) {
+      const hands: NonNullable<AccessState["branchOwners"]> = [];
+      for (const row of value.branchOwners) {
+        if (!isRecord(row) || typeof row.treeId !== "string" || typeof row.branchRootId !== "string" || typeof row.inviteId !== "string") continue;
+        try {
+          hands.push({
+            treeId: asTreeId(row.treeId),
+            branchRootId: asPersonId(row.branchRootId),
+            inviteId: asInviteId(row.inviteId),
+          });
+        } catch {
+          /* skip a blank id */
+        }
+      }
+      if (hands.length) base.branchOwners = hands;
+    }
   } catch {
     return emptyAccess();
   }

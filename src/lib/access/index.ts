@@ -6,6 +6,8 @@ export type { Branch, BranchMember, BranchTie } from "./branch";
 
 export { resolveEdit } from "./edit";
 
+export { canEdit, handBranch, ownedBranchLabels } from "./ownership";
+
 export { acceptedInvite, exposeLink, pendingInvite, revokedInvite } from "./link";
 
 export { ownerWorkingView, resolveVisibility } from "./visibility";
@@ -60,6 +62,7 @@ export {
 } from "./types";
 export type {
   AccessState,
+  BranchHand,
   BranchConflict,
   ClaimRank,
   EditDecision,

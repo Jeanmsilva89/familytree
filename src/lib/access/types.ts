@@ -99,6 +99,19 @@ export type AccessState = {
    * The people themselves are copied into `TreeData` under `localPersonId`.
    */
   sharedFamilies?: SharedFamily[];
+  /**
+   * Branches the tree owner handed to a guest on a local invite.
+   * Absent means the tree owner still holds every branch. Revoking the
+   * invite removes that guest's hands.
+   */
+  branchOwners?: BranchHand[];
+};
+
+/** One branch, rooted at a person, held by a guest invite. */
+export type BranchHand = {
+  treeId: TreeId;
+  branchRootId: PersonId;
+  inviteId: InviteId;
 };
 
 /** One person in a shared family: the id on the sender's tree, and the id on this device. */

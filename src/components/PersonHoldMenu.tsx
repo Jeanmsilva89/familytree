@@ -19,6 +19,13 @@ type ShareDetails = {
   onToggle: (personId: string) => void;
 };
 
+export type BranchOwnerMenu = {
+  invites: { id: string; label: string }[];
+  /** Invite id that holds the branch rooted at this person, or null when you do. */
+  holderFor: (personId: string) => string | null;
+  onChoose: (personId: string, inviteId: string | null) => void;
+};
+
 type Options = {
   people: Person[];
   selectedId?: string;
@@ -28,6 +35,8 @@ type Options = {
   shareDetails?: ShareDetails;
   /** Share the viewer's allowed tree as a file. Nothing is uploaded. */
   onShareFile?: () => void;
+  /** Hand this person's branch to a local guest, or take it back. */
+  branchOwner?: BranchOwnerMenu;
   onSelect: (person?: Person) => void;
   onOpen: (person: Person) => void;
 };
@@ -38,7 +47,7 @@ function personPoint(target: EventTarget) {
   return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
 }
 
-export function usePersonInteraction({ people, selectedId, editMode = false, canGather = true, shareDetails, onShareFile, onSelect, onOpen }: Options) {
+export function usePersonInteraction({ people, selectedId, editMode = false, canGather = true, shareDetails, onShareFile, branchOwner, onSelect, onOpen }: Options) {
   const [state, setState] = useState<PersonInteraction>(initialInteraction);
   const stateRef = useRef(state);
   const selectedRef = useRef(selectedId);
@@ -162,6 +171,7 @@ export function usePersonInteraction({ people, selectedId, editMode = false, can
         onToggle: () => shareDetails.onToggle(menuPerson),
       } : undefined}
       onShareFile={onShareFile}
+      branchOwner={branchOwner}
       onGather={gather}
       onEdit={edit}
       onDismiss={dismiss}
@@ -177,6 +187,7 @@ function PersonHoldMenu({
   canGather,
   share,
   onShareFile,
+  branchOwner,
   onGather,
   onEdit,
   onDismiss,
@@ -186,16 +197,26 @@ function PersonHoldMenu({
   canGather: boolean;
   share?: { shared: boolean; locked: boolean; onToggle: () => void };
   onShareFile?: () => void;
+  branchOwner?: BranchOwnerMenu;
   onGather: () => void;
   onEdit: () => void;
   onDismiss: () => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const [picking, setPicking] = useState(false);
   const person = people.find((item) => item.id === menu.personId);
   const name = person ? person.givenName.trim() || displayName(person) : "this person";
+  const holderId = branchOwner?.holderFor(menu.personId) ?? null;
+  const holderName = branchOwner?.invites.find((invite) => invite.id === holderId)?.label;
+  const choiceCount = picking && branchOwner ? 1 + branchOwner.invites.length : 0;
+  const baseRows = (share ? 1 + (onShareFile ? 1 : 0) : (canGather ? 1 : 0) + 1) + (branchOwner ? 1 : 0);
+  const menuHeight = 20 + (baseRows + choiceCount) * 44;
   const left = Math.min(Math.max(8, menu.x), Math.max(8, window.innerWidth - 216));
-  const menuHeight = share && onShareFile ? 156 : 108;
   const top = Math.min(Math.max(8, menu.y - 96), Math.max(8, window.innerHeight - menuHeight));
+
+  useEffect(() => {
+    setPicking(false);
+  }, [menu.personId]);
 
   useEffect(() => {
     const onKey = (event: globalThis.KeyboardEvent) => {
@@ -249,35 +270,21 @@ function PersonHoldMenu({
       onKeyDown={onKeyDown}
     >
       {share ? (
-        <>
-          <button
-            type="button"
-            role="menuitemcheckbox"
-            className="is-toggle"
-            aria-label="Share details"
-            aria-checked={share.shared}
-            disabled={share.locked}
-            onClick={() => {
-              if (share.locked) return;
-              share.onToggle();
-            }}
-          >
-            <span>Share details</span>
-            <span className="hold-toggle-state" aria-hidden="true">{share.shared ? "On" : "Off"}</span>
-          </button>
-          {onShareFile ? (
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => {
-                onShareFile();
-                onDismiss();
-              }}
-            >
-              Share as file
-            </button>
-          ) : null}
-        </>
+        <button
+          type="button"
+          role="menuitemcheckbox"
+          className="is-toggle"
+          aria-label="Share details"
+          aria-checked={share.shared}
+          disabled={share.locked}
+          onClick={() => {
+            if (share.locked) return;
+            share.onToggle();
+          }}
+        >
+          <span>Share details</span>
+          <span className="hold-toggle-state" aria-hidden="true">{share.shared ? "On" : "Off"}</span>
+        </button>
       ) : (
         <>
           {canGather ? (
@@ -290,8 +297,83 @@ function PersonHoldMenu({
           </button>
         </>
       )}
+      {share && onShareFile ? (
+        <button
+          type="button"
+          role="menuitem"
+          onClick={() => {
+            onShareFile();
+            onDismiss();
+          }}
+        >
+          Share as file
+        </button>
+      ) : null}
+      {branchOwner ? (
+        <BranchOwnerChoices
+          invites={branchOwner.invites}
+          holderId={holderId}
+          holderName={holderName}
+          picking={picking}
+          onOpen={() => setPicking(true)}
+          onChoose={(inviteId) => {
+            branchOwner.onChoose(menu.personId, inviteId);
+            onDismiss();
+          }}
+        />
+      ) : null}
     </div>,
     document.body,
+  );
+}
+
+function BranchOwnerChoices({
+  invites,
+  holderId,
+  holderName,
+  picking,
+  onOpen,
+  onChoose,
+}: {
+  invites: { id: string; label: string }[];
+  holderId: string | null;
+  holderName?: string;
+  picking: boolean;
+  onOpen: () => void;
+  onChoose: (inviteId: string | null) => void;
+}) {
+  return (
+    <>
+      <button type="button" role="menuitem" className="is-toggle" aria-label="Branch owner" aria-expanded={picking} onClick={onOpen}>
+        <span>Branch owner…</span>
+        <span className="hold-toggle-state" aria-hidden="true">{holderName ?? "You"}</span>
+      </button>
+      {picking ? (
+        <div className="branch-owner-choices" role="group" aria-label="Who owns this branch">
+          <button
+            type="button"
+            role="menuitemradio"
+            aria-checked={holderId == null}
+            aria-label="Take this branch back"
+            onClick={() => onChoose(null)}
+          >
+            You
+          </button>
+          {invites.map((invite) => (
+            <button
+              key={invite.id}
+              type="button"
+              role="menuitemradio"
+              aria-checked={holderId === invite.id}
+              aria-label={`Give this branch to ${invite.label}`}
+              onClick={() => onChoose(invite.id)}
+            >
+              {invite.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </>
   );
 }
 

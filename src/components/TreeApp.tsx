@@ -10,11 +10,14 @@ import {
   addGuestCard,
   asInviteId,
   asPersonId,
+  canEdit,
   DEVICE_TREE_ID,
   detailToggle,
   ensureDeviceOwner,
   graphForViewer,
+  handBranch,
   marksForViewer,
+  ownedBranchLabels,
   revokeInviteCard,
   separateAccess,
   exportShareBundle,
@@ -294,7 +297,7 @@ export function TreeApp() {
   const lensCaption = lensPhase === "working"
     ? "Your working view. Choose who is looking."
     : lensPhase === "preview"
-      ? `Previewing ${lensViewerName}. Hidden people stay off the sky.`
+      ? `Previewing ${lensViewerName}. A branch they own can be edited. Everything else stays as it is.`
       : guestStatus === "pending"
         ? `Arranging ${lensViewerName}'s invite. They see no one until you accept. Hold a person to share details.`
         : guestStatus === "revoked"
@@ -379,6 +382,50 @@ export function TreeApp() {
     setSheetPerson(undefined);
   };
   const sheetFamily = sheetPerson ? sharedFamilyForPerson(ensuredAccess, sheetPerson.id) : undefined;
+  const acting = Boolean(lensOn && lineFilter.families && lensPhase === "preview");
+  const editor = viewerFor(ensuredAccess, acting ? lensViewer : { kind: "owner" });
+  const forest = { [DEVICE_TREE_ID]: treeState.tree };
+  const allowPerson = (id: string) => Boolean(
+    editor && canEdit(forest, ensuredAccess, editor, { kind: "person", treeId: DEVICE_TREE_ID, personId: asPersonId(id) }),
+  );
+  const allowRelation = (personId: string, otherId: string, role: "parent" | "partner" | "child") => {
+    if (!editor) return false;
+    const tree = treeState.tree;
+    if (role === "partner") {
+      const union = tree.unions.find((item) => item.partnerIds.includes(personId) && item.partnerIds.includes(otherId));
+      if (!union) return allowPerson(personId) && allowPerson(otherId);
+      return canEdit(forest, ensuredAccess, editor, { kind: "union", treeId: DEVICE_TREE_ID, unionId: union.id });
+    }
+    const link = tree.childLinks.find((item) => (
+      role === "parent"
+        ? item.childId === personId && item.parentIds.includes(otherId)
+        : item.childId === otherId && item.parentIds.includes(personId)
+    ));
+    if (!link) return allowPerson(personId) && allowPerson(otherId);
+    return canEdit(forest, ensuredAccess, editor, { kind: "childLink", treeId: DEVICE_TREE_ID, childLinkId: link.id });
+  };
+  const branchOwnerMenu = {
+    invites: ensuredAccess.links
+      .filter((link) => link.status !== "revoked")
+      .map((link) => ({ id: link.id as string, label: link.guestLabel?.trim() || "Guest" })),
+    holderFor: (personId: string) => {
+      const hand = ensuredAccess.branchOwners?.find(
+        (item) => item.treeId === DEVICE_TREE_ID && item.branchRootId === personId,
+      );
+      if (!hand) return null;
+      const link = ensuredAccess.links.find((item) => item.id === hand.inviteId);
+      return link && link.status !== "revoked" ? (hand.inviteId as string) : null;
+    },
+    onChoose: (personId: string, inviteId: string | null) => {
+      void accessState.update((current) => handBranch(
+        ensureDeviceOwner(current, treeState.tree),
+        DEVICE_TREE_ID,
+        asPersonId(personId),
+        inviteId ? asInviteId(inviteId) : null,
+      ));
+    },
+  };
+  const ownerLabels = ownedBranchLabels(treeState.tree, ensuredAccess, DEVICE_TREE_ID);
 
   return (
     <div className={narrow ? "app-shell tree-shell is-narrow" : "app-shell tree-shell is-wide"}>
@@ -583,20 +630,23 @@ export function TreeApp() {
               editMode={graphEdit && !lensOn}
               lens={lensSky}
               sharedPersonIds={sharedPersonIds}
+              branchOwner={branchOwnerMenu}
+              editScope={acting ? { person: allowPerson, relation: allowRelation } : undefined}
+              owners={ownerLabels}
               onLink={(personId, otherId, role, kind, parentRole, kin) => {
-                if (isShared(personId) || isShared(otherId)) return;
+                if (!allowPerson(personId) || !allowPerson(otherId)) return;
                 return treeState.link(personId, otherId, role, kind, parentRole, kin);
               }}
               onUnlink={(personId, otherId, role) => {
-                if (isShared(personId) && isShared(otherId)) return;
+                if (!allowRelation(personId, otherId, role)) return;
                 return treeState.unlink(personId, otherId, role);
               }}
               onMoveToUnit={(personId, unitRootId) => {
-                if (isShared(personId)) return;
+                if (!allowPerson(personId)) return;
                 return treeState.familyUnit(personId, { unitOf: unitRootId });
               }}
               onPlace={(id, x) => {
-                if (isShared(id)) return;
+                if (!allowPerson(id)) return;
                 return treeState.edit(id, { rowNudge: Math.round(x) });
               }}
             />
@@ -609,13 +659,20 @@ export function TreeApp() {
               fitKey={graphOpen}
               editMode={graphEdit}
               onLink={(personId, otherId, role, kind, parentRole, kin) => {
-              if (isShared(personId) || isShared(otherId)) return;
-              return treeState.link(personId, otherId, role, kind, parentRole, kin);
-            }}
-              onUnlink={treeState.unlink}
-              onPlace={(id, x) => treeState.edit(id, { graphX: Math.round(x) })}
+                if (!allowPerson(personId) || !allowPerson(otherId)) return;
+                return treeState.link(personId, otherId, role, kind, parentRole, kin);
+              }}
+              onUnlink={(personId, otherId, role) => {
+                if (!allowRelation(personId, otherId, role)) return;
+                return treeState.unlink(personId, otherId, role);
+              }}
+              onPlace={(id, x) => {
+                if (!allowPerson(id)) return;
+                return treeState.edit(id, { graphX: Math.round(x) });
+              }}
               lineFilter={lineFilter}
               canGather
+              branchOwner={branchOwnerMenu}
             />
           )}
           {graphAddName != null ? (
@@ -687,12 +744,16 @@ export function TreeApp() {
             fitKey={`related-${relatedRoot.id}`}
             editMode={relatedEdit}
             onLink={(personId, otherId, role, kind, parentRole, kin) => {
-              if (isShared(personId) || isShared(otherId)) return;
+              if (!allowPerson(personId) || !allowPerson(otherId)) return;
               return treeState.link(personId, otherId, role, kind, parentRole, kin);
             }}
-            onUnlink={treeState.unlink}
+            onUnlink={(personId, otherId, role) => {
+              if (!allowRelation(personId, otherId, role)) return;
+              return treeState.unlink(personId, otherId, role);
+            }}
             lineFilter={lineFilter}
             canGather={false}
+            branchOwner={branchOwnerMenu}
           />
         </div>
       ) : null}
