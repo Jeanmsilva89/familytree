@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
 import { useAccess } from "@/hooks/useAccess";
 import { useNarrow } from "@/hooks/useNarrow";
@@ -51,6 +52,9 @@ import { PersonSheet } from "./PersonSheet";
 import { SharePreview } from "./SharePreview";
 import { StartScreen } from "./StartScreen";
 import { TreeCanvas } from "./TreeCanvas";
+import { previewSeen } from "@/lib/orbitView";
+
+const OrbitView = dynamic(() => import("./OrbitView").then((mod) => mod.OrbitView), { ssr: false });
 
 type BeforeInstallPrompt = Event & { prompt: () => Promise<void> };
 
@@ -327,6 +331,7 @@ export function TreeApp() {
     if (!viewer) return;
     void deliverShareFile(exportShareBundle(treeState.tree, access, viewer, new Date().toISOString()));
   };
+  const orbitSeen = lensOn && lensPhase === "preview" ? previewSeen(Object.values(lensMarks)) : undefined;
   const lensSky = lensOn && lineFilter.families
     ? {
         active: true as const,
@@ -618,7 +623,19 @@ export function TreeApp() {
               </button>
             ) : null}
           </div>
-          {lineFilter.families ? (
+          {lineFilter.orbit ? (
+            <OrbitView
+              tree={treeState.tree}
+              seen={orbitSeen}
+              marks={lensOn ? lensMarks : undefined}
+              arranging={Boolean(lensSky && lensSky.phase === "arrange")}
+              editMode={graphEdit && !lensOn}
+              lineFilter={lineFilter}
+              onHighlight={setHighlighted}
+              onOpen={setSheetPerson}
+              onArrange={lensSky?.onPerson}
+            />
+          ) : lineFilter.families ? (
             <FamilySky
               tree={treeState.tree}
               highlightedId={highlighted?.id}

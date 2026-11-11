@@ -11,6 +11,8 @@ export type LineFilter = {
   households: boolean;
   /** Family sky: one bucket per family unit, with semantic zoom. */
   families: boolean;
+  /** Opt-in orbit focus. Off leaves the generation rows and the family sky alone. */
+  orbit: boolean;
 };
 
 export const DEFAULT_LINE_FILTER: LineFilter = {
@@ -22,6 +24,7 @@ export const DEFAULT_LINE_FILTER: LineFilter = {
   couples: true,
   households: true,
   families: true,
+  orbit: false,
 };
 
 export function lineFilterAllows(filter: LineFilter, kin: KinKind): boolean {
@@ -45,6 +48,10 @@ export function toggleFamilies(filter: LineFilter): LineFilter {
   return { ...filter, families: !filter.families };
 }
 
-export function toggleLineKind(filter: LineFilter, key: Exclude<keyof LineFilter, "genealogyOnly" | "households" | "families">): LineFilter {
+export function toggleOrbit(filter: LineFilter): LineFilter {
+  return { ...filter, orbit: !filter.orbit };
+}
+
+export function toggleLineKind(filter: LineFilter, key: Exclude<keyof LineFilter, "genealogyOnly" | "households" | "families" | "orbit">): LineFilter {
   return { ...filter, genealogyOnly: false, [key]: !filter[key] };
 }

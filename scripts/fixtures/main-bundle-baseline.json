@@ -1,4 +1,4 @@
 {
-  "note": "Uncompressed bytes of the client files the home route loaded before the sample routes existed. The webpack runtime is excluded: it only lists chunk ids, and it must not contain three.js.",
-  "sizes": [557, 2531, 8537, 17096, 18271, 41966, 173019, 174133, 218357]
+  "note": "Uncompressed bytes of the client files the home route loads. The webpack runtime is excluded: it only lists chunk ids, and it must not contain three.js. Orbit's renderer is a separate chunk and is not in this list.",
+  "sizes": [557, 2531, 6218, 8537, 13978, 18271, 43229, 173019, 174133, 224861]
 }
