@@ -7,6 +7,7 @@ import {
   lineFilterAllowsCouples,
   toggleHouseholds,
   toggleFamilies,
+  toggleOrbit,
   toggleLineKind,
 } from "./kinFilter";
 import { kinOf, strongestKin } from "./types";
@@ -57,5 +58,14 @@ describe("kin filters", () => {
     assert.equal(off.families, false);
     assert.equal(off.households, true);
     assert.equal(toggleFamilies(off).families, true);
+  });
+
+  it("keeps orbit off until it is chosen, without touching the other lenses", () => {
+    assert.equal(DEFAULT_LINE_FILTER.orbit, false);
+    const on = toggleOrbit(DEFAULT_LINE_FILTER);
+    assert.equal(on.orbit, true);
+    assert.equal(on.families, true);
+    assert.equal(on.households, true);
+    assert.equal(toggleOrbit(on).orbit, false);
   });
 });

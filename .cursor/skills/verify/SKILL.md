@@ -153,6 +153,31 @@ VERIFY_BASE_URL=https://familytree-rose.vercel.app VERIFY_OUT=/opt/cursor/artifa
 
 The site is a client-side PWA. A fresh browser context talks to the network for HTML, so this checks the deployment that is live now. Pass only when both sizes print `passed` and the script exits 0.
 
+## Orbit view
+
+The Orbit chip is off until someone turns it on. The generation rows, dark couple cards, lens chips, and second tap to edit stay. Gather family is unchanged on the classic graph and the family sky: a tap never gathers, and a press-and-hold still only opens the menu.
+
+With the fixture imported and Visualize open, at desktop (1280×800) and phone (390×844), in the dark theme:
+
+52. Confirm the scripts loaded so far do not contain three.js. Turn on Orbit. The stage reads Fixture. It opens on generation rows: Ada Fixture above Eli Fixture, Eli above Fay Fixture.
+53. Tap Eli Fixture once. The rows stay, and the editor does not open. Tap him again. The editor opens on Eli Fixture. Close it. The rows stay.
+54. Press and hold Eli Fixture. The lines leave while the layout is still the rows, then the cards glide. Eli's own transform changes during that glide. He ends at the center, Dee Fixture beside him, Fay below, Ada above, and Wynn Fixture dialed back. The lines draw in after the cards settle.
+55. Tap empty space. The generation rows return. Tap Eli once more. A tap still does not focus anyone.
+56. Turn Orbit off. The family sky is back.
+
+Screenshots: `orbit-<size>-rows.png`, `orbit-<size>-focused.png`, `orbit-<size>-rows-again.png`.
+
+On a phone with `prefers-reduced-motion: reduce`, Orbit shows the same seats without loading three.js. Screenshot: `orbit-phone-reduced-focused.png`.
+
+Frame times for the press-and-hold glide are measured at 390×844, deviceScaleFactor 3, with CPU throttle 6. The check fails if p95 is over 16.8 ms.
+
+```bash
+node scripts/verify-orbit.mjs
+node scripts/measure-orbit.mjs --check
+```
+
+`npm run verify` runs both after the sample checks.
+
 ## Samples
 
 `npm run verify` also runs `scripts/verify-samples.mjs` and `scripts/measure-samples.mjs --check`. The samples are a design exploration. They are not linked from the home page, and they do not read or write the saved tree.

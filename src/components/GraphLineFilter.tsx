@@ -6,6 +6,7 @@ import {
   toggleFamilies,
   toggleHouseholds,
   toggleLineKind,
+  toggleOrbit,
   type LineFilter,
 } from "@/lib/kinFilter";
 
@@ -54,6 +55,14 @@ export function GraphLineFilter({ value, onChange }: Props) {
         onClick={() => onChange(toggleFamilies(value))}
       >
         Families
+      </button>
+      <button
+        type="button"
+        className={value.orbit ? "chip is-on" : "chip"}
+        aria-pressed={value.orbit}
+        onClick={() => onChange(toggleOrbit(value))}
+      >
+        Orbit
       </button>
       {!value.families ? (
         <button
