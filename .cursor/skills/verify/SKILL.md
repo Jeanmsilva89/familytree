@@ -152,3 +152,22 @@ VERIFY_BASE_URL=https://familytree-rose.vercel.app VERIFY_OUT=/opt/cursor/artifa
 ```
 
 The site is a client-side PWA. A fresh browser context talks to the network for HTML, so this checks the deployment that is live now. Pass only when both sizes print `passed` and the script exits 0.
+
+## Samples
+
+`npm run verify` also runs `scripts/verify-samples.mjs` and `scripts/measure-samples.mjs --check`. The samples are a design exploration. They are not linked from the home page, and they do not read or write the saved tree.
+
+At desktop (1280×800) and phone (390×844):
+
+1. Open `/`. No link points at `/samples`. The scripts loaded for `/` do not contain three.js.
+2. Open `/samples`. Three cards, each with its one-line description, link to Depth sky, Floating cards, and Orbit focus.
+3. On each direction, pan the view, pinch or wheel to zoom, and tap a person. The caption shows that person's fixture name.
+4. On Depth sky, tap the Dee & Eli household, then tap a person once the cards are readable.
+5. On Floating cards, zoom until the view is `data-level="near"` and a card can be tapped.
+6. On Orbit focus, press and hold Eli Fixture. The lines leave the screen while the rings move, then draw again. Dee is `data-ring="partner"`, Fay is `near`, and Wynn is `outer`.
+
+With `prefers-reduced-motion: reduce`, Depth sky shows the static fallback and does not load three.js. A tap still shows the name. With WebGL disabled, Orbit focus shows the same kind of fallback.
+
+The home route's client files, other than the webpack chunk map, keep the byte sizes in `scripts/fixtures/main-bundle-baseline.json`.
+
+Frame times are measured at 390×844, deviceScaleFactor 3, with CPU throttle 4, during the depth orbit, the card zoom, and the orbit gather. The check fails if a direction's p95 frame time is over 16.8 ms. A kept 60Hz tick shows up as 16.7 or 16.8 in Chromium; a missed frame is about 33.
