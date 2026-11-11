@@ -1,0 +1,252 @@
+.samples-root {
+  min-height: 100dvh;
+  background: #0b1822;
+  color: #f3ebe1;
+  font-family: "Segoe UI", "Avenir Next", "Helvetica Neue", system-ui, sans-serif;
+}
+
+body:has(.samples-root) {
+  background: #0b1822;
+}
+
+.smp-index {
+  max-width: 440px;
+  margin: 0 auto;
+  padding: calc(28px + env(safe-area-inset-top)) 20px calc(36px + env(safe-area-inset-bottom));
+}
+
+.smp-kicker {
+  margin: 0 0 8px;
+  color: #9fb8b4;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.smp-index h1 {
+  margin: 0 0 22px;
+  font-size: 1.55rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.smp-index ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.smp-index a {
+  display: block;
+  padding: 18px 16px 16px;
+  border-radius: 18px;
+  background: #14303a;
+  border: 1px solid #2c4a54;
+  color: inherit;
+  text-decoration: none;
+}
+
+.smp-index a:focus-visible {
+  outline: 2px solid #7dcdc4;
+  outline-offset: 3px;
+}
+
+.smp-index strong {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 600;
+}
+
+.smp-index span {
+  display: block;
+  margin-top: 6px;
+  color: #d4c6b6;
+  font-size: 0.95rem;
+  line-height: 1.35;
+}
+
+.smp-stage {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+
+.smp-bar {
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 6px;
+}
+
+.smp-bar a {
+  color: #9fb8b4;
+  text-decoration: none;
+  font-size: 14px;
+}
+
+.smp-bar h1 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.smp-view {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  touch-action: none;
+}
+
+.smp-view canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.smp-overlay {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.smp-family,
+.smp-person {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform, opacity;
+}
+
+.smp-family {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+  color: #f3ebe1;
+  white-space: nowrap;
+}
+
+.smp-stage[data-sample="orbit"] .smp-family {
+  display: none;
+}
+
+.smp-stage[data-sample="depth"] .smp-person {
+  width: 92px;
+  padding: 10px 8px 8px;
+  border-radius: 16px;
+  background: #14303a;
+  border: 1px solid #314a54;
+  text-align: center;
+}
+
+.smp-stage[data-sample="depth"] .smp-person i,
+.smp-fallback i {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  margin: 0 auto 6px;
+  border-radius: 50%;
+  background: hsl(var(--hue) 34% 38%);
+  color: #fff;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.smp-person strong {
+  display: block;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.15;
+  white-space: nowrap;
+}
+
+.smp-stage[data-sample="cards"] .smp-person strong,
+.smp-stage[data-sample="orbit"] .smp-person strong {
+  font-size: 13px;
+  text-align: center;
+}
+
+.smp-person[data-selected="true"] strong {
+  color: #ffffff;
+}
+
+.smp-stage[data-sample="depth"] .smp-person[data-selected="true"] {
+  border-color: #d4b496;
+}
+
+.smp-caption {
+  margin: 0;
+  padding: 8px 16px calc(14px + env(safe-area-inset-bottom));
+  text-align: center;
+  font-size: 15px;
+  font-weight: 600;
+  pointer-events: none;
+}
+
+.smp-caption[data-selected-name=""] {
+  color: #9fb8b4;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.smp-fallback {
+  position: absolute;
+  inset: 0;
+  overflow: auto;
+  padding: 8px 16px 20px;
+  pointer-events: auto;
+  touch-action: pan-y;
+}
+
+.smp-fallback section {
+  margin: 0 0 16px;
+}
+
+.smp-fallback h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #d4c6b6;
+}
+
+.smp-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.smp-fallback button {
+  appearance: none;
+  width: 92px;
+  padding: 10px 8px 8px;
+  border-radius: 16px;
+  background: #14303a;
+  border: 1px solid #314a54;
+  color: inherit;
+  text-align: center;
+}
+
+.smp-fallback button[data-ring="outer"] {
+  opacity: 0.45;
+}
+
+.smp-fallback button[data-ring="center"],
+.smp-fallback button[data-ring="partner"] {
+  border-color: #d4b496;
+}
+
+.smp-fallback button:focus-visible {
+  outline: 2px solid #7dcdc4;
+  outline-offset: 2px;
+}

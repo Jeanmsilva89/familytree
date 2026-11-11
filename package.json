@@ -10,20 +10,22 @@
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts src/lib/avatar.test.ts src/lib/generations.test.ts src/lib/graphView.test.ts src/lib/persist.test.ts src/lib/partnerStatus.test.ts src/lib/kinFilter.test.ts src/lib/households.test.ts src/lib/householdLayout.test.ts src/lib/familyUnits.test.ts src/lib/familyUnitsIo.test.ts src/lib/familySky.test.ts src/lib/familySkyRoute.test.ts src/lib/personalMap.test.ts src/lib/personInteraction.test.ts src/lib/familySkyFocus.test.ts src/lib/skyUnlink.test.ts src/lib/skyGlide.test.ts src/lib/gatherChoreography.test.ts src/lib/access/access.test.ts src/lib/access/arrange.test.ts src/lib/access/store.test.ts src/lib/access/share.test.ts src/lib/access/ownership.test.ts",
-    "verify": "node scripts/verify-family-sky.mjs && node scripts/measure-gather.mjs --check"
+    "test": "tsx --test src/lib/tree.test.ts src/lib/gedcom.test.ts src/lib/vcard.test.ts src/lib/layout.test.ts src/lib/avatar.test.ts src/lib/generations.test.ts src/lib/graphView.test.ts src/lib/persist.test.ts src/lib/partnerStatus.test.ts src/lib/kinFilter.test.ts src/lib/households.test.ts src/lib/householdLayout.test.ts src/lib/familyUnits.test.ts src/lib/familyUnitsIo.test.ts src/lib/familySky.test.ts src/lib/familySkyRoute.test.ts src/lib/personalMap.test.ts src/lib/personInteraction.test.ts src/lib/familySkyFocus.test.ts src/lib/skyUnlink.test.ts src/lib/skyGlide.test.ts src/lib/gatherChoreography.test.ts src/lib/access/access.test.ts src/lib/access/arrange.test.ts src/lib/access/store.test.ts src/lib/access/share.test.ts src/lib/access/ownership.test.ts src/lib/samples/scene.test.ts",
+    "verify": "node scripts/verify-family-sky.mjs && node scripts/measure-gather.mjs --check && node scripts/verify-samples.mjs && node scripts/measure-samples.mjs --check"
   },
   "dependencies": {
     "idb": "^8.0.3",
     "next": "^15.4.6",
     "react": "^19.1.1",
-    "react-dom": "^19.1.1"
+    "react-dom": "^19.1.1",
+    "three": "^0.170.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.1",
     "@types/node": "^22.17.1",
     "@types/react": "^19.1.10",
     "@types/react-dom": "^19.1.7",
+    "@types/three": "^0.170.0",
     "eslint": "^9.33.0",
     "eslint-config-next": "^15.4.6",
     "playwright": "^1.64.1",
