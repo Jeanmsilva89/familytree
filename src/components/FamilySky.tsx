@@ -45,9 +45,11 @@ import {
   curveUnlinkMark,
   forkUnlinkMark,
   skyUnlinkEnabled,
+  unlinkRequest,
   type SkyUnlinkMark,
 } from "@/lib/skyUnlink";
 import { LinkRolePicker } from "./LinkRolePicker";
+import type { BranchOwnerMenu } from "./PersonHoldMenu";
 import type { PersonMark } from "@/lib/access";
 
 type Props = {
@@ -86,6 +88,18 @@ type Props = {
   };
   /** People brought in from a share file. Their bucket is marked, and they are not edited here. */
   sharedPersonIds?: readonly string[];
+  /** Hand the branch rooted at a person to a local guest. */
+  branchOwner?: BranchOwnerMenu;
+  /**
+   * Previewing as a viewer. Only people and relationships this allows can be
+   * nudged, linked, or unlinked. Absent means the normal Edit switch.
+   */
+  editScope?: {
+    person: (personId: string) => boolean;
+    relation: (personId: string, otherId: string, role: "parent" | "partner" | "child") => boolean;
+  };
+  /** Guest label for people in a branch someone else holds. Drawn only in the lens or Edit. */
+  owners?: Record<string, string>;
 };
 
 type Port = "parent" | "partner" | "child";
@@ -146,13 +160,23 @@ export function FamilySky({
   onPlace,
   lens,
   sharedPersonIds,
+  branchOwner,
+  editScope,
+  owners,
 }: Props) {
   const arrangingLens = Boolean(lens?.active && lens.phase === "arrange" && lens.onShareDetails);
   const sharedPeople = new Set(sharedPersonIds ?? []);
+  const scoped = Boolean(editScope);
+  function personOpen(id: string) {
+    if (sharedPeople.has(id)) return false;
+    if (editScope) return editScope.person(id);
+    return true;
+  }
   const interaction = usePersonInteraction({
     people: tree.people,
     selectedId: highlightedId,
     editMode,
+    branchOwner,
     onShareFile: arrangingLens ? lens?.onShareFile : undefined,
     shareDetails: arrangingLens ? {
       shared: (personId) => lens?.shareOf?.(personId)?.shared ?? false,
@@ -786,13 +810,13 @@ export function FamilySky({
 
   /** Edit mode, close up: start a wire from a dot, or pick up a person. Returns true when handled. */
   function editPointerDown(event: PointerEvent<HTMLDivElement>, target: Element) {
-    if (!editMode || levelRef.current !== "near" || pointers.current.size > 0) return false;
+    if (!(editMode || scoped) || levelRef.current !== "near" || pointers.current.size > 0) return false;
     const portEl = target.closest(".graph-port") as HTMLElement | null;
     if (portEl && onLink) {
       const fromId = portEl.dataset.personId;
       const port = portEl.dataset.port as Port | undefined;
       const card = fromId ? cardOf.get(fromId) : undefined;
-      if (!fromId || !port || !card) return false;
+      if (!fromId || !port || !card || !personOpen(fromId)) return false;
       event.stopPropagation();
       stageRef.current?.setPointerCapture(event.pointerId);
       connect.current = { fromId, port, pointerId: event.pointerId };
@@ -806,7 +830,7 @@ export function FamilySky({
     if (cardEl && (onPlace || onMoveToUnit)) {
       const id = cardEl.dataset.personId;
       const card = id ? cardOf.get(id) : undefined;
-      if (!id || !card) return false;
+      if (!id || !card || !personOpen(id)) return false;
       stageRef.current?.setPointerCapture(event.pointerId);
       gesture.current = {
         id,
@@ -964,7 +988,7 @@ export function FamilySky({
   function onPointerDown(event: PointerEvent<HTMLDivElement>) {
     const target = event.target instanceof Element ? event.target : null;
     // A tap on a relationship mark is an unlink, not a pan or a carry.
-    if (editMode && target?.closest(".graph-hit, .sky-unlink")) return;
+    if ((editMode || scoped) && target?.closest(".graph-hit, .sky-unlink")) return;
     if (target && editPointerDown(event, target)) {
       pointers.current.set(event.pointerId, { x: event.clientX, y: event.clientY });
       return;
@@ -1098,7 +1122,12 @@ export function FamilySky({
   const near = level === "near";
   const mid = level === "mid";
   const far = level === "far";
-  const unlinkArmed = skyUnlinkEnabled(editMode, level) && Boolean(onUnlink);
+  const unlinkArmed = (skyUnlinkEnabled(editMode, level) || (scoped && level === "near")) && Boolean(onUnlink);
+  function relationOpen(mark: SkyUnlinkMark) {
+    if (!editScope) return true;
+    const request = unlinkRequest(mark);
+    return editScope.relation(request.personId, request.otherId, request.role);
+  }
   const peopleCount = tree.people.length;
 
   return (
@@ -1180,7 +1209,8 @@ export function FamilySky({
                   if (lensOn && (!lensShows(link.fromPersonId) || !lensShows(link.toPersonId))) return null;
                   const w = linkStyle(link.kind, lit);
                   const d = curvesPath(near ? link.pieces : link.midPieces);
-                  const mark = unlinkArmed ? curveUnlinkMark(link) : null;
+                  const curveMark = unlinkArmed ? curveUnlinkMark(link) : null;
+                  const mark = curveMark && relationOpen(curveMark) ? curveMark : null;
                   return (
                     <g key={link.id} data-link-id={link.id}>
                       <path
@@ -1270,7 +1300,8 @@ export function FamilySky({
                     ) : null}
                     {seg("rail", guides.railL, guides.railY, guides.railR, guides.railY, bar, "rail")}
                     {kids.map((d) => {
-                      const mark = unlinkArmed ? forkUnlinkMark(fork, d) : null;
+                      const forkMark = unlinkArmed ? forkUnlinkMark(fork, d) : null;
+                      const mark = forkMark && relationOpen(forkMark) ? forkMark : null;
                       return (
                         <g key={`c-${d.childId}`} data-seg="child" data-person-id={d.childId}>
                           {seg(`c-${d.childId}`, d.x, guides.railY, d.x, d.y1, kinLine(d.kin, lit, false))}
@@ -1400,6 +1431,8 @@ export function FamilySky({
               const lifted = carried?.id === card.id;
               const sliding = !lifted && placing?.id === card.id;
               const lensClass = mark?.draw === "ghost" ? " is-lens-ghost" : mark?.presence === "dimmed" ? " is-lens-dim" : "";
+              const showOwner = Boolean((lensOn || editMode) && owners?.[card.id]);
+              const movable = personOpen(card.id) && ((editMode && !lensOn) || scoped);
               return (
                 <button
                   key={card.id}
@@ -1410,10 +1443,13 @@ export function FamilySky({
                   data-draw={mark?.draw}
                   data-details={mark?.details ?? sharedDetails}
                   data-shared={sharedCard ? "true" : undefined}
-                  className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${lensClass}${editMode && !lensOn ? " is-movable" : ""}${lifted ? " is-carried" : ""}${sliding ? " is-placing" : ""}`}
+                  data-branch-owner={showOwner ? owners?.[card.id] : undefined}
+                  data-edit={scoped ? (personOpen(card.id) ? "open" : "locked") : undefined}
+                  className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${lensClass}${movable ? " is-movable" : ""}${lifted ? " is-carried" : ""}${sliding ? " is-placing" : ""}`}
                   style={{ left: at.x - CARD.w / 2, top: at.y, width: CARD.w, height: CARD.h }}
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (lens?.phase === "preview") return;
                     if (lensOn) {
                       if (arrangingLens && interaction.consumeTap(card.id)) return;
                       lens?.onPerson(card.id);
@@ -1421,7 +1457,7 @@ export function FamilySky({
                     }
                     tapCard(card.person);
                   }}
-                  {...(arrangingLens || !lensOn ? interaction.bindPerson(card.id) : {})}
+                  {...(lens?.phase === "preview" ? {} : interaction.bindPerson(card.id))}
                   aria-pressed={lensOn ? undefined : selected}
                 >
                   {photo ? (
@@ -1429,6 +1465,7 @@ export function FamilySky({
                   ) : (
                     <GeneratedAvatar person={card.person} className="swatch" />
                   )}
+                  {showOwner ? <span className="owner-mark">{owners?.[card.id]}</span> : null}
                   <span className="identity">
                     <strong title={displayName(card.person)}>{card.person.givenName || displayName(card.person)}</strong>
                     {withheld ? null : <em>{age ?? "—"}</em>}
@@ -1458,6 +1495,7 @@ export function FamilySky({
                   aria-label={lensOn ? displayName(card.person) : `${displayName(card.person)}. Zoom in`}
                   onClick={(event) => {
                     event.stopPropagation();
+                    if (lens?.phase === "preview") return;
                     if (lensOn) {
                       if (arrangingLens && interaction.consumeTap(card.id)) return;
                       lens?.onPerson(card.id);
@@ -1471,7 +1509,7 @@ export function FamilySky({
                     interaction.selectOnly(card.id);
                     zoomToPerson(card.id);
                   }}
-                  {...(arrangingLens || !lensOn ? interaction.bindPerson(card.id) : {})}
+                  {...(lens?.phase === "preview" ? {} : interaction.bindPerson(card.id))}
                 >
                   {photo ? (
                     <img src={photo} alt="" />
@@ -1484,9 +1522,9 @@ export function FamilySky({
             })
           : null}
 
-        {near && editMode && onLink
+        {near && (editMode || scoped) && onLink
           ? sky.cards
-              .filter((card) => shown.has(card.unitId) && card.id !== carried?.id)
+              .filter((card) => shown.has(card.unitId) && card.id !== carried?.id && personOpen(card.id))
               .flatMap((card) => {
                 const ports: { port: Port; side?: "left" | "right"; label: string }[] = [
                   { port: "parent", label: `Link a parent of ${card.person.givenName}` },
@@ -1515,7 +1553,8 @@ export function FamilySky({
 
         {unlinkArmed && (near || pictureMap) && lineFilterAllowsCouples(lineFilter)
           ? sky.couples.filter((c) => c.bar && (pictureMap || shown.has(c.unitId)) && c.partnerIds.every((id) => lensShows(id))).map((couple) => {
-              const mark = coupleUnlinkMark(couple.partnerIds);
+              const coupleMark = coupleUnlinkMark(couple.partnerIds);
+              const mark = coupleMark && relationOpen(coupleMark) ? coupleMark : null;
               const geom = coupleBarGeometry(
                 couple.partnerIds.map((id) => cardOf.get(id)).filter((card): card is NonNullable<typeof card> => Boolean(card)),
                 couple.partnerIds,

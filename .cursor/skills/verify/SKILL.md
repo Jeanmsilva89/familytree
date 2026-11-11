@@ -1,6 +1,6 @@
 ---
 name: verify
-description: Drive the Family Tree PWA in a browser and confirm the Families lens, the visibility lens, detail grants, and divorce/remarriage with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, the visibility lens, partner status, or a production deploy of familytree-rose.vercel.app.
+description: Drive the Family Tree PWA in a browser and confirm the Families lens, the visibility lens, detail grants, divorce/remarriage, and branch ownership with fixture data at desktop and phone sizes. Use before shipping Visualize, the family sky, family-unit moves, the visibility lens, partner status, branch ownership, or a production deploy of familytree-rose.vercel.app.
 ---
 
 # Verify the Families lens
@@ -80,14 +80,24 @@ After the lens checks, still on the Families lens, in the dark theme:
 
 Screenshot: `partner-status-<size>.png`.
 
+Still on that tree, in the dark theme, at both sizes:
+
+41. Turn Families off. Press and hold Eli Fixture on the classic graph. The menu includes Branch owner. Escape closes it and nobody moves. Turn Families back on.
+42. Open Lens, still looking as you. Add an invite card named Lane Fixture. Hold Eli Fixture and give his branch to Lane Fixture. Eli, Dee, and Fay wear a small owner mark. Ada does not. The hand is in IndexedDB, and the saved tree itself still has no access field.
+43. Look as Lane Fixture. Include Eli, Dee, Fay, Ada, and Ben, then accept the invite and preview. Eli, Dee, and Fay are editable. Ada and Ben are not.
+44. Drag Dee Fixture along her row. The nudge is saved. Drag Ada Fixture the same way. Her place does not change. Tapping Ada and Ben's couple does not ask to unlink them. Tapping the line between Dee and Eli asks, and accepting it removes that union.
+45. Take Eli's branch back. Preview as Lane again and drag Dee. Her place stays where the earlier nudge left it. The owner marks are gone.
+
+Screenshots: `branch-owner-<size>-mark.png`, `branch-owner-<size>-preview.png`.
+
 On a fresh pair of trees, still in the dark theme, at both sizes:
 
-41. Import the Families fixture. Open Visualize, turn Families on, and open Lens as Eli Fixture. Include Eli and Dee, dim Fay, and hide Rex. Hold Dee, turn Share details on, then choose Share as file. The file is a download. It is not posted anywhere.
-42. The file contains Eli, Dee, and Fay only. Fay has a name and no photo, date, or bio. Dee has the fixture photo and the date 1800-01-01. Eli's own fixture bio is open. Rex and Ada are absent.
-43. In a second browser context, import the host fixture (Host Fixture only). Choose Add a shared family, pick the file, and read the preview: Ada Fixture as the owner, 3 people, and Eli, Dee, and Fay each with an avatar. Rex is not listed.
-44. Add it. The sky shows that household as its own bucket, marked shared. Fay is a name and a generated avatar. Dee shows the fixture photo and 1800-01-01. Host Fixture is still a separate person.
-45. Open Fay. The sheet says it is shared by Ada Fixture and read only. Link Fay to Host Fixture as partners. The two records stay themselves, and a partner line joins the buckets.
-46. Import the same file again. The tree is still Host, Eli, Dee, and Fay, one shared family, and the partner link is still there.
+46. Import the Families fixture. Open Visualize, turn Families on, and open Lens as Eli Fixture. Include Eli and Dee, dim Fay, and hide Rex. Hold Dee, turn Share details on, then choose Share as file. The file is a download. It is not posted anywhere.
+47. The file contains Eli, Dee, and Fay only. Fay has a name and no photo, date, or bio. Dee has the fixture photo and the date 1800-01-01. Eli's own fixture bio is open. Rex and Ada are absent.
+48. In a second browser context, import the host fixture (Host Fixture only). Choose Add a shared family, pick the file, and read the preview: Ada Fixture as the owner, 3 people, and Eli, Dee, and Fay each with an avatar. Rex is not listed.
+49. Add it. The sky shows that household as its own bucket, marked shared. Fay is a name and a generated avatar. Dee shows the fixture photo and 1800-01-01. Host Fixture is still a separate person.
+50. Open Fay. The sheet says it is shared by Ada Fixture and read only. Link Fay to Host Fixture as partners. The two records stay themselves, and a partner line joins the buckets.
+51. Import the same file again. The tree is still Host, Eli, Dee, and Fay, one shared family, and the partner link is still there.
 
 Screenshots: `share-<size>-preview.png`, `share-<size>-linked.png`.
 
@@ -111,6 +121,8 @@ Screenshots, one set per size:
 - `lens-<size>-guest-revoked.png` — the invite cleared
 - `lens-<size>-owner.png` — You, the full fixture tree again
 - `partner-status-<size>.png` — Dee Fixture divorced from Eli Fixture and remarried to Rema Fixture, labels open
+- `branch-owner-<size>-mark.png` — Eli Fixture's branch handed to Lane Fixture, with the owner mark on
+- `branch-owner-<size>-preview.png` — previewing as Lane Fixture, Eli's branch editable and Ada locked
 - `share-<size>-preview.png` — the import preview for Eli, Dee, and Fay Fixture
 - `share-<size>-linked.png` — that shared family in the sky, linked to Host Fixture
 

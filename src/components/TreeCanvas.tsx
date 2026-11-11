@@ -11,7 +11,7 @@ import { PERSONAL_MAP_MS, graphFromPersonalMap, layoutPersonalMap, morphGraph, p
 import { gatherCameraMs, gatherPoints, interruptGather, planGather } from "@/lib/gatherChoreography";
 import { gatherCameraRunning, playGatherCamera, prefersReducedMotion, runFlight, runLinesOut, takeGatherCamera, type GatherSession } from "@/lib/gatherPlay";
 import { gatheredPersonId } from "@/lib/personInteraction";
-import { usePersonInteraction } from "./PersonHoldMenu";
+import { usePersonInteraction, type BranchOwnerMenu } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
 import { commitUnlink, coupleUnlinkMark } from "@/lib/skyUnlink";
 import { LinkRolePicker } from "./LinkRolePicker";
@@ -30,6 +30,7 @@ type Props = {
   onPlace?: (personId: string, x: number) => void | Promise<void>;
   lineFilter?: LineFilter;
   canGather?: boolean;
+  branchOwner?: BranchOwnerMenu;
 };
 
 type View = { x: number; y: number; s: number };
@@ -66,12 +67,14 @@ export function TreeCanvas({
   onPlace,
   lineFilter = DEFAULT_LINE_FILTER,
   canGather = true,
+  branchOwner,
 }: Props) {
   const interaction = usePersonInteraction({
     people: tree.people,
     selectedId: highlightedId,
     editMode,
     canGather,
+    branchOwner,
     onSelect: onHighlight,
     onOpen,
   });

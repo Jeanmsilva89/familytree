@@ -19,7 +19,9 @@
  * invite from pending to accepted to revoked. Then, still on the fixture,
  * divorce Dee Fixture and Eli Fixture from Dee's editor and marry Dee to
  * Rema Fixture. The sky shows a quiet divorced line and a remarried bar.
- * Remarried is not stored. Then a separate pair of trees: export a share
+ * Remarried is not stored. Then the tree owner hands Eli Fixture's branch to
+ * Lane Fixture, a local invite, previews as Lane, edits inside that branch,
+ * and is blocked outside it. Then a separate pair of trees: export a share
  * file for Eli Fixture and import it into a fresh Host Fixture tree.
  * Hidden and withheld people stay out, a chosen link joins the two records
  * without merging them, and importing the file again does not duplicate
@@ -1530,6 +1532,224 @@ async function runPartnerStatus(page, viewport) {
   console.log(`${viewport.name}: divorce and remarriage saved, shown, and reloaded`);
 }
 
+async function tryNudge(page, viewport, personId) {
+  const selector = `.portrait-card[data-person-id="${personId}"]`;
+  await revealSkyPerson(page, viewport, personId);
+  const point = await bringMarkOnScreen(page, selector);
+  if (!point) fail(`${viewport.name}: ${personId} is not close enough to nudge`);
+  const before = await readTree(page);
+  const previous = before.people.find((person) => person.id === personId)?.rowNudge;
+  const stage = await page.locator(".family-sky").boundingBox();
+  if (!stage) fail(`${viewport.name}: the sky is not on screen`);
+  const scale = await page.evaluate(() => {
+    const world = document.querySelector(".sky-world");
+    const value = world ? getComputedStyle(world).transform : "none";
+    const match = /matrix\(([^)]+)\)/.exec(value);
+    const n = match ? Number(match[1].split(",")[0]) : 1;
+    return Number.isFinite(n) && n > 0 ? n : 1;
+  });
+  const roomRight = stage.x + stage.width - point.x;
+  const roomLeft = point.x - stage.x;
+  const dir = roomRight >= 36 ? 1 : -1;
+  const screenDelta = Math.min(40 * scale, (dir > 0 ? roomRight : roomLeft) - 20);
+  if (screenDelta < 16) fail(`${viewport.name}: ${personId} is too close to the edge to nudge`);
+  await page.mouse.move(point.x, point.y);
+  await page.mouse.down();
+  await page.mouse.move(point.x + dir * screenDelta, point.y, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(450);
+  const after = await readTree(page);
+  return { previous, next: after.people.find((person) => person.id === personId)?.rowNudge };
+}
+
+async function runBranchOwner(page, viewport) {
+  if ((await page.locator("html").getAttribute("data-theme")) !== "dark") {
+    fail(`${viewport.name}: branch owner check expected the dark theme`);
+  }
+  const lens = page.getByRole("button", { name: "Lens", exact: true });
+  if ((await lens.getAttribute("aria-pressed")) === "true") await lens.click();
+  const done = page.getByRole("button", { name: "Done", exact: true });
+  if (await done.count()) await done.click();
+
+  await turnFamiliesOff(page);
+  const classicEli = page.locator('.graph-stage:not(.family-sky) .portrait-card[data-person-id="fx-eli"]');
+  await classicEli.waitFor({ timeout: 8000 });
+  const classicMenu = await holdCard(page, classicEli, viewport);
+  await classicMenu.getByRole("menuitem", { name: "Branch owner" }).waitFor();
+  await page.keyboard.press("Escape");
+  await classicMenu.waitFor({ state: "detached" });
+  if ((await page.locator('.graph-stage:not(.family-sky)').getAttribute("data-layout")) !== "tree") {
+    fail(`${viewport.name}: the classic branch-owner menu moved the layout`);
+  }
+  await turnFamiliesOn(page, viewport);
+
+  await page.getByRole("button", { name: "Lens", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="working"]').waitFor();
+  const invite = page.getByRole("button", { name: "Invite card", exact: true });
+  await invite.scrollIntoViewIfNeeded();
+  await invite.click();
+  await page.getByLabel("Guest name").fill("Lane Fixture");
+  await page.getByRole("button", { name: "Add card", exact: true }).click();
+  await page.getByRole("button", { name: "Look as Lane Fixture, pending", exact: true }).waitFor();
+
+  const eli = await revealSkyPerson(page, viewport, "fx-eli");
+  await bringMarkOnScreen(page, '.portrait-card[data-person-id="fx-eli"]');
+  const menu = await holdCard(page, eli, viewport);
+  await menu.getByRole("menuitem", { name: "Branch owner" }).click();
+  await menu.getByRole("menuitemradio", { name: "Give this branch to Lane Fixture" }).click();
+  await menu.waitFor({ state: "detached" });
+  await page.waitForFunction(async () => {
+    const access = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const get = db.transaction("access", "readonly").objectStore("access").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    const lane = access?.links?.find((link) => link.guestLabel === "Lane Fixture");
+    return access?.branchOwners?.some((hand) => hand.branchRootId === "fx-eli" && hand.inviteId === lane?.id);
+  });
+  const savedTree = await readTree(page);
+  if ("access" in savedTree || "branchOwners" in savedTree) {
+    fail(`${viewport.name}: branch ownership was stored inside the tree`);
+  }
+
+  for (const id of ["fx-eli", "fx-dee", "fx-fay"]) {
+    const card = await revealSkyPerson(page, viewport, id);
+    if ((await card.getAttribute("data-branch-owner")) !== "Lane") {
+      fail(`${viewport.name}: ${id} did not show Lane's owner mark`);
+    }
+  }
+  const adaPlain = await revealSkyPerson(page, viewport, "fx-ada");
+  if (await adaPlain.getAttribute("data-branch-owner")) {
+    fail(`${viewport.name}: Ada Fixture wore an owner mark`);
+  }
+  await revealSkyPerson(page, viewport, "fx-eli");
+  await page.screenshot({ path: path.join(outDir, `branch-owner-${viewport.name}-mark.png`) });
+
+  await page.getByRole("button", { name: "Look as Lane Fixture, pending", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="arrange"]').waitFor();
+  for (const id of ["fx-eli", "fx-dee", "fx-fay", "fx-ada", "fx-ben"]) {
+    await revealSkyPerson(page, viewport, id);
+    await tapLensPerson(page, id);
+  }
+  await page.getByRole("button", { name: "Accept invite for Lane Fixture", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  const shown = (await resolved(page)).split(" ").filter(Boolean).sort();
+  const expected = ["fx-ada", "fx-ben", "fx-dee", "fx-eli", "fx-fay"];
+  if (JSON.stringify(shown) !== JSON.stringify(expected)) {
+    fail(`${viewport.name}: Lane's preview showed ${shown.join(" ")}`);
+  }
+  for (const id of ["fx-eli", "fx-dee", "fx-fay"]) {
+    const card = await revealSkyPerson(page, viewport, id);
+    if ((await card.getAttribute("data-edit")) !== "open") fail(`${viewport.name}: ${id} was not editable for Lane`);
+    if ((await card.getAttribute("data-branch-owner")) !== "Lane") fail(`${viewport.name}: ${id} lost the owner mark in preview`);
+  }
+  for (const id of ["fx-ada", "fx-ben"]) {
+    const card = await revealSkyPerson(page, viewport, id);
+    if ((await card.getAttribute("data-edit")) !== "locked") fail(`${viewport.name}: ${id} was editable outside Lane's branch`);
+    if (await card.getAttribute("data-branch-owner")) fail(`${viewport.name}: ${id} wore an owner mark in preview`);
+  }
+  await revealSkyPerson(page, viewport, "fx-eli");
+  await page.screenshot({ path: path.join(outDir, `branch-owner-${viewport.name}-preview.png`) });
+
+  const deeNudge = await tryNudge(page, viewport, "fx-dee");
+  if (typeof deeNudge.next !== "number" || deeNudge.next === deeNudge.previous) {
+    fail(`${viewport.name}: dragging Dee Fixture inside Lane's branch did not save a place`);
+  }
+  const adaNudge = await tryNudge(page, viewport, "fx-ada");
+  if (adaNudge.next !== adaNudge.previous) {
+    fail(`${viewport.name}: dragging Ada Fixture outside the branch changed her place`);
+  }
+
+  await revealSkyPerson(page, viewport, "fx-ada");
+  const blocked = page.locator('.graph-hit[data-from="fx-ada"][data-to="fx-ben"], .graph-hit[data-from="fx-ben"][data-to="fx-ada"], .sky-unlink[data-partners="fx-ada fx-ben"], .sky-unlink[data-partners="fx-ben fx-ada"]');
+  if (await blocked.count()) fail(`${viewport.name}: Ada and Ben's couple could be unlinked`);
+  let stray = false;
+  const onStray = (dialog) => {
+    stray = true;
+    dialog.dismiss().catch(() => undefined);
+  };
+  page.on("dialog", onStray);
+  const adaCouple = page.locator('[data-couple="fx-u-ab"]');
+  if (await adaCouple.count()) {
+    const box = await adaCouple.first().boundingBox();
+    if (box) await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  }
+  await page.waitForTimeout(300);
+  page.off("dialog", onStray);
+  if (stray) fail(`${viewport.name}: tapping Ada and Ben asked to unlink them`);
+  const kept = await readTree(page);
+  if (!kept.unions.some((union) => union.partnerIds.includes("fx-ada") && union.partnerIds.includes("fx-ben"))) {
+    fail(`${viewport.name}: Ada and Ben were unlinked`);
+  }
+
+  await revealSkyPerson(page, viewport, "fx-dee");
+  const deeEli = '.graph-hit[data-from="fx-dee"][data-to="fx-eli"], .graph-hit[data-from="fx-eli"][data-to="fx-dee"]';
+  const deePoint = await bringMarkOnScreen(page, deeEli);
+  if (!deePoint) fail(`${viewport.name}: Dee and Eli's link is not editable inside the branch`);
+  let parentMessage = "";
+  try {
+    parentMessage = await clickConfirm(page, deePoint, true);
+  } catch {
+    fail(`${viewport.name}: tapping Dee and Eli's link did not ask to unlink`);
+  }
+  if (!parentMessage.includes("Dee Fixture") || !parentMessage.includes("Eli Fixture")) {
+    fail(`${viewport.name}: the in-branch confirm said ${JSON.stringify(parentMessage)}`);
+  }
+  await page.waitForFunction(async () => {
+    const tree = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const get = db.transaction("tree", "readonly").objectStore("tree").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    return !tree.unions.some((union) => union.partnerIds.includes("fx-dee") && union.partnerIds.includes("fx-eli"));
+  });
+
+  await page.getByRole("button", { name: "You", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="working"]').waitFor();
+  const backEli = await revealSkyPerson(page, viewport, "fx-eli");
+  await bringMarkOnScreen(page, '.portrait-card[data-person-id="fx-eli"]');
+  const backMenu = await holdCard(page, backEli, viewport);
+  await backMenu.getByRole("menuitem", { name: "Branch owner" }).click();
+  await backMenu.getByRole("menuitemradio", { name: "Take this branch back" }).click();
+  await backMenu.waitFor({ state: "detached" });
+  await page.waitForFunction(async () => {
+    const access = await new Promise((resolve, reject) => {
+      const request = indexedDB.open("familytree");
+      request.onerror = () => reject(request.error);
+      request.onsuccess = () => {
+        const db = request.result;
+        const get = db.transaction("access", "readonly").objectStore("access").get("living");
+        get.onsuccess = () => resolve(get.result);
+        get.onerror = () => reject(get.error);
+      };
+    });
+    return !access?.branchOwners?.some((hand) => hand.branchRootId === "fx-eli");
+  });
+  const cleared = await revealSkyPerson(page, viewport, "fx-eli");
+  if (await cleared.getAttribute("data-branch-owner")) {
+    fail(`${viewport.name}: Eli kept an owner mark after the branch was taken back`);
+  }
+
+  await page.getByRole("button", { name: "Look as Lane Fixture, accepted", exact: true }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
+  await page.locator('.family-sky[data-lens-phase="preview"]').waitFor();
+  const locked = await tryNudge(page, viewport, "fx-dee");
+  if (locked.next !== deeNudge.next) {
+    fail(`${viewport.name}: Dee Fixture could still be moved after the branch was taken back`);
+  }
+  console.log(`${viewport.name}: branch handed to Lane Fixture, edited inside it, and taken back`);
+}
+
 async function runViewport(browser, viewport) {
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
@@ -1697,6 +1917,7 @@ async function runViewport(browser, viewport) {
     await runSkyUnlink(page, viewport);
     await runVisibilityLens(page, viewport);
     await runPartnerStatus(page, viewport);
+    await runBranchOwner(page, viewport);
     console.log(`${viewport.name}: links, buckets, stars, step-only child, row move, reload, place, unlink, lens, and partner status passed`);
   } catch (error) {
     await page.screenshot({ path: shot("failed") }).catch(() => undefined);

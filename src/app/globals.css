@@ -1541,7 +1541,8 @@ html[data-theme="dark"] .generated-avatar {
 .family-sky.is-editing.is-near .graph-lines line:not(.graph-hit) {
   pointer-events: none;
 }
-.family-sky.is-editing.is-near .graph-hit { pointer-events: stroke; cursor: pointer; }
+.family-sky.is-editing.is-near .graph-hit,
+.family-sky.is-near .graph-hit { pointer-events: stroke; cursor: pointer; }
 .family-sky .sky-unlink {
   position: absolute;
   z-index: 6;
@@ -1709,6 +1710,26 @@ html[data-theme="dark"] .generated-avatar {
   text-transform: uppercase;
   opacity: 0.72;
 }
+.branch-owner-choices {
+  display: grid;
+  gap: 4px;
+}
+.portrait-card[data-branch-owner] {
+  box-shadow: inset 0 0 0 2px #d2a85a;
+}
+.portrait-card .owner-mark {
+  position: absolute;
+  top: 6px;
+  right: 7px;
+  z-index: 1;
+  color: #e6c27a;
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  line-height: 1;
+  text-transform: uppercase;
+}
+.portrait-card[data-edit="open"] { cursor: grab; }
+.portrait-card[data-edit="locked"] { cursor: default; }
 .share-counts {
   margin: 4px 0 0;
   color: var(--muted);

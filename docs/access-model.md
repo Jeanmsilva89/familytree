@@ -45,7 +45,15 @@ Claims, strongest first:
 4. **Care.** Foster may edit, and loses a conflict to a line parent.
 5. **Partner.** A partner may edit the partner's record, but self wins. A step-parent has no claim on the step-child. They may edit the step link they are named on, at partner rank, and a line parent still prevails.
 
-A **delegate** acts as the branch owner. They do not form a party of their own. A guest, and a person on another tree, cannot edit.
+A **delegate** acts as the branch owner. They do not form a party of their own. A guest, and a person on another tree, cannot edit through `resolveEdit`.
+
+The tree owner can hand a branch to a guest named on a local invite. The hand is stored on the access state as `branchOwners`. It is not a kinship claim, and it does not change `resolveEdit`. `canEdit` is the gate for writing on this device:
+
+- The tree owner may edit anyone on their tree, except a person, union, or parent link locked by an imported shared family.
+- A guest may edit a person only when that person sits in a branch their invite holds. A relationship may be edited only when every person it names sits in such a branch.
+- A pending or accepted invite can hold a branch. Revoking the invite removes those hands, the same way it clears that guest's detail grants. A revoked guest cannot edit.
+- Taking the branch back removes the hand.
+- Access saved before hands existed loads with no hands. `TreeData` still has no access field. A share file does not carry hands.
 
 A relationship has no self claim for the child. When two line parents both may edit a child link, `standing` is empty until they agree or the tree owner decides. On the child's own record, the child stands when there is no tree owner, and `branchConflict` still reports the parents' tie.
 
@@ -69,7 +77,7 @@ Living details stay withheld unless the viewer is that person, a detail grant na
 
 A viewer always sees their own living details when they are shown. A person marked deceased stays open without a grant, including when dimmed. Withdrawing a grant does not close either of those.
 
-Revoking an invite clears that guest's visible set and clears the detail grants stored on their lens. A grant that is still sitting on the lens after a revoke, or a grant left on the revoked link, reveals nothing. Another viewer's grants stay where they are.
+Revoking an invite clears that guest's visible set, clears the detail grants stored on their lens, and ends any branch that guest was holding. A grant that is still sitting on the lens after a revoke, or a grant left on the revoked link, reveals nothing. Another viewer's grants stay where they are.
 
 `ownerWorkingView` is the exception for the person who already holds the tree on their device: every person on that tree, details open, including sealed people. It does not include a linked tree. Anyone else gets an empty graph. A lens is how that owner decides what another viewer sees.
 
@@ -82,6 +90,8 @@ Revoking an invite clears that guest's visible set and clears the detail grants 
 The owner arranges a lens on the family sky, not in a settings form. They choose a viewer — a person on the tree, or a guest named on an invite — and touch a branch or a person to include, hide, or dim them. An invite card moves from pending to accepted to revoked.
 
 Holding a person while arranging opens Share details. That toggles a detail grant for the viewer. It does not gather the sky and it does not open the editor. In the preview, a withheld person shows only their name and generated avatar. A granted person shows the photo and dates already stored for them. The same hold menu can save Share as file.
+
+The hold menu, on the sky and on the classic graph, also offers Branch owner. The tree owner hands that person's branch to one of the local invite guests, or takes it back. Nothing is sent. While the lens or Edit is on, a person in a branch someone else holds wears a small ring and the guest's name. The default sky does not draw it. Previewing as that guest is the edit: people and relationships inside a branch they hold can be nudged, linked, and unlinked, and everything else stays as it is. An imported shared family stays read-only in that preview too.
 
 ## Share file
 
