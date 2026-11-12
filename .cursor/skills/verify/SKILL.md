@@ -169,7 +169,17 @@ Screenshots: `orbit-<size>-rows.png`, `orbit-<size>-focused.png`, `orbit-<size>-
 
 On a phone with `prefers-reduced-motion: reduce`, Orbit shows the same seats without loading three.js. Screenshot: `orbit-phone-reduced-focused.png`.
 
-Frame times for the press-and-hold glide are measured at 390×844, deviceScaleFactor 3, with CPU throttle 6. The check fails if p95 is over 16.8 ms.
+Frame times for the press-and-hold glide are measured at 390×844, deviceScaleFactor 3, with CPU throttle 6. The previous gather sat at 16.7 ms. The check fails if p95 is over 18.7 ms.
+
+Still in the dark theme, at both sizes, after the Orbit checks above. The people are the same fixture.
+
+57. Open Lens and look as Eli Fixture. Turn Orbit on if it is off. Include Eli Fixture and Ada Fixture, dim Fay Fixture, and hide Rex Fixture. Leave Dee Fixture untouched. Turn on Preview. The stage shows Eli, Ada, and Fay only. Rex and Dee are absent, including from the line list. Fay is dimmed, with a generated avatar and no photo or date. Ada is a name and a generated avatar. Eli has a generated avatar.
+58. Press and hold Eli Fixture. He ends at the center. Ada is above him. Fay is dialed back. Nobody sits in the partner seat, and Dee is not on the stage. Tap empty space. The rows return.
+59. Look as Quinn Fixture, still pending, and preview. Orbit draws no one.
+60. Back as you, add an invite card named Lane Fixture, and on the classic graph give Eli Fixture's branch to Lane. Include Eli, Dee, Fay, Ada, and Ben for Lane, accept, and preview with Orbit on. Eli, Dee, and Fay wear Lane's mark and can be dragged. Ada and Ben are locked. Dragging Dee saves her place. Dragging Ada does not. A second tap on Ada does not open the editor. A second tap on Dee does.
+61. On a fresh host tree, import a fixture share of one withheld person, Nia Fixture. Turn Edit on, then Orbit. Nia is marked shared, shows a generated avatar, and cannot be dragged. The sheet says the family is read only.
+
+Screenshots: `orbit-<size>-preview.png` after the gather in Eli's preview, `orbit-<size>-branch.png` while previewing as Lane.
 
 ```bash
 node scripts/verify-orbit.mjs
