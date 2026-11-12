@@ -17,12 +17,12 @@ At desktop (1280×800) and phone (390×844), in the dark theme:
 2. Open Visualize.
 3. Turn on the Families lens.
 4. Zoom until family buckets and a blood link are on screen. No person-to-person link may cross the soft background of a family that neither endpoint belongs to.
-5. Zoom out to the star view (`data-level="far"`) and confirm the "Tap a family to zoom in" hint.
+5. Zoom out to the star view (`data-level="far"`) and confirm the "Tap a family to zoom in" hint. Record the star centers, reload, and confirm they match before any family is moved.
 6. Tap the Ada & Ben star and confirm the sky zooms back in.
 7. Open Cora Fixture's person sheet and move her into Dee Fixture's family unit. The choice must stick in IndexedDB.
 8. Confirm Nia Fixture and Pal Fixture share a family, and that family is not Stu Fixture's. Nia's only parent on the tree is Stu, as a step-parent. Pal's parents are not on the tree. Wynn Fixture's only parent is Stu, as step, and Wynn has no partner: Wynn is a family of one, not a member of Stu's bucket. Zoom to Wynn and confirm the step link from Stu.
 9. Move Rex Fixture (no partner, parent of Eli) into Dee's family and confirm Rex sits on Dee's row.
-10. Reload and confirm the star positions match.
+10. Reload and confirm the star positions still match.
 
 Before the Families checks, on the classic graph (Families lens off):
 
@@ -159,7 +159,7 @@ The Orbit chip is off until someone turns it on. The generation rows, dark coupl
 
 With the fixture imported and Visualize open, at desktop (1280×800) and phone (390×844), in the dark theme:
 
-52. Confirm the scripts loaded so far do not contain three.js. Turn on Orbit. The stage reads Fixture. It opens on generation rows: Ada Fixture above Eli Fixture, Eli above Fay Fixture.
+52. Confirm the scripts loaded so far do not contain three.js. Turn on Orbit. The stage reads Fixture. It opens on generation rows: Ada Fixture above Eli Fixture, Eli above Fay Fixture. Record each card's seat, reload, open Orbit again, and confirm the seats match.
 53. Tap Eli Fixture once. The rows stay, and the editor does not open. Tap him again. The editor opens on Eli Fixture. Close it. The rows stay.
 54. Press and hold Eli Fixture. The lines leave while the layout is still the rows, then the cards glide. Eli's own transform changes during that glide. He ends at the center, Dee Fixture beside him, Fay below, Ada above, and Wynn Fixture dialed back. The lines draw in after the cards settle.
 55. Tap empty space. The generation rows return. Tap Eli once more. A tap still does not focus anyone.

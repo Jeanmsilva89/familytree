@@ -3,6 +3,7 @@ import { partnerStatus } from "./types";
 import { CARD, showsCoupleBar, type GraphLayout, type LaidCard, type LaidCouple, type LaidFork } from "./layout";
 import { buildGraph } from "./layoutGraph";
 import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type JoinReason, type UnitLinkKind } from "./familyUnits";
+import { placeFamilySkySeed, seedFromUnits, treeForLens } from "./layoutSeed";
 import type { Camera } from "./graphView";
 import { routePersonLink, type RouteBucket, type RouteCurve } from "./familySkyRoute";
 
@@ -105,8 +106,6 @@ export function zoomLevel(s: number, previous?: ZoomLevel, farAt: number = SKY_Z
 
 const BUCKET = { padX: 34, padTop: 52, padBottom: 30, n: 4, gap: 70 };
 const LABEL_ROOM = BUCKET.padTop - BUCKET.padBottom;
-const GRAVITY = 0.25;
-const GEN_PULL = 0.3;
 
 function bucketShape(halfW: number, halfH: number) {
   const n = BUCKET.n;
@@ -152,7 +151,9 @@ function unitTree(tree: TreeData, unit: FamilyUnit, via: Record<string, JoinReas
   const people = tree.people
     .filter((p) => inside.has(p.id))
     // graphX is the classic graph's absolute place. It must not size or move a bucket.
-    .map((p) => ({ ...p, graphX: undefined }));
+    .map((p) => ({ ...p, graphX: undefined }))
+    // The saved array order is not part of the graph.
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const unions = tree.unions
     .map((u) => ({ ...u, partnerIds: u.partnerIds.filter((id) => inside.has(id)) }))
     .filter((u) => u.partnerIds.length >= 2);
@@ -163,7 +164,8 @@ function unitTree(tree: TreeData, unit: FamilyUnit, via: Record<string, JoinReas
       parentIds: l.parentIds.filter((id) => inside.has(id) && !(brought.has(id) && !brought.has(l.childId))),
     }))
     .filter((l) => l.parentIds.length > 0)
-    .map((l) => (l.unionId && !unions.some((u) => u.id === l.unionId) ? { ...l, unionId: undefined } : l));
+    .map((l) => (l.unionId && !unions.some((u) => u.id === l.unionId) ? { ...l, unionId: undefined } : l))
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   return { people, unions, childLinks, focusPersonId: unit.rootId };
 }
 
@@ -319,180 +321,6 @@ function shiftFork(fork: LaidFork, dx: number, dy: number, unitId: string): SkyF
   };
 }
 
-/**
- * Generation of every person, counted down from people with no parents.
- * A parentless partner takes the generation of the partner who has parents.
- * The same tree always yields the same numbers: focus is not a seed.
- */
-function stableGenerations(tree: TreeData): Map<string, number> {
-  const known = new Set(tree.people.map((p) => p.id));
-  const parents = new Map<string, string[]>();
-  for (const link of tree.childLinks) {
-    if (!known.has(link.childId)) continue;
-    for (const parentId of link.parentIds) {
-      if (!known.has(parentId) || parentId === link.childId) continue;
-      const list = parents.get(link.childId) ?? [];
-      if (!list.includes(parentId)) list.push(parentId);
-      parents.set(link.childId, list);
-    }
-  }
-  const gen = new Map(tree.people.map((p) => [p.id, 0]));
-  const cap = Math.max(1, tree.people.length);
-  let changed = true;
-  for (let guard = 0; changed && guard < cap * 3; guard++) {
-    changed = false;
-    for (const person of tree.people) {
-      const ps = parents.get(person.id);
-      if (!ps?.length) continue;
-      const g = Math.min(cap, Math.max(...ps.map((id) => gen.get(id) ?? 0)) + 1);
-      if (g > (gen.get(person.id) ?? 0)) {
-        gen.set(person.id, g);
-        changed = true;
-      }
-    }
-    for (const union of tree.unions) {
-      if (union.kind !== "married" && union.kind !== "partnered") continue;
-      const ids = [...new Set(union.partnerIds.filter((id) => known.has(id)))];
-      const anchored = ids.filter((id) => (parents.get(id) ?? []).length > 0);
-      if (!anchored.length) continue;
-      const target = Math.min(...anchored.map((id) => gen.get(id) ?? 0));
-      for (const id of ids) {
-        if ((parents.get(id) ?? []).length) continue;
-        if ((gen.get(id) ?? 0) !== target) {
-          gen.set(id, target);
-          changed = true;
-        }
-      }
-    }
-  }
-  return gen;
-}
-
-type Node = { w: number; h: number; r: number; level: number; x: number; y: number };
-
-/**
- * Deterministic force layout: linked buckets attract, all buckets repel,
- * older generations float up. A final pass removes any overlap.
- */
-function placeBuckets(nodes: Node[], edges: { a: number; b: number; weight: number }[], start: number) {
-  const n = nodes.length;
-  if (!n) return;
-  const avgR = nodes.reduce((s, b) => s + b.r, 0) / n;
-  const levelStep = avgR * 1.1;
-
-  // Seed on a golden-angle spiral in breadth-first order from the start bucket.
-  const adj = nodes.map(() => [] as number[]);
-  for (const e of edges) {
-    adj[e.a].push(e.b);
-    adj[e.b].push(e.a);
-  }
-  const orderList: number[] = [];
-  const seen = new Set<number>();
-  const visit = (root: number) => {
-    const queue = [root];
-    seen.add(root);
-    while (queue.length) {
-      const i = queue.shift()!;
-      orderList.push(i);
-      for (const j of adj[i]) if (!seen.has(j)) { seen.add(j); queue.push(j); }
-    }
-  };
-  visit(start);
-  for (let i = 0; i < n; i++) if (!seen.has(i)) visit(i);
-  orderList.forEach((i, k) => {
-    const angle = k * 2.399963;
-    const radius = avgR * 1.7 * Math.sqrt(k);
-    nodes[i].x = Math.cos(angle) * radius;
-    nodes[i].y = Math.sin(angle) * radius * 0.8 - nodes[i].level * levelStep;
-  });
-
-  const iterations = n > 150 ? 160 : 280;
-  const dispX = new Float64Array(n);
-  const dispY = new Float64Array(n);
-  for (let it = 0; it < iterations; it++) {
-    const temp = avgR * 1.2 * (1 - it / iterations) + 1;
-    dispX.fill(0);
-    dispY.fill(0);
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        let dx = nodes[i].x - nodes[j].x;
-        let dy = nodes[i].y - nodes[j].y;
-        let d = Math.hypot(dx, dy);
-        if (d < 0.01) {
-          dx = Math.cos(i * 7 + j);
-          dy = Math.sin(i * 7 + j);
-          d = 1;
-        }
-        const k = nodes[i].r + nodes[j].r + BUCKET.gap;
-        // Short-range repulsion only, so the sky packs into a cloud.
-        if (d > k * 1.8) continue;
-        const f = (k * k) / d;
-        dispX[i] += (dx / d) * f;
-        dispY[i] += (dy / d) * f;
-        dispX[j] -= (dx / d) * f;
-        dispY[j] -= (dy / d) * f;
-      }
-    }
-    for (const e of edges) {
-      const a = nodes[e.a];
-      const b = nodes[e.b];
-      const dx = a.x - b.x;
-      const dy = a.y - b.y;
-      const d = Math.max(0.01, Math.hypot(dx, dy));
-      const k = a.r + b.r + BUCKET.gap;
-      const f = ((d * d) / k) * Math.min(2, Math.sqrt(e.weight));
-      dispX[e.a] -= (dx / d) * f;
-      dispY[e.a] -= (dy / d) * f;
-      dispX[e.b] += (dx / d) * f;
-      dispY[e.b] += (dy / d) * f;
-    }
-    for (let i = 0; i < n; i++) {
-      const node = nodes[i];
-      // Pull toward the centre, and gently toward the generation's height.
-      dispX[i] -= node.x * GRAVITY;
-      dispY[i] += (-node.level * levelStep - node.y) * GEN_PULL - node.y * GRAVITY * 0.5;
-      const len = Math.hypot(dispX[i], dispY[i]);
-      if (len > 0) {
-        const step = Math.min(len, temp);
-        node.x += (dispX[i] / len) * step;
-        node.y += (dispY[i] / len) * step;
-      }
-    }
-  }
-
-  removeOverlaps(nodes);
-}
-
-/** Push overlapping bucket boxes (plus a gap) apart along the shorter axis. */
-function removeOverlaps(nodes: Node[]) {
-  const n = nodes.length;
-  for (let pass = 0; pass < 600; pass++) {
-    let moved = false;
-    for (let i = 0; i < n; i++) {
-      for (let j = i + 1; j < n; j++) {
-        const a = nodes[i];
-        const b = nodes[j];
-        const dx = b.x - a.x;
-        const dy = b.y - a.y;
-        const ox = (a.w + b.w) / 2 + BUCKET.gap * 0.5 - Math.abs(dx);
-        const oy = (a.h + b.h) / 2 + BUCKET.gap * 0.5 - Math.abs(dy);
-        if (ox <= 0 || oy <= 0) continue;
-        moved = true;
-        if (ox < oy) {
-          const sg = dx === 0 ? (i < j ? 1 : -1) : Math.sign(dx);
-          a.x -= sg * ox * 0.5;
-          b.x += sg * ox * 0.5;
-        } else {
-          const sg = dy === 0 ? 1 : Math.sign(dy);
-          a.y -= sg * oy * 0.5;
-          b.y += sg * oy * 0.5;
-        }
-      }
-    }
-    if (!moved) break;
-  }
-}
-
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 
 const LINK_GAP = 7;
@@ -645,17 +473,23 @@ export function curveHitsCards(q: Curve, cards: { x: number; y: number }[], samp
 }
 
 /**
- * Lay out the sky. The result is a pure function of the tree: the same people,
- * links, and overrides always land in the same places. Focus and any earlier
- * sky are not inputs.
+ * Lay out the sky. The result is a pure function of the kinship graph, the
+ * saved row nudges, and the saved family-unit overrides. Focus, any earlier
+ * sky, and the order of the saved arrays are not inputs. `visibleIds` drops
+ * everyone a lens has hidden before buckets are placed, so their saved places
+ * cannot appear in that view.
  */
-export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = routePersonLink): FamilySky {
-  const units = deriveFamilyUnits(tree);
-  const gen = stableGenerations(tree);
+export function layoutFamilySky(
+  tree: TreeData,
+  route: typeof routePersonLink = routePersonLink,
+  visibleIds?: ReadonlySet<string>,
+): FamilySky {
+  const source = visibleIds ? treeForLens(tree, visibleIds) : tree;
+  const units = deriveFamilyUnits(source);
 
   // 1. Each unit's own generation-row layout, in local coordinates.
   const local = units.units.map((unit) => {
-    const graph = buildGraph(unitTree(tree, unit, units.via), unit.rootId);
+    const graph = buildGraph(unitTree(source, unit, units.via), unit.rootId);
     const cards = graph.cards;
     const minX = Math.min(...cards.map((c) => c.x - CARD.w / 2));
     const maxX = Math.max(...cards.map((c) => c.x + CARD.w / 2));
@@ -663,31 +497,19 @@ export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = 
     const maxY = Math.max(...cards.map((c) => c.y + CARD.h));
     // Room for the label on top: the shape wraps the content plus a strip above it.
     const shape = bucketShape((maxX - minX) / 2, (maxY - minY) / 2 + LABEL_ROOM / 2);
-    const oldest = Math.min(...unit.memberIds.map((id) => gen.get(id) ?? 0));
-    return { unit, graph, minX, maxX, minY, maxY, shape, level: -oldest };
+    return { unit, graph, minX, maxX, minY, maxY, shape };
   });
 
-  // 2. Place the buckets.
-  const indexOf = new Map(units.units.map((u, i) => [u.id, i]));
-  const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
-  const edgeMap = new Map<string, { a: number; b: number; weight: number }>();
-  for (const link of units.links) {
-    const key = pairKey(link.fromUnitId, link.toUnitId);
-    const e = edgeMap.get(key) ?? { a: indexOf.get(link.fromUnitId)!, b: indexOf.get(link.toUnitId)!, weight: 0 };
-    e.weight += 1;
-    edgeMap.set(key, e);
-  }
-  const nodes: Node[] = local.map((l) => ({
-    w: 2 * l.shape.rx,
-    h: 2 * l.shape.ry,
-    r: Math.hypot(l.shape.rx, l.shape.ry) * 0.85,
-    level: l.level,
-    x: 0,
-    y: 0,
-  }));
-  // Always seed from the first unit. Which person is in focus does not move the sky.
-  const edgeList = [...edgeMap.values()];
-  placeBuckets(nodes, edgeList, 0);
+  // 2. Hang each family from its parent family. The seed ignores array order,
+  // and a change inside one family does not recompute the families above it.
+  const seed = seedFromUnits(units);
+  const sizeOf = new Map(local.map((item) => [item.unit.id, { w: 2 * item.shape.rx, h: 2 * item.shape.ry }]));
+  const placed = new Map(placeFamilySkySeed(seed, (id) => sizeOf.get(id) ?? { w: 0, h: 0 }, BUCKET.gap).map((item) => [item.id, item]));
+  const nodes = local.map((item) => {
+    const at = placed.get(item.unit.id) ?? { x: item.shape.rx, y: item.shape.ry };
+    const size = sizeOf.get(item.unit.id) ?? { w: 2 * item.shape.rx, h: 2 * item.shape.ry };
+    return { x: at.x, y: at.y, w: size.w, h: size.h };
+  });
 
   // 3. Shift into positive world coordinates.
   const pad = 80;
@@ -719,13 +541,13 @@ export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = 
     const dy = node.y - localCy + LABEL_ROOM / 2;
     for (const card of l.graph.cards) cards.push({ ...card, x: card.x + dx, y: card.y + dy, unitId: l.unit.id });
     for (const couple of l.graph.couples) {
-      const union = tree.unions.find((item) => item.id === couple.id);
+      const union = source.unions.find((item) => item.id === couple.id);
       couples.push({
         ...couple,
         cx: couple.cx + dx,
         cy: couple.cy + dy,
         unitId: l.unit.id,
-        status: union ? partnerStatus(tree, union) : couple.status,
+        status: union ? partnerStatus(source, union) : couple.status,
       });
     }
     for (const fork of l.graph.forks) forks.push(shiftFork(fork, dx, dy, l.unit.id));
@@ -740,8 +562,11 @@ export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = 
       glow: 110 + 46 * Math.sqrt(l.unit.memberIds.length),
     });
   });
-  const order = new Map(tree.people.map((p, i) => [p.id, i]));
-  cards.sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  const byId = (a: { id: string }, b: { id: string }) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  cards.sort(byId);
+  buckets.sort(byId);
+  couples.sort(byId);
+  forks.sort(byId);
   const cardOf = new Map(cards.map((c) => [c.id, c]));
 
   // 5. Links between buckets: person to person, and one edge per bucket pair.
@@ -767,9 +592,11 @@ export function layoutFamilySky(tree: TreeData, route: typeof routePersonLink = 
     edges.set(key, edge);
   }
 
+  links.sort(byId);
+  const unitEdges = [...edges.values()].sort(byId);
   const width = Math.max(320, ...buckets.map((b) => b.cx + b.rx + pad));
   const height = Math.max(280, ...buckets.map((b) => b.cy + b.ry + pad));
-  return { width, height, cards, couples, forks, buckets, links, unitEdges: [...edges.values()], units, shift: { x: 0, y: 0 } };
+  return { width, height, cards, couples, forks, buckets, links, unitEdges, units, shift: { x: 0, y: 0 } };
 }
 
 export type Box = { minX: number; minY: number; maxX: number; maxY: number };

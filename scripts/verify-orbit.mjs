@@ -63,6 +63,19 @@ async function openTree(page) {
   await page.locator(".family-sky").waitFor();
 }
 
+function orbitSeatSnapshot(page) {
+  return page.locator(".orbit-stage .portrait-card").evaluateAll((nodes) =>
+    nodes
+      .map((node) => ({
+        id: node.getAttribute("data-person-id"),
+        x: node.style.getPropertyValue("--x"),
+        y: node.style.getPropertyValue("--y"),
+        ring: node.getAttribute("data-ring") || "",
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id)),
+  );
+}
+
 function cardBox(page, id) {
   return page.evaluate((id) => {
     const el = document.querySelector(`.orbit-stage [data-person-id="${id}"]`);
@@ -135,6 +148,21 @@ async function runSize(browser, size, reduced) {
     if (!portraits.some((card) => card.id === "fx-dee" && card.portrait === "photo")) {
       fail(`${label}: Dee's fixture photo is not on her card`);
     }
+    const seatsBefore = await orbitSeatSnapshot(page);
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByRole("button", { name: /menu/i }).waitFor({ timeout: 20000 });
+    await page.getByText("Looking at Ada").waitFor();
+    if ((await page.locator(".graph-overlay").count()) === 0) {
+      await page.locator(".family-overlay").getByRole("button", { name: "Visualize", exact: true }).click();
+    }
+    await page.locator(".family-sky").waitFor();
+    await page.getByRole("button", { name: "Orbit", exact: true }).click();
+    await page.locator('.orbit-stage[data-ready="true"]').waitFor({ timeout: 15000 });
+    const seatsAfter = await orbitSeatSnapshot(page);
+    if (JSON.stringify(seatsBefore) !== JSON.stringify(seatsAfter)) {
+      fail(`${label}: orbit seats changed after reload`);
+    }
+    console.log(`${label}: a reload kept the orbit seats`);
     await page.screenshot({ path: path.join(outDir, `orbit-${size.name}${reduced ? "-reduced" : ""}-rows.png`) });
 
     await page.mouse.click(eli.x, eli.y);

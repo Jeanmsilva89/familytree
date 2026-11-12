@@ -184,7 +184,10 @@ function bloodScore(tree: TreeData, id: string, household: Set<string>): number 
 /** Generations for every person, including people outside the focus family. */
 function allGenerations(tree: TreeData, homeIds: string[]): Map<string, number> {
   const gen = computeGenerations(tree, homeIds);
-  for (const person of tree.people) {
+  // A family the focus walk never reaches is seeded from the same person
+  // whichever way the saved list is ordered. Otherwise the rows flip.
+  const pending = [...tree.people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const person of pending) {
     if (gen.has(person.id)) continue;
     const seed = householdCouple(tree, person.id);
     const more = computeGenerations(tree, seed.length ? seed : [person.id]);
@@ -419,7 +422,9 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
           const byBirth = birthKey(personById(tree, p.via)).localeCompare(birthKey(personById(tree, q.via)));
           if (byBirth) return byBirth;
         }
-        return blocks.indexOf(p.block) - blocks.indexOf(q.block);
+        // Array position is not part of the graph. The same people in a
+        // different saved order must keep the same left and right.
+        return p.block.id < q.block.id ? -1 : p.block.id > q.block.id ? 1 : 0;
       });
       const rankOf = new Map<string, number>();
       for (const n of list) {
@@ -452,7 +457,10 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     }
   };
   place(homeBlock, 0, 0);
-  for (const block of blocks) {
+  const pending = blocks
+    .filter((block) => block.visit < 0)
+    .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  for (const block of pending) {
     if (block.visit >= 0) continue;
     const placed = blocks.filter((b) => b.visit >= 0);
     const edge = placed.length ? Math.max(...placed.map(right)) : 0;

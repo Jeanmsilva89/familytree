@@ -131,7 +131,8 @@ async function visiblePerson(page, id) {
       if (id && el.getAttribute("data-person-id") !== id) return false;
       const opacity = Number(getComputedStyle(el).opacity);
       const rect = el.getBoundingClientRect();
-      return opacity > 0.55 && rect.width > 8 && rect.left > 0 && rect.right < innerWidth && rect.top > 40 && rect.bottom < innerHeight - 24;
+      // Stay clear of the edges. A card clipped by the frame can pass a loose box check and still miss the tap.
+      return opacity > 0.55 && rect.width > 8 && rect.left > 48 && rect.right < innerWidth - 48 && rect.top > 64 && rect.bottom < innerHeight - 64;
     });
     if (!pick) return null;
     const rect = pick.getBoundingClientRect();
