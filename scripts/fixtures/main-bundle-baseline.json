@@ -1,4 +1,4 @@
 {
-  "note": "Uncompressed bytes of the client files the home route loads. The webpack runtime is excluded: it only lists chunk ids, and it must not contain three.js. Orbit's renderer is a separate chunk and is not in this list. The largest file grew when Orbit learned to seat a lens preview.",
-  "sizes": [557, 2531, 6218, 8537, 13978, 18271, 43229, 173019, 174133, 226157]
+  "note": "Uncompressed bytes of the client files the home route loads. The webpack runtime is excluded: it only lists chunk ids, and it must not contain three.js. Orbit's renderer is a separate chunk and is not in this list. The largest file grew when the family sky stopped using a force layout and placed families from a kinship seed.",
+  "sizes": [557, 2531, 6218, 8537, 13978, 18369, 43229, 173019, 174133, 228176]
 }

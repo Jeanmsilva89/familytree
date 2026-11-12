@@ -195,7 +195,15 @@ export function FamilySky({
     if (!lens?.active || lens.phase === "arrange") return;
     clearInteraction();
   }, [clearInteraction, lens?.active, lens?.phase]);
-  const baseSky = useMemo(() => layoutFamilySky(tree, routePersonLink), [tree]);
+  // Preview draws only the people that lens resolved. Arrange still lays out
+  // the whole tree so a hidden person can be touched as a ghost. An empty
+  // preview (a pending guest) is a different key from the owner's sky.
+  const previewKey = lens?.active && lens.phase === "preview" ? `preview:${lens.resolvedIds.join("|")}` : "";
+  const baseSky = useMemo(() => {
+    if (!previewKey) return layoutFamilySky(tree, routePersonLink);
+    const visible = new Set(previewKey.slice("preview:".length).split("|").filter(Boolean));
+    return layoutFamilySky(tree, routePersonLink, visible);
+  }, [previewKey, tree]);
   const gatheredId = gatheredPersonId(interaction.focus, editMode);
   const personal = useMemo(
     () => (gatheredId ? layoutPersonalMap(tree, gatheredId) : null),

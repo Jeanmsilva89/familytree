@@ -16,8 +16,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 204,
       "unitId": "fu-fx-ada",
       "generation": 0,
-      "lx": -0.408,
-      "ly": 0.718
+      "lx": -0.418,
+      "ly": 0.737
     },
     {
       "id": "fx-ben",
@@ -27,8 +27,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 204,
       "unitId": "fu-fx-ada",
       "generation": 0,
-      "lx": 0.408,
-      "ly": 0.718
+      "lx": 0.418,
+      "ly": 0.737
     },
     {
       "id": "fx-cora",
@@ -39,7 +39,7 @@ export const SAMPLE_SCENE: SampleScene = {
       "unitId": "fu-fx-ada",
       "generation": 1,
       "lx": 0,
-      "ly": -0.86
+      "ly": -0.883
     },
     {
       "id": "fx-eli",
@@ -49,8 +49,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 52,
       "unitId": "fu-fx-dee",
       "generation": 1,
-      "lx": 0.408,
-      "ly": 0.718
+      "lx": 0.418,
+      "ly": 0.737
     },
     {
       "id": "fx-dee",
@@ -60,8 +60,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 268,
       "unitId": "fu-fx-dee",
       "generation": 1,
-      "lx": -0.408,
-      "ly": 0.718
+      "lx": -0.418,
+      "ly": 0.737
     },
     {
       "id": "fx-fay",
@@ -72,7 +72,7 @@ export const SAMPLE_SCENE: SampleScene = {
       "unitId": "fu-fx-dee",
       "generation": 2,
       "lx": 0,
-      "ly": -0.86
+      "ly": -0.883
     },
     {
       "id": "fx-gran",
@@ -82,8 +82,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 60,
       "unitId": "fu-fx-gran",
       "generation": 0,
-      "lx": -0.408,
-      "ly": 0.718
+      "lx": -0.418,
+      "ly": 0.737
     },
     {
       "id": "fx-mae",
@@ -93,8 +93,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 12,
       "unitId": "fu-fx-gran",
       "generation": 1,
-      "lx": -0.408,
-      "ly": -0.86
+      "lx": -0.418,
+      "ly": -0.883
     },
     {
       "id": "fx-stu",
@@ -104,8 +104,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 228,
       "unitId": "fu-fx-gran",
       "generation": 1,
-      "lx": 0.408,
-      "ly": -0.86
+      "lx": 0.418,
+      "ly": -0.883
     },
     {
       "id": "fx-nia",
@@ -115,8 +115,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 220,
       "unitId": "fu-fx-nia",
       "generation": 2,
-      "lx": -0.408,
-      "ly": -0.071
+      "lx": -0.418,
+      "ly": -0.073
     },
     {
       "id": "fx-pal",
@@ -126,8 +126,8 @@ export const SAMPLE_SCENE: SampleScene = {
       "hue": 20,
       "unitId": "fu-fx-nia",
       "generation": 2,
-      "lx": 0.408,
-      "ly": -0.071
+      "lx": 0.418,
+      "ly": -0.073
     },
     {
       "id": "fx-wynn",
@@ -138,7 +138,7 @@ export const SAMPLE_SCENE: SampleScene = {
       "unitId": "fu-fx-wynn",
       "generation": 2,
       "lx": 0,
-      "ly": -0.071
+      "ly": -0.073
     },
     {
       "id": "fx-rex",
@@ -149,7 +149,7 @@ export const SAMPLE_SCENE: SampleScene = {
       "unitId": "fu-fx-rex",
       "generation": 0,
       "lx": 0,
-      "ly": -0.071
+      "ly": -0.073
     }
   ],
   "families": [
@@ -166,10 +166,10 @@ export const SAMPLE_SCENE: SampleScene = {
         "fx-ben"
       ],
       "generation": 0,
-      "x": -2.821,
-      "y": 2.501,
+      "x": -3.2,
+      "y": 1.785,
       "z": 0,
-      "radius": 0.601,
+      "radius": 0.607,
       "hue": 204
     },
     {
@@ -185,10 +185,10 @@ export const SAMPLE_SCENE: SampleScene = {
         "fx-eli"
       ],
       "generation": 1,
-      "x": 0.108,
-      "y": 3.2,
+      "x": -3.2,
+      "y": -1.785,
       "z": 2.2,
-      "radius": 0.601,
+      "radius": 0.607,
       "hue": 268
     },
     {
@@ -203,10 +203,10 @@ export const SAMPLE_SCENE: SampleScene = {
         "fx-gran"
       ],
       "generation": 0,
-      "x": 0.563,
-      "y": -3.2,
+      "x": 1.071,
+      "y": 1.785,
       "z": 0,
-      "radius": 0.627,
+      "radius": 0.634,
       "hue": 60
     },
     {
@@ -221,8 +221,8 @@ export const SAMPLE_SCENE: SampleScene = {
         "fx-pal"
       ],
       "generation": 2,
-      "x": -2.274,
-      "y": -2.988,
+      "x": 1.068,
+      "y": -0.97,
       "z": 4.4,
       "radius": 0.58,
       "hue": 220
@@ -237,8 +237,8 @@ export const SAMPLE_SCENE: SampleScene = {
         "fx-wynn"
       ],
       "generation": 2,
-      "x": 2.821,
-      "y": -1.955,
+      "x": 3.2,
+      "y": -0.97,
       "z": 4.4,
       "radius": 0.58,
       "hue": 296
@@ -253,8 +253,8 @@ export const SAMPLE_SCENE: SampleScene = {
         "fx-rex"
       ],
       "generation": 0,
-      "x": 2.176,
-      "y": 1.691,
+      "x": -1.064,
+      "y": -0.97,
       "z": 0,
       "radius": 0.58,
       "hue": 52

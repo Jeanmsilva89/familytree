@@ -1812,6 +1812,19 @@ async function runViewport(browser, viewport) {
     await page.getByText("Tap a family to zoom in").waitFor();
     await page.screenshot({ path: shot("stars") });
 
+    const freshStars = await starSnapshot(page);
+    await page.reload({ waitUntil: "networkidle" });
+    await page.getByRole("button", { name: /menu/i }).waitFor({ timeout: 20000 });
+    await page.getByText("Looking at Ada").waitFor();
+    await openVisualize(page);
+    await turnFamiliesOn(page, viewport);
+    await showStars(page);
+    const reloadedStars = await starSnapshot(page);
+    if (JSON.stringify(freshStars) !== JSON.stringify(reloadedStars)) {
+      fail(`${viewport.name}: star positions changed after a fresh reload`);
+    }
+    console.log(`${viewport.name}: a fresh reload kept the star positions`);
+
     await assertStepOnlyChild(page, viewport);
     await showStars(page);
 

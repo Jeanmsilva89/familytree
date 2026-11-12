@@ -59,7 +59,6 @@ function byBirthThenName(a: Person, b: Person): number {
 
 export function deriveHouseholds(tree: TreeData): Households {
   const people = new Map(tree.people.map((p) => [p.id, p]));
-  const order = new Map(tree.people.map((p, i) => [p.id, i]));
   const known = (id: string) => people.has(id);
 
   const parentsOf = new Map<string, string[]>();
@@ -119,7 +118,9 @@ export function deriveHouseholds(tree: TreeData): Households {
   //    That parent heads a single-parent household. Prefer a parent who already
   //    heads one, then the parent with more children, then one whose own
   //    parents are on the tree, then the parent listed first.
-  const peopleInOrder = [...tree.people].sort((a, b) => order.get(a.id)! - order.get(b.id)!);
+  // Id order, not the saved array. Two devices that added the same people
+  // in a different sequence still build the same households.
+  const peopleInOrder = [...tree.people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   const homeParent = new Map<string, string>();
   for (const person of peopleInOrder) {
     const ps = parents(person.id);
@@ -164,7 +165,9 @@ export function deriveHouseholds(tree: TreeData): Households {
     }
     const best = [...candidates.values()].sort(
       (a, b) =>
-        b.line - a.line || b.count - a.count || households.indexOf(a.household) - households.indexOf(b.household),
+        b.line - a.line ||
+        b.count - a.count ||
+        (a.household.id < b.household.id ? -1 : a.household.id > b.household.id ? 1 : 0),
     )[0];
     if (!best) continue;
     best.household.childIds.push(person.id);

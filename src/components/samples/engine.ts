@@ -701,8 +701,11 @@ export function mountSample(options: MountOptions): () => void {
     level = "far";
   } else if (kind === "cards") {
     rig.dist = clampDist(fitted);
-    nearCut = rig.dist * 0.62;
-    farCut = rig.dist * 0.84;
+    // The closest the camera can sit is limits[0]. A sky that already fits
+    // near that distance used to put the near threshold past the stop, so a
+    // zoom in never crossed it. Keep the threshold where a zoom can reach it.
+    nearCut = Math.max(limits[0] * 1.08, rig.dist * 0.62);
+    farCut = Math.max(nearCut * 1.28, rig.dist * 0.84);
     writeTargets(cardPoses(scene, "far"), performance.now() / 1000, 0.01, false);
     setAttr("level", "far");
   } else {
