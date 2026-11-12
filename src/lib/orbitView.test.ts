@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import type { ChildLink, Person, TreeData, Union } from "./types";
+import { CARD } from "./layout";
 import {
   canOrbitFocus,
   fitGeneration,
@@ -9,9 +10,13 @@ import {
   isFixtureTree,
   previewSeen,
   layoutOrbit,
+  orbitMayEdit,
   orbitSegments,
   reduceOrbit,
+  sceneTree,
+  selectOrbit,
   type OrbitEvent,
+  type OrbitPick,
   type OrbitState,
   type SeenPerson,
 } from "./orbitView";
@@ -28,6 +33,10 @@ function tree(people: Person[], unions: Union[] = [], childLinks: ChildLink[] = 
 
 function seen(ids: string[], patch: Partial<SeenPerson> = {}): Map<string, SeenPerson> {
   return new Map(ids.map((id) => [id, { id, presence: "shown", details: "open", ...patch }]));
+}
+
+function roleOf(picks: OrbitPick[] | null, id: string) {
+  return picks?.find((pick) => pick.id === id)?.role;
 }
 
 function run(events: OrbitEvent[], start: OrbitState = initialOrbit()) {
@@ -250,5 +259,149 @@ describe("orbit gesture", () => {
     const hidden = seats.filter((seat) => seat.id !== "fx-fay");
     const remaining = orbitSegments(fixture, hidden);
     assert.equal(remaining.some((line) => line.toId === "fx-fay" || line.fromId === "fx-fay"), false);
+  });
+});
+
+describe("orbit selection", () => {
+  const link = (
+    id: string,
+    childId: string,
+    parentIds: string[],
+    kin?: Record<string, "blood" | "adopted" | "step" | "foster">,
+  ): ChildLink => ({ id, childId, parentIds, ...(kin ? { kin } : {}) });
+
+  /**
+   * FIXTURE. Invented people for the Orbit selection cases. Not a real family.
+   * Cam's parents are Ann and Bea, both mothers, plus step-parent Stu.
+   * Kip is Cam's half-sibling through Ann. Pat is the current spouse after
+   * a divorce from Ex. Hid is a second current partner the lens hides.
+   */
+  const complicated = tree(
+    [
+      person("cam", "Cam"),
+      person("pat", "Pat"),
+      person("ex", "Ex"),
+      person("hid", "Hid"),
+      person("ann", "Ann"),
+      person("bea", "Bea"),
+      person("stu", "Stu"),
+      person("kip", "Kip"),
+      person("half", "Half"),
+      person("adopted", "Adopted"),
+      person("foster", "Foster"),
+      person("stepkid", "Stepkid"),
+      person("out", "Out"),
+      person("dim", "Dim"),
+    ],
+    [
+      { id: "now", partnerIds: ["cam", "pat"], kind: "married" },
+      { id: "old", partnerIds: ["cam", "ex"], kind: "divorced" },
+      { id: "quiet", partnerIds: ["cam", "hid"], kind: "married" },
+      { id: "moms", partnerIds: ["ann", "bea"], kind: "married" },
+    ],
+    [
+      link("cam-line", "cam", ["ann", "bea", "stu"], { stu: "step" }),
+      link("kip-line", "kip", ["ann"]),
+      link("half-line", "half", ["cam"]),
+      link("adopted-line", "adopted", ["cam"], { cam: "adopted" }),
+      link("foster-line", "foster", ["cam"], { cam: "foster" }),
+      link("step-line", "stepkid", ["cam"], { cam: "step" }),
+      link("dim-line", "dim", ["cam"]),
+    ],
+  );
+
+  const visible = seen(complicated.people.map((item) => item.id).filter((id) => id !== "hid"));
+  visible.set("dim", { id: "dim", presence: "dimmed", details: "withheld" });
+  visible.set("pat", { id: "pat", presence: "shown", details: "withheld" });
+
+  it("places step, half, adoptive, and foster children, and keeps same-sex parents symmetric", () => {
+    const picks = selectOrbit(complicated, "cam", visible);
+    assert.ok(picks);
+    assert.equal(roleOf(picks, "cam"), "center");
+    assert.equal(roleOf(picks, "pat"), "partner");
+    assert.equal(roleOf(picks, "ann"), "parent");
+    assert.equal(roleOf(picks, "bea"), "parent");
+    assert.equal(roleOf(picks, "stu"), "parent");
+    assert.equal(roleOf(picks, "kip"), "sibling");
+    for (const id of ["half", "adopted", "foster", "stepkid"]) assert.equal(roleOf(picks, id), "child");
+    assert.equal(roleOf(picks, "ex"), "outer");
+    assert.equal(roleOf(picks, "out"), "outer");
+    assert.equal(roleOf(picks, "dim"), "outer");
+    assert.equal(picks.find((pick) => pick.id === "dim")?.presence, "dimmed");
+    assert.equal(picks.find((pick) => pick.id === "pat")?.details, "withheld");
+    assert.equal(picks.some((pick) => pick.id === "hid"), false);
+    assert.equal(picks.some((pick) => pick.id === ""), false);
+  });
+
+  it("does not invent a parent who is not on the tree", () => {
+    const oneParent = tree(
+      [person("cam", "Cam"), person("ann", "Ann")],
+      [],
+      [link("only", "cam", ["ann"])],
+    );
+    const picks = selectOrbit(oneParent, "cam");
+    assert.ok(picks);
+    assert.deepEqual(picks.map((pick) => pick.id).sort(), ["ann", "cam"]);
+    assert.equal(roleOf(picks, "ann"), "parent");
+  });
+
+  it("keeps a divorced parent nearby when the child is the focus, and the new spouse beside the remarried parent", () => {
+    const family = tree(
+      [person("fay", "Fay"), person("eli", "Eli"), person("dee", "Dee"), person("rema", "Rema")],
+      [
+        { id: "old", partnerIds: ["eli", "dee"], kind: "divorced" },
+        { id: "now", partnerIds: ["eli", "rema"], kind: "married" },
+      ],
+      [link("kid", "fay", ["eli", "dee"])],
+    );
+    const asChild = selectOrbit(family, "fay");
+    assert.equal(roleOf(asChild, "eli"), "parent");
+    assert.equal(roleOf(asChild, "dee"), "parent");
+    assert.equal(roleOf(asChild, "rema"), "outer");
+    const asParent = selectOrbit(family, "eli");
+    assert.equal(roleOf(asParent, "rema"), "partner");
+    assert.equal(roleOf(asParent, "dee"), "outer");
+    assert.equal(roleOf(asParent, "fay"), "child");
+  });
+
+  it("drops a hidden partner and does not reserve the seat beside the focus", () => {
+    const open = seen(["cam", "pat", "hid", "ann"]);
+    const closed = seen(["cam", "pat", "ann"]);
+    const withHid = layoutOrbit(complicated, "cam", open);
+    const without = layoutOrbit(complicated, "cam", closed);
+    assert.ok(withHid && without);
+    const hid = withHid.find((seat) => seat.id === "hid");
+    const patOpen = withHid.find((seat) => seat.id === "pat")!;
+    const patClosed = without.find((seat) => seat.id === "pat")!;
+    assert.equal(hid?.ring, "partner");
+    assert.equal(without.some((seat) => seat.id === "hid"), false);
+    assert.equal(patClosed.ring, "partner");
+    assert.equal(patClosed.x, CARD.w + CARD.coupleGap);
+    assert.ok(patOpen.x === CARD.w + CARD.coupleGap || patOpen.x > patClosed.x);
+    const lines = orbitSegments(sceneTree(complicated, closed), without);
+    assert.equal(lines.some((line) => line.fromId === "hid" || line.toId === "hid"), false);
+  });
+
+  it("builds the scene from the resolved people only", () => {
+    const allowed = seen(["cam", "ann", "pat"]);
+    const scene = sceneTree(complicated, allowed);
+    const dumped = JSON.stringify(scene);
+    assert.equal(dumped.includes("hid"), false);
+    assert.equal(dumped.includes("bea"), false);
+    assert.equal(dumped.includes("stu"), false);
+    assert.deepEqual(scene.people.map((item) => item.id).sort(), ["ann", "cam", "pat"]);
+    assert.equal(scene.unions.some((union) => union.partnerIds.includes("hid")), false);
+    assert.ok(scene.unions.some((union) => union.partnerIds.includes("pat") && union.partnerIds.includes("cam")));
+    const line = scene.childLinks.find((item) => item.childId === "cam");
+    assert.deepEqual(line?.parentIds, ["ann"]);
+    assert.equal(sceneTree(complicated), complicated);
+  });
+
+  it("refuses an edit affordance for a shared person and for anyone outside the guest's branch", () => {
+    const guest = (id: string) => id === "dee" || id === "eli";
+    assert.equal(orbitMayEdit("dee", { editing: true, edit: guest, sharedIds: ["shared"] }), true);
+    assert.equal(orbitMayEdit("ada", { editing: true, edit: guest, sharedIds: ["shared"] }), false);
+    assert.equal(orbitMayEdit("shared", { editing: true, edit: () => true, sharedIds: ["shared"] }), false);
+    assert.equal(orbitMayEdit("dee", { editing: false, edit: guest }), false);
   });
 });

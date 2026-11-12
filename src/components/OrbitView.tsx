@@ -14,8 +14,10 @@ import {
   layoutOrbit,
   ORBIT_GLIDE_MS,
   ORBIT_LINES_MS,
+  orbitMayEdit,
   orbitSegments,
   reduceOrbit,
+  sceneTree,
   type OrbitLayout,
   type OrbitSeat,
   type OrbitState,
@@ -25,12 +27,18 @@ import { displayName, type Person, type TreeData } from "@/lib/types";
 import type { OrbitLineBox } from "@/components/orbit/lines";
 
 const PAD = { top: 188, right: 16, bottom: 36, left: 16 };
+const NO_SHARED: readonly string[] = [];
 
 type Mark = {
   personId: string;
   draw: "shown" | "ghost";
   presence: "shown" | "dimmed";
   details: "open" | "withheld";
+  effect?: "include" | "dim" | "hide" | "unset";
+};
+
+type EditScope = {
+  person: (personId: string) => boolean;
 };
 
 type Props = {
@@ -40,9 +48,14 @@ type Props = {
   arranging?: boolean;
   editMode?: boolean;
   lineFilter?: LineFilter;
+  owners?: Record<string, string>;
+  showOwners?: boolean;
+  editScope?: EditScope;
+  sharedIds?: readonly string[];
   onHighlight?: (person?: Person) => void;
   onOpen: (person: Person) => void;
   onArrange?: (personId: string) => void;
+  onPlace?: (personId: string, x: number) => void;
 };
 
 type Camera = { x: number; y: number; s: number };
@@ -75,9 +88,14 @@ export function OrbitView({
   arranging = false,
   editMode = false,
   lineFilter = DEFAULT_LINE_FILTER,
+  owners,
+  showOwners = false,
+  editScope,
+  sharedIds,
   onHighlight,
   onOpen,
   onArrange,
+  onPlace,
 }: Props) {
   const stageRef = useRef<HTMLDivElement>(null);
   const inkRef = useRef<HTMLDivElement>(null);
@@ -95,17 +113,26 @@ export function OrbitView({
   const onOpenRef = useRef(onOpen);
   const onHighlightRef = useRef(onHighlight);
   const onArrangeRef = useRef(onArrange);
+  const onPlaceRef = useRef(onPlace);
+  const editScopeRef = useRef(editScope);
+  const sharedRef = useRef(sharedIds);
   peopleRef.current = tree.people;
   onOpenRef.current = onOpen;
   onHighlightRef.current = onHighlight;
   onArrangeRef.current = onArrange;
+  onPlaceRef.current = onPlace;
+  editScopeRef.current = editScope;
+  sharedRef.current = sharedIds;
 
   const seenKey = seen
-    ? [...seen.values()].map((row) => `${row.id}:${row.presence}:${row.details}`).sort().join("|")
-    : "";
+    ? `1:${[...seen.values()].map((row) => `${row.id}:${row.presence}:${row.details}`).sort().join("|")}`
+    : "0";
   const seenRef = useRef(seen);
   seenRef.current = seen;
-  const stableSeen = useMemo(() => (seenKey ? seenRef.current : undefined), [seenKey]);
+  const stableSeen = useMemo(
+    () => (seenKey === "0" ? undefined : seenRef.current ?? new Map()),
+    [seenKey],
+  );
 
   const dispatch = useCallback((event: Parameters<typeof reduceOrbit>[1]) => {
     const decision = reduceOrbit(stateRef.current, event);
@@ -115,7 +142,10 @@ export function OrbitView({
     if (effect.type === "open-editor" || effect.type === "select") {
       const personId = effect.personId;
       const person = peopleRef.current.find((item) => item.id === personId);
-      if (person) {
+      const scope = editScopeRef.current;
+      const shared = sharedRef.current?.includes(personId) ?? false;
+      const locked = Boolean(scope && (!scope.person(personId) || shared));
+      if (person && !(effect.type === "open-editor" && locked)) {
         if (effect.type === "open-editor") onOpenRef.current(person);
         else onHighlightRef.current?.(person);
       }
@@ -259,7 +289,8 @@ export function OrbitView({
     };
   }, [dispatch, reduced, state.lines]);
 
-  const graph = useMemo(() => buildGraph(tree), [tree]);
+  const viewTree = useMemo(() => sceneTree(tree, stableSeen), [stableSeen, tree]);
+  const graph = useMemo(() => buildGraph(viewTree), [viewTree]);
   const rowCam = useMemo(
     () => userCam ?? generationCamera(graph.cards, tree.focusPersonId, view),
     [graph.cards, tree.focusPersonId, userCam, view],
@@ -292,8 +323,8 @@ export function OrbitView({
   }, [drawnIds, graph.cards, seats, shownLayout]);
 
   const segments = useMemo(
-    () => orbitSegments(tree, activeSeats, lineFilter),
-    [activeSeats, lineFilter, tree],
+    () => orbitSegments(viewTree, activeSeats, lineFilter),
+    [activeSeats, lineFilter, viewTree],
   );
 
   const box = useMemo((): OrbitLineBox => {
@@ -317,6 +348,12 @@ export function OrbitView({
   const down = useRef<{ id: number; x: number; y: number; personId: string | null; moved: boolean } | null>(null);
   const holdTimer = useRef(0);
   const last = useRef({ x: 0, y: 0 });
+  const rowXRef = useRef(new Map<string, number>());
+  rowXRef.current = new Map(graph.cards.map((card) => [card.id, card.x]));
+  const place = useRef<{ pointerId: number; personId: string; originX: number; startX: number; x: number } | null>(null);
+  const [dragX, setDragX] = useState<{ id: string; x: number } | null>(null);
+  const sharedList = sharedIds ?? NO_SHARED;
+  const editing = Boolean(editScope) || editMode;
 
   const onPointerDown = (event: ReactPointerEvent<HTMLElement>) => {
     if (event.button !== 0) return;
@@ -326,6 +363,13 @@ export function OrbitView({
     last.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
     window.clearTimeout(holdTimer.current);
+    place.current = null;
+    if (personId && orbitMayEdit(personId, { editing: Boolean(editScope) || editMode, edit: editScope?.person, sharedIds: sharedList }) && stateRef.current.layout === "rows" && stateRef.current.motion === "idle") {
+      const originX = rowXRef.current.get(personId);
+      if (originX != null) {
+        place.current = { pointerId: event.pointerId, personId, originX, startX: event.clientX, x: originX };
+      }
+    }
     if (!personId || arranging || editMode) return;
     holdTimer.current = window.setTimeout(() => {
       const start = down.current;
@@ -341,6 +385,21 @@ export function OrbitView({
   const onPointerMove = (event: ReactPointerEvent<HTMLElement>) => {
     const start = down.current;
     if (!start || start.id !== event.pointerId) return;
+    const placing = place.current;
+    if (placing && placing.pointerId === event.pointerId) {
+      if (stateRef.current.layout !== "rows" || stateRef.current.motion !== "idle") {
+        place.current = null;
+        setDragX(null);
+      } else {
+        if (Math.abs(event.clientX - placing.startX) > HOLD_SLOP_PX) {
+          start.moved = true;
+          window.clearTimeout(holdTimer.current);
+          placing.x = placing.originX + (event.clientX - placing.startX) / (rowCamRef.current.s || 1);
+          setDragX({ id: placing.personId, x: placing.x });
+        }
+        return;
+      }
+    }
     if (!start.moved && Math.hypot(event.clientX - start.x, event.clientY - start.y) > HOLD_SLOP_PX) {
       start.moved = true;
       window.clearTimeout(holdTimer.current);
@@ -358,6 +417,16 @@ export function OrbitView({
   const onPointerUp = (event: ReactPointerEvent<HTMLElement>) => {
     const start = down.current;
     window.clearTimeout(holdTimer.current);
+    const placing = place.current;
+    if (placing && placing.pointerId === event.pointerId) {
+      place.current = null;
+      const movedPlace = Math.abs(placing.x - placing.originX) > 8 && stateRef.current.layout === "rows";
+      setDragX(null);
+      if (movedPlace && start) {
+        start.moved = true;
+        onPlaceRef.current?.(placing.personId, placing.x);
+      }
+    }
     if (!start || start.id !== event.pointerId) return;
     down.current = null;
     if (!start.moved && start.personId) {
@@ -402,6 +471,7 @@ export function OrbitView({
       data-renderer={renderer}
       data-ready={renderer !== "pending" && view.w > 0 ? "true" : "false"}
       data-fixture={fixture ? "true" : "false"}
+      data-linked={segments.map((line) => `${line.fromId}>${line.toId}`).sort().join(" ")}
       aria-label="Orbit view"
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -476,25 +546,35 @@ export function OrbitView({
           const pose = poseOf.get(card.id);
           if (!pose || !row) return null;
           const mark = marks?.[card.id];
-          const details = stableSeen?.get(card.id)?.details ?? "open";
+          const details = stableSeen?.get(card.id)?.details ?? mark?.details ?? "open";
           const dimmed = mark?.presence === "dimmed" || stableSeen?.get(card.id)?.presence === "dimmed";
           const ghost = mark?.draw === "ghost";
           const photo = details === "open" ? person.photo : undefined;
           const age = details === "open" ? ageLabel(person.birthDate) : undefined;
           const ring = shownLayout === "orbit" ? orbit?.ring : undefined;
+          const ownerName = showOwners ? owners?.[card.id] : undefined;
+          const shared = sharedList.includes(person.id);
+          const mayEdit = orbitMayEdit(person.id, { editing, edit: editScope?.person, sharedIds: sharedList });
+          const centerX = dragX?.id === card.id ? dragX.x : pose.x;
           return (
             <button
               key={card.id}
               type="button"
-              className={`portrait-card${photo ? " has-photo" : ""}${dimmed ? " is-lens-dim" : ""}${ghost ? " is-lens-ghost" : ""}`}
+              className={`portrait-card${photo ? " has-photo" : ""}${dimmed ? " is-lens-dim" : ""}${ghost ? " is-lens-ghost" : ""}${mayEdit ? " is-movable" : ""}`}
               data-person-id={person.id}
               data-name={displayName(person)}
               data-gen={row.gen}
               data-ring={ring}
               data-details={details}
+              data-lens={mark?.effect}
+              data-draw={mark?.draw}
+              data-portrait={photo ? "photo" : "generated"}
+              data-shared={shared ? "true" : undefined}
+              data-branch-owner={ownerName}
+              data-edit={editing ? (mayEdit ? "open" : "locked") : undefined}
               aria-pressed={state.selectedId === person.id}
               style={{
-                "--x": `${pose.x - CARD.w / 2}px`,
+                "--x": `${centerX - CARD.w / 2}px`,
                 "--y": `${pose.y}px`,
                 "--s": String(pose.scale),
                 "--a": String(dimmed && shownLayout === "rows" ? Math.min(pose.opacity, 0.32) : pose.opacity),
@@ -518,6 +598,7 @@ export function OrbitView({
               }}
             >
               {photo ? <img className="portrait-photo" src={photo} alt="" /> : <GeneratedAvatar person={person} className="swatch" />}
+              {ownerName ? <span className="owner-mark">{ownerName}</span> : null}
               <span className="identity">
                 <strong title={displayName(person)}>{person.givenName || displayName(person)}</strong>
                 {details === "open" ? <em>{age ?? "—"}</em> : null}

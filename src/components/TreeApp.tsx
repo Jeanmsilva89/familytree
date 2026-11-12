@@ -631,9 +631,17 @@ export function TreeApp() {
               arranging={Boolean(lensSky && lensSky.phase === "arrange")}
               editMode={graphEdit && !lensOn}
               lineFilter={lineFilter}
+              owners={ownerLabels}
+              showOwners={lensOn || graphEdit}
+              editScope={acting ? { person: allowPerson } : undefined}
+              sharedIds={sharedPersonIds}
               onHighlight={setHighlighted}
               onOpen={setSheetPerson}
               onArrange={lensSky?.onPerson}
+              onPlace={(id, x) => {
+                if (!allowPerson(id)) return;
+                return treeState.edit(id, { graphX: Math.round(x) });
+              }}
             />
           ) : lineFilter.families ? (
             <FamilySky

@@ -93,6 +93,12 @@ Holding a person while arranging opens Share details. That toggles a detail gran
 
 The hold menu, on the sky and on the classic graph, also offers Branch owner. The tree owner hands that person's branch to one of the local invite guests, or takes it back. Nothing is sent. While the lens or Edit is on, a person in a branch someone else holds wears a small ring and the guest's name. The default sky does not draw it. Previewing as that guest is the edit: people and relationships inside a branch they hold can be nudged, linked, and unlinked, and everything else stays as it is. An imported shared family stays read-only in that preview too.
 
+## On Orbit
+
+Orbit reads the same resolved view. While a lens preview is on, the scene is only the people `resolveVisibility` returned. A hidden person is not drawn, not dimmed, and not the end of a line. A hidden partner or parent does not keep an empty seat. A dimmed person stays dimmed, on the outer ring. Withheld living details are a name and a generated avatar; a photo is shown only when details are open. Everyone else shows their photo, or a generated avatar when they have none.
+
+The owner ring shows on Orbit when the lens or Edit is on. Previewing as a guest, a drag along the generation row changes the place of a person in a branch that guest holds, and only that person. A second tap opens the editor for them. Anyone outside the branch stays where they are, and the editor does not open. An imported shared family stays read-only. Gather is still the press-and-hold. A tap does not gather.
+
 ## Share file
 
 A share file is version 1 of `familytree-share`. Export runs `resolveVisibility` for the chosen viewer and writes only that graph. Hidden people are absent. A withheld living person keeps a name, and the screen draws a generated avatar from it. A detail grant, the viewer themselves, and a person marked deceased keep the details those rules already open. A parent link keeps its kin and role so the family still draws. The owner's name is on the file as provenance. Their living details are not, unless the viewer can see that person.

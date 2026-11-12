@@ -18,8 +18,18 @@ import type { KinKind, TreeData } from "./types";
 
 export type OrbitRing = "center" | "partner" | "near" | "outer";
 
+/** Kin seat, before the rings are drawn. Dimmed relatives collapse to `outer`. */
+export type OrbitRole = "center" | "partner" | "parent" | "child" | "sibling" | "outer";
+
 export type SeenPerson = {
   id: string;
+  presence: "shown" | "dimmed";
+  details: "open" | "withheld";
+};
+
+export type OrbitPick = {
+  id: string;
+  role: OrbitRole;
   presence: "shown" | "dimmed";
   details: "open" | "withheld";
 };
@@ -131,6 +141,110 @@ export function canOrbitFocus(
   return true;
 }
 
+/**
+ * Who Orbit seats around a focus person.
+ *
+ * `seen` is the resolved visibility. A person who is not in it is absent:
+ * no card, no line end, and no empty seat. A dimmed relative stays in the
+ * result, on the outer ring. Withheld details do not change the seat.
+ * Blood, step, adopted, and foster children are all children. Two parents
+ * of any role are both parents. A parent who is not on the tree is nobody.
+ * A divorced or separated partner does not sit beside the focus. The
+ * current spouse does, including after a remarriage.
+ */
+export function selectOrbit(
+  tree: TreeData,
+  focusId: string,
+  seen?: ReadonlyMap<string, SeenPerson>,
+): OrbitPick[] | null {
+  if (!canOrbitFocus(focusId, { tree, seen })) return null;
+  const visible = shownIds(tree, seen);
+  const focus = visible.get(focusId);
+  if (!focus || focus.presence !== "shown") return null;
+  const shown = new Set([...visible.values()].filter((row) => row.presence === "shown").map((row) => row.id));
+
+  const partners = new Set<string>();
+  for (const union of unionsFor(tree, focusId)) {
+    if (union.kind === "divorced" || union.kind === "separated") continue;
+    for (const id of union.partnerIds) {
+      if (id !== focusId && shown.has(id)) partners.add(id);
+    }
+  }
+  const parents = parentsOf(tree, focusId)
+    .map((parent) => parent.id)
+    .filter((id) => shown.has(id) && !partners.has(id));
+  const children = childrenOfPerson(tree, focusId)
+    .map((child) => child.id)
+    .filter((id) => shown.has(id) && !partners.has(id));
+  const siblings = new Set<string>();
+  for (const parent of parentsOf(tree, focusId)) {
+    for (const child of childrenOfPerson(tree, parent.id)) {
+      if (child.id !== focusId && shown.has(child.id) && !partners.has(child.id)) siblings.add(child.id);
+    }
+  }
+  for (const id of parents) siblings.delete(id);
+  for (const id of children) siblings.delete(id);
+
+  const role = new Map<string, OrbitRole>();
+  role.set(focusId, "center");
+  for (const id of partners) role.set(id, "partner");
+  for (const id of parents) role.set(id, "parent");
+  for (const id of children) role.set(id, "child");
+  for (const id of siblings) if (!role.has(id)) role.set(id, "sibling");
+
+  return [...visible.values()].map((row) => ({
+    id: row.id,
+    role: row.presence === "dimmed" ? "outer" : (role.get(row.id) ?? "outer"),
+    presence: row.presence,
+    details: row.details,
+  }));
+}
+
+/**
+ * The tree Orbit may draw. Hidden people are removed, and a link that named
+ * one of them keeps only the people who remain. An unknown parent is not added.
+ */
+export function sceneTree(tree: TreeData, seen?: ReadonlyMap<string, SeenPerson>): TreeData {
+  if (!seen) return tree;
+  const ids = new Set(seen.keys());
+  const people = tree.people.filter((person) => ids.has(person.id));
+  const unions = tree.unions.flatMap((union) => {
+    const partnerIds = union.partnerIds.filter((id) => ids.has(id));
+    if (partnerIds.length < 2) return [];
+    return [{ ...union, partnerIds }];
+  });
+  const childLinks = tree.childLinks.flatMap((link) => {
+    if (!ids.has(link.childId)) return [];
+    const parentIds = link.parentIds.filter((id) => ids.has(id));
+    if (!parentIds.length) return [];
+    const roles = pickRecord(link.roles, parentIds);
+    const kin = pickRecord(link.kin, parentIds);
+    return [{ ...link, parentIds, ...(roles ? { roles } : { roles: undefined }), ...(kin ? { kin } : { kin: undefined }) }];
+  });
+  return { ...tree, people, unions, childLinks };
+}
+
+function pickRecord<T>(record: Partial<Record<string, T>> | undefined, ids: string[]): Partial<Record<string, T>> | undefined {
+  if (!record) return undefined;
+  const next: Partial<Record<string, T>> = {};
+  for (const id of ids) {
+    const value = record[id];
+    if (value !== undefined) next[id] = value;
+  }
+  return Object.keys(next).length ? next : undefined;
+}
+
+/** Guest edit, owner edit, and a shared family. A shared person is never editable. */
+export function orbitMayEdit(
+  personId: string,
+  gate: { editing: boolean; edit?: (id: string) => boolean; sharedIds?: readonly string[] },
+): boolean {
+  if (!gate.editing || !personId) return false;
+  if (gate.sharedIds?.includes(personId)) return false;
+  if (gate.edit) return gate.edit(personId);
+  return true;
+}
+
 function shownIds(tree: TreeData, seen?: ReadonlyMap<string, SeenPerson>): Map<string, SeenPerson> {
   const out = new Map<string, SeenPerson>();
   for (const person of tree.people) {
@@ -164,43 +278,20 @@ export function layoutOrbit(
   focusId: string,
   seen?: ReadonlyMap<string, SeenPerson>,
 ): OrbitSeat[] | null {
-  if (!canOrbitFocus(focusId, { tree, seen })) return null;
-  const visible = shownIds(tree, seen);
-  if (!visible.has(focusId)) return null;
-  const available = new Set(
-    [...visible.values()].filter((row) => row.presence === "shown" && row.id !== focusId).map((row) => row.id),
-  );
-  const dimmed = new Set([...visible.values()].filter((row) => row.presence === "dimmed").map((row) => row.id));
-
-  const partners = new Set<string>();
-  for (const union of unionsFor(tree, focusId)) {
-    if (union.kind === "divorced" || union.kind === "separated") continue;
-    for (const id of union.partnerIds) {
-      if (available.has(id)) partners.add(id);
-    }
-  }
-  const parents = parentsOf(tree, focusId)
-    .map((parent) => parent.id)
-    .filter((id) => available.has(id) && !partners.has(id));
-  const children = childrenOfPerson(tree, focusId)
-    .map((child) => child.id)
-    .filter((id) => available.has(id) && !partners.has(id));
-  const siblings = new Set<string>();
-  for (const parent of parentsOf(tree, focusId)) {
-    for (const child of childrenOfPerson(tree, parent.id)) {
-      if (child.id !== focusId && available.has(child.id) && !partners.has(child.id)) siblings.add(child.id);
-    }
-  }
-  for (const id of parents) siblings.delete(id);
-  for (const id of children) siblings.delete(id);
-
-  const placed = new Set<string>([focusId, ...partners, ...parents, ...children, ...siblings]);
-  const outer = [...visible.keys()].filter((id) => !placed.has(id));
+  const picks = selectOrbit(tree, focusId, seen);
+  if (!picks) return null;
+  const idsFor = (role: OrbitRole) => picks.filter((pick) => pick.role === role).map((pick) => pick.id);
+  const dimmed = new Set(picks.filter((pick) => pick.presence === "dimmed").map((pick) => pick.id));
+  const partners = idsFor("partner").sort();
+  const parents = idsFor("parent");
+  const children = idsFor("child");
+  const siblings = idsFor("sibling");
+  const outer = idsFor("outer");
 
   const at = new Map<string, { x: number; y: number; ring: OrbitRing; scale: number; opacity: number }>();
   const focusCy = CARD.h / 2;
   at.set(focusId, { x: 0, y: focusCy, ring: "center", scale: 1, opacity: 1 });
-  [...partners].sort().forEach((id, index) => {
+  partners.forEach((id, index) => {
     at.set(id, { x: CARD.w + CARD.coupleGap + index * (CARD.w + CARD.gap), y: focusCy, ring: "partner", scale: 1, opacity: 1 });
   });
   for (const [id, pos] of arc(parents, NEAR_R, -Math.PI / 2, Math.PI / 2)) {
