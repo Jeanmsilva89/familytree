@@ -63,6 +63,8 @@ export type ShareChildLink = {
   parentIds: string[];
   roles?: Partial<Record<string, ParentRole>>;
   kin?: Partial<Record<string, KinKind>>;
+  /** Parents who are not people in this file. No ids, so a hidden relative cannot be named. */
+  unknownParents?: { role?: ParentRole }[];
 };
 
 export type ShareBundle = {
@@ -174,13 +176,27 @@ function shareChildLink(tree: TreeData, link: VisibleChildLink): ShareChildLink 
   const parentIds = link.parentIds.map((id) => id as string);
   const roles = pickRoles(source?.roles, parentIds);
   const kin = pickKin(source?.kin, parentIds);
+  const unknownParents = readUnknownParents(source?.unknownParents);
   return {
     id: link.id,
     childId: link.childId,
     parentIds,
     ...(roles ? { roles } : {}),
     ...(kin ? { kin } : {}),
+    ...(unknownParents ? { unknownParents } : {}),
   };
+}
+
+function readUnknownParents(value: unknown): { role?: ParentRole }[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const next: { role?: ParentRole }[] = [];
+  for (const item of value) {
+    if (!item || typeof item !== "object") continue;
+    const role = (item as { role?: unknown }).role;
+    if (role === "mother" || role === "father") next.push({ role });
+    else if (role === undefined) next.push({});
+  }
+  return next.length ? next : undefined;
 }
 
 function pickRoles(
@@ -336,7 +352,8 @@ function readChildLink(value: unknown, known: Set<string>): ShareChildLink {
   }
   const roles = readRoleMap(value.roles, parentIds);
   const kin = readKinMap(value.kin, parentIds);
-  return { id, childId, parentIds, ...(roles ? { roles } : {}), ...(kin ? { kin } : {}) };
+  const unknownParents = readUnknownParents(value.unknownParents);
+  return { id, childId, parentIds, ...(roles ? { roles } : {}), ...(kin ? { kin } : {}), ...(unknownParents ? { unknownParents } : {}) };
 }
 
 function readRoleMap(value: unknown, parentIds: string[]): ShareChildLink["roles"] {
@@ -481,6 +498,7 @@ export function importShareBundle(
       parentIds: link.parentIds.map((id) => localOf.get(id)!),
       ...(roles ? { roles } : {}),
       ...(kin ? { kin } : {}),
+      ...(link.unknownParents?.length ? { unknownParents: link.unknownParents.map((parent) => ({ ...parent })) } : {}),
     };
   });
   next = { ...next, unions: [...next.unions, ...unions], childLinks: [...next.childLinks, ...childLinks] };

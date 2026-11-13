@@ -98,7 +98,10 @@ describe("partner status (FIXTURE)", () => {
     assert.equal(partnerStatus(tree, next), "remarried");
     const units = deriveFamilyUnits(tree);
     assert.notEqual(units.unitOf[ada.id], units.unitOf[bea.id]);
-    assert.equal(units.unitOf[ada.id], units.unitOf[cora.id]);
+    // Kit is Ada and Bea's child, not Cora's, so Ada does not carry Kit into Cora's bucket.
+    assert.notEqual(units.unitOf[ada.id], units.unitOf[cora.id]);
+    assert.equal(units.unitOf[kit.id], units.unitOf[ada.id]);
+    assert.notEqual(units.unitOf[kit.id], units.unitOf[cora.id]);
     const divorced = units.links.find((link) => link.kind === "divorced");
     assert.ok(divorced, "a divorce is a quiet link, not a missing fact");
     assert.deepEqual([divorced!.fromPersonId, divorced!.toPersonId].sort(), [ada.id, bea.id].sort());
@@ -106,7 +109,13 @@ describe("partner status (FIXTURE)", () => {
     assert.notEqual(homes.homeOf[ada.id], homes.homeOf[bea.id]);
     const sky = layoutFamilySky(tree);
     assert.ok(sky.links.some((link) => link.kind === "divorced"));
-    assert.equal(sky.couples.find((couple) => couple.id === "u-new")?.status, "remarried");
+    assert.ok(
+      sky.links.some(
+        (link) =>
+          link.kind === "partner" &&
+          [link.fromPersonId, link.toPersonId].sort().join() === [ada.id, cora.id].sort().join(),
+      ),
+    );
     const graph = buildGraph(tree, ada.id);
     const bar = graph.couples.find((couple) => couple.id === "u-new");
     assert.equal(bar?.status, "remarried");

@@ -18,7 +18,7 @@ import {
   type FamilySky,
 } from "./familySky";
 import { LINK_BOW_LIMIT, curveBowRatio, pointInBucket } from "./familySkyRoute";
-import { ALL_FAMILY_UNIT_FIXTURES, FIXTURE_MATERNAL_FAMILY, FIXTURE_MOVED_PARENT, fuId } from "./familyUnits.fixtures";
+import { ALL_FAMILY_UNIT_FIXTURES, FIXTURE_BLENDED, FIXTURE_MATERNAL_FAMILY, FIXTURE_MOVED_PARENT, fuId } from "./familyUnits.fixtures";
 import { CARD } from "./layout";
 import type { ChildLink, Person, TreeData, Union } from "./types";
 
@@ -556,5 +556,23 @@ describe("family sky stability (FIXTURE trees)", () => {
     assert.ok(foster?.parentDrops.every((drop) => drop.kin === "foster"));
     assert.equal(bucket("kit").id, bucket("vic").id);
     assert.equal(sky.links.some((link) => link.toPersonId === "kit" && link.kind === "blood"), false);
+  });
+
+  it("keeps a remarried parent's child out of the step-parent bucket", () => {
+    const sky = layoutFamilySky(FIXTURE_BLENDED);
+    const bucket = (id: string) => sky.buckets.find((item) => item.memberIds.includes(fuId(id)))!;
+    assert.ok(bucket("kip").memberIds.includes(fuId("dale")));
+    assert.ok(bucket("kip").memberIds.includes(fuId("gran")));
+    assert.equal(bucket("kip").memberIds.includes(fuId("step")), false);
+    assert.deepEqual(bucket("pip").memberIds, [fuId("pip")]);
+    assert.equal(bucket("step").memberIds.includes(fuId("pip")), false);
+    const step = sky.links.find((link) => link.fromPersonId === fuId("step") && link.toPersonId === fuId("pip"));
+    assert.equal(step?.kind, "step");
+    assert.notEqual(step?.fromUnitId, step?.toUnitId);
+    const twice = layoutFamilySky(structuredClone(FIXTURE_BLENDED));
+    assert.deepEqual(
+      sky.buckets.map((item) => [item.id, item.cx, item.cy, item.memberIds]),
+      twice.buckets.map((item) => [item.id, item.cx, item.cy, item.memberIds]),
+    );
   });
 });

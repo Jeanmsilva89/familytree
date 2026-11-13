@@ -1,0 +1,72 @@
+{
+  "note": "FIXTURE. Invented people for the blended-family check. Not a real family. Never replace these names with real relatives. Kip's only parent on this tree is Dale. Kip's other parent is unknown, not Step. Pip's parents are not on this tree. Step is a step-parent only.",
+  "focusPersonId": "fx-dale",
+  "people": [
+    {
+      "id": "fx-gran",
+      "givenName": "Gran",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-dale",
+      "givenName": "Dale",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. Known parent of Kip. Married to Step.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-step",
+      "givenName": "Step",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. Step-parent only. Not a parent of Kip or Pip.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-kip",
+      "givenName": "Kip",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. One known parent, Dale. The other parent is unknown.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "fx-pip",
+      "givenName": "Pip",
+      "familyName": "Fixture",
+      "bio": "Fixture. Not a real person. Parents are not on this tree. Step is a step-parent only.",
+      "createdAt": "2024-01-01T00:00:00.000Z",
+      "updatedAt": "2024-01-01T00:00:00.000Z"
+    }
+  ],
+  "unions": [
+    { "id": "fx-u-ds", "partnerIds": ["fx-dale", "fx-step"], "kind": "married" }
+  ],
+  "childLinks": [
+    {
+      "id": "fx-c-dale",
+      "childId": "fx-dale",
+      "parentIds": ["fx-gran"],
+      "roles": { "fx-gran": "mother" }
+    },
+    {
+      "id": "fx-c-kip",
+      "childId": "fx-kip",
+      "parentIds": ["fx-dale"],
+      "roles": { "fx-dale": "father" },
+      "unknownParents": [{}]
+    },
+    {
+      "id": "fx-c-pip",
+      "childId": "fx-pip",
+      "parentIds": ["fx-step"],
+      "roles": { "fx-step": "father" },
+      "kin": { "fx-step": "step" },
+      "unknownParents": [{ "role": "mother" }, { "role": "father" }]
+    }
+  ]
+}

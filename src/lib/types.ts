@@ -119,6 +119,15 @@ export type Union = {
   extras?: ExtraField[];
 };
 
+/**
+ * A parent who is not a person on the tree.
+ * Never filled in from a partner. Role is optional because the parent may be
+ * unknown in every way, not only unnamed.
+ */
+export type UnknownParent = {
+  role?: ParentRole;
+};
+
 export type ChildLink = {
   id: string;
   childId: string;
@@ -127,6 +136,11 @@ export type ChildLink = {
   roles?: Partial<Record<string, ParentRole>>;
   /** How each parent relates to the child. Missing keys are blood. */
   kin?: Partial<Record<string, KinKind>>;
+  /**
+   * Parents who are not people on the tree. A partner is not written here
+   * in their place. A parent id that is not on the tree means the same thing.
+   */
+  unknownParents?: UnknownParent[];
 };
 
 /**

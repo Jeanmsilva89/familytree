@@ -378,6 +378,34 @@ export const FIXTURE_MOVED_PARENT: TreeData = {
   ],
 };
 
+/**
+ * FIXTURE: a remarriage and a step-only child. Dale's only recorded child
+ * is Kip; Kip's other parent is unknown, not Step. Pip's parents are not on
+ * the tree. Step is a step-parent only. Nobody here is a real relative.
+ */
+export const FIXTURE_BLENDED: TreeData = {
+  focusPersonId: fuId("dale"),
+  people: [
+    fx("gran", "Gran"),
+    fx("dale", "Dale"),
+    fx("step", "Step"),
+    fx("kip", "Kip"),
+    fx("pip", "Pip"),
+  ],
+  unions: [couple("dale", "step", "married")],
+  childLinks: [
+    kid("dale", [["gran", "mother"]]),
+    {
+      ...kid("kip", [["dale", "father"]]),
+      unknownParents: [{}],
+    },
+    {
+      ...kid("pip", [["step", "father", "step"]]),
+      unknownParents: [{ role: "mother" }, { role: "father" }],
+    },
+  ],
+};
+
 export const ALL_FAMILY_UNIT_FIXTURES: Record<string, TreeData> = {
   FIXTURE_MATERNAL_FAMILY,
   FIXTURE_REMARRIAGE,
@@ -390,4 +418,5 @@ export const ALL_FAMILY_UNIT_FIXTURES: Record<string, TreeData> = {
   FIXTURE_CYCLE,
   FIXTURE_BUCKET_RULE,
   FIXTURE_MOVED_PARENT,
+  FIXTURE_BLENDED,
 };

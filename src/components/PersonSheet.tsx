@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useId, useRef, useState, type ChangeEvent, type TouchEvent } from "react";
-import type { ExtraField, KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
+import type { ExtraField, KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind, UnknownParent } from "@/lib/types";
 import {
   KIN_KIND_OPTIONS,
   PARENT_ROLE_OPTIONS,
@@ -27,7 +27,13 @@ type Props = {
   onClose: () => void;
   onAddParent: (childId: string, name: string, role?: ParentRole, kin?: KinKind) => Promise<void>;
   onAddPartner: (personId: string, name: string, kind: UnionKind) => Promise<void>;
-  onAddChild: (parentIds: string[], name: string, unionId?: string, kin?: Partial<Record<string, KinKind>>) => Promise<void>;
+  onAddChild: (
+    parentIds: string[],
+    name: string,
+    unionId?: string,
+    kin?: Partial<Record<string, KinKind>>,
+    unknownParents?: UnknownParent[],
+  ) => Promise<void>;
   onAddSibling: (personId: string, name: string) => Promise<string | void>;
   onLinkExisting: (personId: string, otherId: string, role: LinkRole, kind?: UnionKind, parentRole?: ParentRole, kin?: KinKind) => Promise<void>;
   onSetUnionKind: (unionId: string, kind: UnionKind) => Promise<void>;
@@ -273,7 +279,11 @@ export function PersonSheet({
     }
     if (rel === "parent") await onAddParent(person.id, name, addRole || undefined, addKin);
     if (rel === "partner") await onAddPartner(person.id, name, kind);
-    if (rel === "child") await onAddChild(defaultParents, name, unions[0]?.id, childKinMap());
+    if (rel === "child" && addKin === "step") {
+      await onAddChild([person.id], name, undefined, { [person.id]: "step" }, [{ role: "mother" }, { role: "father" }]);
+    } else if (rel === "child") {
+      await onAddChild(defaultParents, name, unions[0]?.id, childKinMap());
+    }
     if (rel === "sibling") await onAddSibling(person.id, name);
     setName("");
     setHint(null);
