@@ -365,3 +365,28 @@ export function playGatherCamera(
     onDone();
   };
 }
+
+/** Zoom and focus glide: the same one-layer clip, from samples chosen up front. */
+export function playSkyCamera(
+  world: HTMLElement,
+  frames: { offset: number; transform: string }[],
+  ms: number,
+  onDone: () => void,
+) {
+  for (const anim of world.getAnimations()) {
+    if (anim.id === CAMERA_CLIP) anim.cancel();
+  }
+  if (ms <= 0 || frames.length < 2) {
+    onDone();
+    return;
+  }
+  const anim = world.animate(
+    frames.map((frame) => ({ offset: frame.offset, transform: frame.transform })),
+    { duration: ms, easing: "linear", fill: "both" },
+  );
+  anim.id = CAMERA_CLIP;
+  anim.onfinish = () => {
+    anim.cancel();
+    onDone();
+  };
+}
