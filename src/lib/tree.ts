@@ -1,4 +1,4 @@
-import type { ChildLink, KinKind, LinkRole, ParentRole, Person, TreeData, Union, UnionKind } from "./types";
+import type { ChildLink, KinKind, LinkRole, ParentRole, Person, TreeData, Union, UnionKind, UnknownParent } from "./types";
 import { emptyTree, kinOf, migrateUnionKind } from "./types";
 import { newId, nowIso } from "./ids";
 
@@ -145,21 +145,25 @@ export function addChild(
   givenName: string,
   unionId?: string,
   kin?: Partial<Record<string, KinKind>>,
+  unknownParents?: UnknownParent[],
 ): TreeData {
   if (parentIds.length < 1) throw new Error("A child needs at least one parent.");
   const child = createPerson(givenName);
+  const recorded = [...new Set(parentIds)];
   const resolvedUnion =
     unionId ??
-    tree.unions.find((u) => parentIds.every((id) => u.partnerIds.includes(id)))?.id;
+    tree.unions.find((u) => recorded.every((id) => u.partnerIds.includes(id)) && u.partnerIds.every((id) => recorded.includes(id)))?.id;
   const kinMap = kin
     ? Object.fromEntries(Object.entries(kin).filter(([, value]) => value && value !== "blood"))
     : undefined;
+  const unknowns = unknownParents?.map((parent) => (parent.role ? { role: parent.role } : {}));
   const link: ChildLink = {
     id: newId("c"),
     childId: child.id,
-    parentIds: [...new Set(parentIds)],
+    parentIds: recorded,
     unionId: resolvedUnion,
     kin: kinMap && Object.keys(kinMap).length ? kinMap : undefined,
+    ...(unknowns?.length ? { unknownParents: unknowns } : {}),
   };
   return { ...withPerson(tree, child), childLinks: [...tree.childLinks, link] };
 }
@@ -395,18 +399,31 @@ export function linkExisting(
     return { ...tree, childLinks: [...tree.childLinks, link] };
   }
 
-  const unions = unionsFor(tree, personId);
-  const parentIds = unions[0]?.partnerIds ?? [personId];
-  const unionId = unions[0]?.id;
+  // A child link records this person only. Their partner is not a parent
+  // unless someone links that parent too. The other parent stays unknown.
+  const parentIds = [personId];
+  const hasPartner = unionsFor(tree, personId).some(
+    (union) =>
+      (union.kind === "married" || union.kind === "partnered") &&
+      union.partnerIds.some((id) => id !== personId && getPerson(tree, id)),
+  );
+  const unknownParents: UnknownParent[] | undefined =
+    kinKind === "step" ? [{ role: "mother" }, { role: "father" }] : hasPartner ? [{}] : undefined;
   if (tree.childLinks.some((l) => l.childId === otherId && parentIds.every((id) => l.parentIds.includes(id)))) {
-    if (kinKind === "blood") return tree;
+    if (kinKind === "blood" && !unknownParents) return tree;
     return {
       ...tree,
       childLinks: tree.childLinks.map((l) => {
         if (l.childId !== otherId) return l;
         const kin = { ...l.kin };
-        for (const id of parentIds) kin[id] = kinKind;
-        return { ...l, kin };
+        if (kinKind !== "blood") {
+          for (const id of parentIds) kin[id] = kinKind;
+        }
+        return {
+          ...l,
+          kin: Object.keys(kin).length ? kin : undefined,
+          ...(unknownParents?.length && !l.unknownParents?.length ? { unknownParents } : {}),
+        };
       }),
     };
   }
@@ -414,7 +431,13 @@ export function linkExisting(
     kinKind === "blood"
       ? undefined
       : Object.fromEntries(parentIds.map((id) => [id, kinKind]));
-  const link: ChildLink = { id: newId("c"), childId: otherId, parentIds: [...new Set(parentIds)], unionId, kin };
+  const link: ChildLink = {
+    id: newId("c"),
+    childId: otherId,
+    parentIds,
+    kin,
+    ...(unknownParents?.length ? { unknownParents } : {}),
+  };
   return { ...tree, childLinks: [...tree.childLinks, link] };
 }
 

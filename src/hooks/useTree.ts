@@ -22,7 +22,7 @@ import {
   updateParentLink,
   updatePerson,
 } from "@/lib/tree";
-import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
+import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind, UnknownParent } from "@/lib/types";
 import { emptyTree } from "@/lib/types";
 
 export function useTree() {
@@ -86,8 +86,8 @@ export function useTree() {
   );
 
   const child = useCallback(
-    async (parentIds: string[], name: string, unionId?: string, kin?: Partial<Record<string, KinKind>>) =>
-      mutate((current) => addChild(current, parentIds, name, unionId, kin)),
+    async (parentIds: string[], name: string, unionId?: string, kin?: Partial<Record<string, KinKind>>, unknownParents?: UnknownParent[]) =>
+      mutate((current) => addChild(current, parentIds, name, unionId, kin, unknownParents)),
     [mutate],
   );
 

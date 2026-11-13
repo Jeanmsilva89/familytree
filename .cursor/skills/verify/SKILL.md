@@ -128,6 +128,20 @@ Screenshots, one set per size:
 
 `<size>` is `desktop` or `phone`.
 
+## Blended family
+
+`npm run verify` also runs `scripts/verify-blended-family.mjs`. The fixture is `scripts/fixtures/verify-blended-family.json`. Every person is named Fixture.
+
+At desktop (1280×800) and phone (390×844), in the dark theme:
+
+1. Import the fixture. Open Visualize. Turn on the Families lens.
+2. Kip Fixture sits with Dale Fixture and Gran Fixture. That family is not Step Fixture's. Kip's other parent is unknown, and Step is only Dale's spouse.
+3. Pip Fixture is a family of one, not a member of Step Fixture's bucket. Zoom to Pip. The card reads "Parents unknown", and the bucket is marked unknown. A step link runs from Step Fixture to Pip Fixture.
+4. No person-to-person link crosses the soft background of a family that neither endpoint belongs to.
+5. Record the star centers, reload, and confirm they match.
+
+Screenshot: `blended-<size>.png`. `<size>` is `desktop` or `phone`.
+
 ## Run it locally
 
 ```bash

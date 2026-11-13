@@ -18,6 +18,11 @@ import { kinOf } from "./types";
  *    mother. When that does not decide it (two women, two men, or no roles
  *    recorded), the partner whose own parent is on the tree anchors, and if
  *    both or neither have one, the partner listed first in the union does.
+ *    The join is refused when either partner has a placing child the other
+ *    is not a placing parent of. Those two stay in their own families, with
+ *    a partner link between the buckets. A remarriage does not pull a child
+ *    into a step-parent's bucket, and it does not pull the step-parent into
+ *    the child's. An unknown parent is never filled in from a partner.
  * 3. Parents. Someone who is not joining a partner joins their line parent.
  *    Which parent links pull a child into a parent's bucket, strongest first:
  *    blood and adopted are equal, then foster. A step link never does. Among
@@ -30,12 +35,17 @@ import { kinOf } from "./types";
  *    that person having a parent on the tree when a couple needs an anchor.
  *    Foster does place the child, and it does count as family for that
  *    anchor, but it loses to a blood or adopted parent. The line drawn for
- *    a foster child stays foster. A step-only child, or a child whose only
- *    other parent ids are not on the tree, heads their own unit (with their
- *    partner, if they have one) and the step link is drawn between buckets.
+ *    a foster child stays foster. Foster is a real placing relationship:
+ *    the child sits with the foster parent, and a spouse who is not also a
+ *    placing parent does not share that bucket.
+ *    A step-only child, or a child whose parents are unknown or not on the
+ *    tree, heads their own unit (with their partner, if they have one) and
+ *    the step link is drawn between buckets. Membership never walks a
+ *    partner edge to invent a parent.
  *    Children follow their mother, daughters stay with their family, a son
- *    who marries out goes with his wife, and a single son stays with his
- *    parents. That maternal placement still wins over a step link.
+ *    who marries out goes with his wife when every child is a child of both,
+ *    and a single son stays with his parents. That maternal placement still
+ *    wins over a step link.
  * 4. Root. Someone with no anchoring partner and no line parent heads a unit.
  *    The unit is named after them and their couple partner.
  *
@@ -151,6 +161,18 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
     if (options[0]) coupleOf.set(person.id, options[0]);
   }
 
+  // A placing child of one partner, and not of the other, is a step boundary.
+  // Walking the partner edge would put that child in the step-parent's bucket.
+  const placingIds = (childId: string) =>
+    (parentsOf.get(childId) ?? []).filter((parent) => parent.kin !== "step").map((parent) => parent.id);
+  const hasExclusiveChild = (personId: string, otherId: string) => {
+    for (const childId of parentsOf.keys()) {
+      const placing = placingIds(childId);
+      if (placing.includes(personId) && !placing.includes(otherId)) return true;
+    }
+    return false;
+  };
+
   // 2. Who anchors a couple.
   const anchorOf = (union: Union, a: string, b: string): string => {
     const [first, second] = union.partnerIds.indexOf(a) <= union.partnerIds.indexOf(b) ? [a, b] : [b, a];
@@ -168,8 +190,12 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
   for (const person of tree.people) {
     const couple = coupleOf.get(person.id);
     if (couple && anchorOf(couple.union, person.id, couple.partnerId) === couple.partnerId) {
-      via.set(person.id, { kind: "partner", personId: couple.partnerId });
-      continue;
+      const blended =
+        hasExclusiveChild(person.id, couple.partnerId) || hasExclusiveChild(couple.partnerId, person.id);
+      if (!blended) {
+        via.set(person.id, { kind: "partner", personId: couple.partnerId });
+        continue;
+      }
     }
     const parent = lineParent(person.id);
     via.set(person.id, parent ? { kind: "parent", personId: parent } : { kind: "root" });
@@ -306,6 +332,31 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
   const viaOut: Record<string, JoinReason> = {};
   for (const person of tree.people) viaOut[person.id] = via.get(person.id)!;
   return { units, unitOf, via: viaOut, links, ignoredOverrides: ignored };
+}
+
+/**
+ * The person's placing parents are not on the tree, and the tree says so:
+ * an explicit unknown parent, a parent id that names nobody, or only step
+ * links. A person with no child link at all is a root, not an unknown parent.
+ */
+export function parentsAreUnknown(tree: TreeData, personId: string): boolean {
+  const known = new Set(tree.people.map((person) => person.id));
+  let recorded = false;
+  let placing = false;
+  for (const link of tree.childLinks) {
+    if (link.childId !== personId) continue;
+    if (link.unknownParents?.length) recorded = true;
+    for (const parentId of link.parentIds) {
+      if (!known.has(parentId)) {
+        recorded = true;
+        continue;
+      }
+      if (parentId === personId) continue;
+      if (kinOf(link, parentId) === "step") recorded = true;
+      else placing = true;
+    }
+  }
+  return recorded && !placing;
 }
 
 export function unitOfPerson(result: FamilyUnits, personId: string): FamilyUnit | undefined {

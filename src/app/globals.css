@@ -1344,6 +1344,17 @@ html[data-theme="dark"] .generated-avatar {
 .sky-bucket.is-shared {
   stroke-dasharray: 5 4;
 }
+.sky-bucket.is-unknown {
+  fill: color-mix(in srgb, var(--muted) 8%, var(--graph-bg));
+  stroke: color-mix(in srgb, var(--muted) 42%, transparent);
+}
+.portrait-card em.is-unknown-parents {
+  font-size: 0.58rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  opacity: 0.55;
+  line-height: 1.25;
+}
 .family-sky.is-mid .sky-bucket {
   fill: color-mix(in srgb, var(--graph-spouse) 10%, var(--graph-bg));
   stroke-width: 1.2;

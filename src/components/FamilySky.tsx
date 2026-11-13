@@ -2,11 +2,12 @@
 
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
-import { displayName, kinKindLabel } from "@/lib/types";
+import { displayName, kinKindLabel, partnerStatus } from "@/lib/types";
 import { PartnerStatusMark } from "./PartnerStatusMark";
 import { CARD, ageLabel, lineageIds } from "@/lib/layout";
 import { GeneratedAvatar } from "./GeneratedAvatar";
 import { centerTransform, fitContentScale, superellipsePath, type Camera } from "@/lib/graphView";
+import { parentsAreUnknown } from "@/lib/familyUnits";
 import { skyFromPersonalMap } from "@/lib/familySkyFocus";
 import { layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
 import { gatherCameraMs, gatherPoints, interruptGather, planGather } from "@/lib/gatherChoreography";
@@ -129,6 +130,11 @@ function allows(filter: LineFilter, kind: UnitLinkKind) {
   return lineFilterAllows(filter, kind);
 }
 
+function partnerLinkStatus(tree: TreeData, a: string, b: string) {
+  const union = tree.unions.find((item) => item.partnerIds.includes(a) && item.partnerIds.includes(b));
+  return union ? partnerStatus(tree, union) : undefined;
+}
+
 function curveMid(curve: { x1: number; y1: number; cx: number; cy: number; x2: number; y2: number }) {
   return {
     x: 0.25 * curve.x1 + 0.5 * curve.cx + 0.25 * curve.x2,
@@ -196,6 +202,13 @@ export function FamilySky({
   // the whole tree so a hidden person can be touched as a ghost. An empty
   // preview (a pending guest) is a different key from the owner's sky.
   const previewKey = lens?.active && lens.phase === "preview" ? `preview:${lens.resolvedIds.join("|")}` : "";
+  const unknownParents = useMemo(() => {
+    const ids = new Set<string>();
+    for (const person of tree.people) {
+      if (parentsAreUnknown(tree, person.id)) ids.add(person.id);
+    }
+    return ids;
+  }, [tree]);
   const baseSky = useMemo(() => {
     if (!previewKey) return layoutFamilySky(tree, routePersonLink);
     const visible = new Set(previewKey.slice("preview:".length).split("|").filter(Boolean));
@@ -1246,13 +1259,15 @@ export function FamilySky({
             ? sky.buckets.filter((bucket) => !lensOn || bucket.memberIds.some((id) => lensDraws(id))).map((bucket) => {
                 const lit = bucket.id === focusUnit;
                 const drop = carried?.over === bucket.id && sky.units.unitOf[carried.id] !== bucket.id;
+                const unknownBucket = bucket.memberIds.every((id) => unknownParents.has(id));
                 return (
                   <path
                     key={bucket.id}
                     data-unit-id={bucket.id}
                     data-members={bucket.memberIds.join(" ")}
+                    data-parents={unknownBucket ? "unknown" : undefined}
                     data-shared={unitShared(bucket.memberIds) ? "true" : undefined}
-                    className={`sky-bucket${lit ? " is-lit" : ""}${drop ? " is-drop" : ""}${unitShared(bucket.memberIds) ? " is-shared" : ""}`}
+                    className={`sky-bucket${lit ? " is-lit" : ""}${drop ? " is-drop" : ""}${unknownBucket ? " is-unknown" : ""}${unitShared(bucket.memberIds) ? " is-shared" : ""}`}
                     d={superellipsePath(bucket, 120)}
                     vectorEffect="non-scaling-stroke"
                   />
@@ -1278,7 +1293,13 @@ export function FamilySky({
                         className={`sky-link is-${link.kind}${lit ? " is-lit" : ""}`}
                         data-from={link.fromPersonId}
                         data-to={link.toPersonId}
-                        data-status={link.kind === "divorced" ? "divorced" : undefined}
+                        data-status={
+                          link.kind === "divorced"
+                            ? "divorced"
+                            : partnerLinkStatus(tree, link.fromPersonId, link.toPersonId) === "remarried"
+                              ? "remarried"
+                              : undefined
+                        }
                         d={d}
                         strokeWidth={w.width}
                         strokeOpacity={w.opacity}
@@ -1468,10 +1489,12 @@ export function FamilySky({
           : null}
 
         {near && !pictureMap && !editMode && !lensOn
-          ? sky.links.filter((link) => link.kind === "divorced" && lensShows(link.fromPersonId) && lensShows(link.toPersonId)).map((link) => {
+          ? sky.links.filter((link) => lensShows(link.fromPersonId) && lensShows(link.toPersonId)).flatMap((link) => {
+              const status = link.kind === "divorced" ? "divorced" : partnerLinkStatus(tree, link.fromPersonId, link.toPersonId);
+              if (status !== "divorced" && status !== "remarried") return [];
               const mid = curveMid(link);
-              if (!Number.isFinite(mid.x) || !Number.isFinite(mid.y)) return null;
-              return <PartnerStatusMark key={`${link.id}-status`} status="divorced" left={mid.x} top={mid.y} />;
+              if (!Number.isFinite(mid.x) || !Number.isFinite(mid.y)) return [];
+              return [<PartnerStatusMark key={`${link.id}-status`} status={status} left={mid.x} top={mid.y} />];
             })
           : null}
 
@@ -1504,6 +1527,7 @@ export function FamilySky({
                   data-draw={mark?.draw}
                   data-details={mark?.details ?? sharedDetails}
                   data-shared={sharedCard ? "true" : undefined}
+                  data-parents={unknownParents.has(card.id) ? "unknown" : undefined}
                   data-branch-owner={showOwner ? owners?.[card.id] : undefined}
                   data-edit={scoped ? (personOpen(card.id) ? "open" : "locked") : undefined}
                   className={`portrait-card${photo ? " has-photo" : ""}${selected || connected ? " is-active" : ""}${dim ? " is-dim" : ""}${lensClass}${movable ? " is-movable" : ""}${lifted ? " is-carried" : ""}${sliding ? " is-placing" : ""}`}
@@ -1529,7 +1553,11 @@ export function FamilySky({
                   {showOwner ? <span className="owner-mark">{owners?.[card.id]}</span> : null}
                   <span className="identity">
                     <strong title={displayName(card.person)}>{card.person.givenName || displayName(card.person)}</strong>
-                    {withheld ? null : <em>{age ?? "—"}</em>}
+                    {withheld ? null : unknownParents.has(card.id) && !age ? (
+                      <em className="is-unknown-parents">Parents unknown</em>
+                    ) : (
+                      <em>{age ?? "—"}</em>
+                    )}
                   </span>
                 </button>
               );

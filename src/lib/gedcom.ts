@@ -350,6 +350,10 @@ export function parseGedcom(text: string): TreeData {
             }
           : undefined;
       if (union) unions.push(union);
+      const only = partners.length === 1 ? partners[0] : undefined;
+      const unknownParents = only
+        ? [{ role: partnerRoles[only] === "mother" ? ("father" as const) : ("mother" as const) }]
+        : undefined;
       for (const child of children) {
         childLinks.push({
           id: newId("c"),
@@ -358,6 +362,7 @@ export function parseGedcom(text: string): TreeData {
           unionId: union?.id,
           roles: partners.length ? { ...partnerRoles } : undefined,
           kin: child.kin,
+          ...(unknownParents ? { unknownParents } : {}),
         });
       }
       continue;

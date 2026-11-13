@@ -270,6 +270,21 @@ describe("self-serve mutations", () => {
     assert.equal(tree.childLinks[0].roles?.[eli], "father");
   });
 
+  it("does not infer a partner as a parent when linking a child", () => {
+    let tree = startWithName("Dale");
+    const dale = tree.people[0].id;
+    tree = addPartner(tree, dale, "Step", "married");
+    const step = tree.people.find((p) => p.givenName === "Step")!.id;
+    tree = addUnlinkedPerson(tree, "Kip");
+    const kip = tree.people.find((p) => p.givenName === "Kip")!.id;
+    tree = linkExisting(tree, dale, kip, "child");
+    const link = tree.childLinks.find((item) => item.childId === kip);
+    assert.ok(link);
+    assert.deepEqual(link?.parentIds, [dale]);
+    assert.equal(link?.parentIds.includes(step), false);
+    assert.ok(link?.unknownParents?.length, "the other parent is unknown, not Step");
+  });
+
   it("links a stepfather and an adopted child with quieter kin", () => {
     let tree = startWithName("Tara");
     const tara = tree.people[0].id;
