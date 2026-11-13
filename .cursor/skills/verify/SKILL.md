@@ -206,3 +206,13 @@ With `prefers-reduced-motion: reduce`, Depth sky shows the static fallback and d
 The home route's client files, other than the webpack chunk map, keep the byte sizes in `scripts/fixtures/main-bundle-baseline.json`.
 
 Frame times are measured at 390×844, deviceScaleFactor 3, with CPU throttle 4, during the depth orbit, the card zoom, and the orbit gather. The check fails if a direction's p95 frame time is over 16.8 ms. A kept 60Hz tick shows up as 16.7 or 16.8 in Chromium; a missed frame is about 33.
+
+## Phone pan, zoom, and glide
+
+`npm run verify` runs `scripts/measure-sky.mjs --check` last. The fixture is the same labeled sky. Chromium is 390×844, deviceScaleFactor 3, CPU throttle 6.
+
+1. A one-finger pan that starts within 12px of the left edge moves the sky by the finger's distance.
+2. A one-finger pan that starts on a person's portrait, with that portrait near the screen edge, moves the sky by the finger's distance. A tap still does not gather.
+3. Wheel zoom from the star view to one family, a two-finger pinch, and the focus glide (tap a family star) each keep p95 frame time at or under 18.7 ms.
+
+The script prints p50 and p95 for each gesture. It fails if an edge pan misses the finger by more than 2px.

@@ -10,7 +10,7 @@ import { centerTransform, fitContentScale, superellipsePath, type Camera } from 
 import { skyFromPersonalMap } from "@/lib/familySkyFocus";
 import { layoutPersonalMap, type PersonalMap } from "@/lib/personalMap";
 import { gatherCameraMs, gatherPoints, interruptGather, planGather } from "@/lib/gatherChoreography";
-import { gatherCameraRunning, playGatherCamera, prefersReducedMotion, runFlight, runLinesOut, takeGatherCamera, type GatherSession } from "@/lib/gatherPlay";
+import { gatherCameraRunning, playGatherCamera, playSkyCamera, prefersReducedMotion, runFlight, runLinesOut, takeGatherCamera, type GatherSession } from "@/lib/gatherPlay";
 import { gatheredPersonId } from "@/lib/personInteraction";
 import { usePersonInteraction } from "./PersonHoldMenu";
 import { DEFAULT_LINE_FILTER, lineFilterAllows, lineFilterAllowsCouples, type LineFilter } from "@/lib/kinFilter";
@@ -36,6 +36,7 @@ import {
   type ZoomLevel,
 } from "@/lib/familySky";
 import { coupleBarGeometry, curvesPath, forkGuides, glideMotion } from "@/lib/skyGlide";
+import { panFromPointer, shouldCapturePan, skyCameraAt, skyCameraFrames } from "@/lib/skyMotion";
 import { bindSkyGlide, clearSkyGlide, stepSkyGlide } from "@/lib/skyGlideDom";
 import { routePersonLink } from "@/lib/familySkyRoute";
 import type { UnitLinkKind } from "@/lib/familyUnits";
@@ -133,10 +134,6 @@ function curveMid(curve: { x1: number; y1: number; cx: number; cy: number; x2: n
     x: 0.25 * curve.x1 + 0.5 * curve.cx + 0.25 * curve.x2,
     y: 0.25 * curve.y1 + 0.5 * curve.cy + 0.25 * curve.y2,
   };
-}
-
-function easeOut(t: number) {
-  return 1 - Math.pow(1 - t, 3);
 }
 
 function easeInOut(t: number) {
@@ -533,26 +530,44 @@ export function FamilySky({
     return Math.min(SKY_ZOOM.max, Math.max(minScale(), s));
   }
 
-  function applyWorld() {
-    const el = worldRef.current;
-    if (!el || gatherCameraRunning(el)) return;
-    const { x, y, s } = viewRef.current;
-    el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
-    el.style.setProperty("--inv", String(1 / s));
+  // Counter-scale lives on the labels and ports, not on the sky. Writing it on
+  // the world invalidates every star and line, which is a full restyle per frame.
+  function writeCounterScale(s: number) {
+    const root = worldRef.current;
+    if (!root) return;
+    const inv = String(1 / (s || 1));
+    for (const node of root.querySelectorAll<HTMLElement>(".sky-label, .sky-port")) {
+      if (node.style.getPropertyValue("--inv") !== inv) node.style.setProperty("--inv", inv);
+    }
+  }
+
+  function syncZoom(s: number, vw: number, vh: number) {
     const next = zoomLevel(s, levelRef.current, farAtRef.current);
     if (next !== levelRef.current) {
       levelRef.current = next;
       setLevel(next);
     }
-    labelsRef.current?.update(viewRef.current, next, stageRef.current?.clientWidth || 360);
     if (next !== "far") {
-      const stage = stageRef.current;
-      const key = visibleBuckets(sky, viewRef.current, stage?.clientWidth || 360, stage?.clientHeight || 480).join("|");
+      const key = visibleBuckets(sky, viewRef.current, vw, vh).join("|");
       if (key !== shownKeyRef.current) {
         shownKeyRef.current = key;
         setShownKey(key);
       }
     }
+    return next;
+  }
+
+  function applyWorld() {
+    const el = worldRef.current;
+    if (!el || gatherCameraRunning(el)) return;
+    const { x, y, s } = viewRef.current;
+    el.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+    writeCounterScale(s);
+    const stage = stageRef.current;
+    const vw = stage?.clientWidth || 360;
+    const vh = stage?.clientHeight || 480;
+    const next = syncZoom(s, vw, vh);
+    labelsRef.current?.update(viewRef.current, next, vw);
   }
 
   function scheduleApply() {
@@ -570,6 +585,10 @@ export function FamilySky({
     if (!world) return;
     const view = takeGatherCamera(world);
     if (view) viewRef.current = view;
+    if (gatherCameraRunning(world)) return;
+    const { x, y, s } = viewRef.current;
+    world.style.transform = `translate(${x}px, ${y}px) scale(${s})`;
+    writeCounterScale(s);
   }
 
   /** Gather camera: one compositor transform. The counter-scale is set once, while the labels are hidden. */
@@ -583,7 +602,7 @@ export function FamilySky({
     }
     const { vw, vh, inset } = stageSize();
     const from = { ...viewRef.current };
-    world.style.setProperty("--inv", String(1 / (target.s || 1)));
+    writeCounterScale(target.s);
     playGatherCamera(world, from, target, { cx: vw / 2, cy: inset + (vh - inset) / 2 }, ms, () => {
       viewRef.current = target;
       applyWorld();
@@ -593,24 +612,39 @@ export function FamilySky({
   function animateTo(target: Camera, ms = 420) {
     stopTween();
     const from = { ...viewRef.current };
+    const world = worldRef.current;
     const { vw, vh, inset } = stageSize();
-    const cx = vw / 2;
-    const cy = inset + (vh - inset) / 2;
-    // Interpolate the world point at the centre and the log of the scale.
-    const fromWorld = { x: (cx - from.x) / from.s, y: (cy - from.y) / from.s };
-    const toWorld = { x: (cx - target.x) / target.s, y: (cy - target.y) / target.s };
-    const start = performance.now();
-    const step = (now: number) => {
-      const t = Math.min(1, (now - start) / ms);
-      const k = easeOut(t);
-      const s = Math.exp(Math.log(from.s) + (Math.log(target.s) - Math.log(from.s)) * k);
-      const wx = fromWorld.x + (toWorld.x - fromWorld.x) * k;
-      const wy = fromWorld.y + (toWorld.y - fromWorld.y) * k;
-      viewRef.current = { x: cx - wx * s, y: cy - wy * s, s };
+    const focal = { cx: vw / 2, cy: inset + (vh - inset) / 2 };
+    if (!world) {
+      viewRef.current = target;
       applyWorld();
-      tween.current = t < 1 ? window.requestAnimationFrame(step) : null;
+      return;
+    }
+    // One compositor transform for the sky. Level changes mount a layer only
+    // when the scale crosses a threshold, not on every frame.
+    const frames = skyCameraFrames(from, target, focal, 30);
+    let settled = false;
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      if (tween.current != null) window.cancelAnimationFrame(tween.current);
+      tween.current = null;
+      viewRef.current = target;
+      applyWorld();
     };
-    tween.current = window.requestAnimationFrame(step);
+    const start = performance.now();
+    const watch = (now: number) => {
+      if (settled) return;
+      const t = Math.min(1, (now - start) / ms);
+      const cam = skyCameraAt(from, target, focal, t);
+      viewRef.current = { x: cam.x, y: cam.y, s: cam.s };
+      writeCounterScale(cam.s);
+      const next = syncZoom(cam.s, vw, vh);
+      labelsRef.current?.update(viewRef.current, next, vw);
+      tween.current = t < 1 ? window.requestAnimationFrame(watch) : null;
+    };
+    tween.current = window.requestAnimationFrame(watch);
+    playSkyCamera(world, frames, ms, finish);
   }
 
   function cameraFor(box: Box, maxScale = SKY_ZOOM.max) {
@@ -1044,8 +1078,23 @@ export function FamilySky({
     if (pinch.current) return;
     const d = drag.current;
     if (!d || d.id !== event.pointerId) return;
-    if (Math.abs(event.clientX - d.x) + Math.abs(event.clientY - d.y) > 6) suppressTap.current = true;
-    viewRef.current = { ...viewRef.current, x: d.vx + (event.clientX - d.x), y: d.vy + (event.clientY - d.y) };
+    const dx = event.clientX - d.x;
+    const dy = event.clientY - d.y;
+    if (shouldCapturePan(dx, dy)) {
+      suppressTap.current = true;
+      const stage = stageRef.current;
+      if (stage && !stage.hasPointerCapture(event.pointerId)) {
+        try {
+          stage.setPointerCapture(event.pointerId);
+        } catch {
+          // The pointer can already have left at the screen edge.
+        }
+      }
+    }
+    viewRef.current = panFromPointer({ x: d.vx, y: d.vy, s: viewRef.current.s }, d, {
+      x: event.clientX,
+      y: event.clientY,
+    });
     scheduleApply();
   }
 
@@ -1152,6 +1201,7 @@ export function FamilySky({
       onPointerMove={onPointerMove}
       onPointerUp={endPointer}
       onPointerCancel={endPointer}
+      onDragStart={(event) => event.preventDefault()}
     >
       <div ref={worldRef} className="graph-world sky-world" style={{ width: sky.width, height: sky.height }}>
         <div className="gather-glow" data-gather-glow aria-hidden="true" />
@@ -1469,7 +1519,7 @@ export function FamilySky({
                   aria-pressed={lensOn ? undefined : selected}
                 >
                   {photo ? (
-                    <img className="portrait-photo" src={photo} alt="" />
+                    <img className="portrait-photo" src={photo} alt="" draggable={false} />
                   ) : (
                     <GeneratedAvatar person={card.person} className="swatch" />
                   )}
@@ -1520,7 +1570,7 @@ export function FamilySky({
                   {...(lens?.phase === "preview" ? {} : interaction.bindPerson(card.id))}
                 >
                   {photo ? (
-                    <img src={photo} alt="" />
+                    <img src={photo} alt="" draggable={false} />
                   ) : (
                     <GeneratedAvatar person={card.person} />
                   )}
@@ -1703,6 +1753,8 @@ const SkyLabels = forwardRef<LabelsHandle, LabelsProps>(function SkyLabels({ sky
       // During a glide the label's left is the moving anchor; otherwise it matches `at`.
       const worldX = el.style.left ? parseFloat(el.style.left) : at.x;
       const sx = cam.x + worldX * cam.s;
+      const inv = String(1 / (cam.s || 1));
+      if (el.style.getPropertyValue("--inv") !== inv) el.style.setProperty("--inv", inv);
       // On screen: nudge inside the edges. Off screen: hide, rather than show a clipped stub.
       let dx = 0;
       const onScreen = sx > 0 && sx < vw;
