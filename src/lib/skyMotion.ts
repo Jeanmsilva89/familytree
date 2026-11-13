@@ -1,16 +1,20 @@
 import { gatherCameraAt } from "./gatherChoreography";
 import type { Camera } from "./graphView";
+import { HOLD_SLOP_PX } from "./personInteraction";
 
 /**
  * Camera motion for the family sky.
  *
- * A pan is the pointer's distance, including when the finger starts on a
- * person or at the screen edge. A zoom or focus glide is one list of
- * transforms for the sky layer, sampled up front, so a frame does not
- * rebuild the sky.
+ * A press is not a pan. A real finger trembles by a few pixels, and a
+ * press-and-hold stays inside the same distance, so the camera waits.
+ * Past that, a pan is the pointer's distance from where the press began,
+ * including when the finger starts on a person or at the screen edge.
+ * A zoom or focus glide is one list of transforms for the sky layer,
+ * sampled up front, so a frame does not rebuild the sky.
  */
 
-export const PAN_CAPTURE_SLOP = 6;
+/** Same distance as a press-and-hold. Inside it, the sky does not move. */
+export const PAN_CAPTURE_SLOP = HOLD_SLOP_PX;
 
 /** Move the camera by a pointer delta. Scale stays put. */
 export function panCamera(start: Camera, dx: number, dy: number): Camera {
@@ -23,11 +27,28 @@ export function panFromPointer(start: Camera, origin: { x: number; y: number }, 
 }
 
 /**
- * A drag past this distance is a pan, not a tap. Capturing then keeps the
+ * A drag past this distance is a pan, not a press. Capturing then keeps the
  * sky on the finger after it slides off a card or past the screen edge.
  */
 export function shouldCapturePan(dx: number, dy: number, slop = PAN_CAPTURE_SLOP): boolean {
-  return Math.abs(dx) + Math.abs(dy) > slop;
+  return Math.hypot(dx, dy) > slop;
+}
+
+/**
+ * Press versus pan. While the finger is still inside a press, the camera
+ * stays at `start`. Once the gesture is a pan, it stays a pan and the sky
+ * follows the finger from the press origin, including the distance that
+ * crossed the slop.
+ */
+export function cameraForPress(
+  start: Camera,
+  origin: { x: number; y: number },
+  point: { x: number; y: number },
+  panning: boolean,
+): { camera: Camera; panning: boolean } {
+  const panningNow = panning || shouldCapturePan(point.x - origin.x, point.y - origin.y);
+  if (!panningNow) return { camera: start, panning: false };
+  return { camera: panFromPointer(start, origin, point), panning: true };
 }
 
 export type SkyCameraSample = Camera & { labelScale: number };

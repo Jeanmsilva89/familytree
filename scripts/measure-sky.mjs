@@ -3,8 +3,10 @@
  *
  * Chromium at 390x844, deviceScaleFactor 3, CPU throttle 6, fixture sky.
  * A pan that starts at the screen edge, or on a person near that edge, has to
- * move the sky by the finger's distance. Wheel zoom, pinch, and the focus
- * glide have to stay within a frame budget.
+ * move the sky by the finger's distance. A press on a person, including the
+ * few pixels a real finger trembles and a press-and-hold, must not move the
+ * world. Wheel zoom, pinch, and the focus glide have to stay within a frame
+ * budget.
  *
  *   npm run build && npm start
  *   node scripts/measure-sky.mjs
@@ -171,6 +173,202 @@ async function pan(page, from, to, steps = 16) {
   };
 }
 
+const PRESS_JITTER = [[1, -2], [2, -4], [3, -5], [4, -6], [2, -3], [1, -2], [0, -1]];
+
+async function worldDuringPress(page, cdp, { x, y, world, jitter, holdMs }) {
+  await page.evaluate((selector) => {
+    const state = { frames: [], on: true, selector };
+    window.__pressWatch = state;
+    const tick = () => {
+      if (!state.on) return;
+      const el = document.querySelector(state.selector);
+      const matrix = el ? new DOMMatrix(getComputedStyle(el).transform) : null;
+      state.frames.push(matrix ? { x: matrix.e, y: matrix.f, s: matrix.a } : null);
+      state.raf = requestAnimationFrame(tick);
+    };
+    state.raf = requestAnimationFrame(tick);
+  }, world);
+  const id = 4;
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [{ x, y, id, radiusX: 2, radiusY: 2, force: 1 }],
+  });
+  const slice = Math.max(16, Math.round(holdMs / (jitter.length + 1)));
+  for (const [dx, dy] of jitter) {
+    await page.waitForTimeout(slice);
+    await cdp.send("Input.dispatchTouchEvent", {
+      type: "touchMove",
+      touchPoints: [{ x: x + dx, y: y + dy, id, radiusX: 2, radiusY: 2, force: 1 }],
+    });
+  }
+  await page.waitForTimeout(slice);
+  const last = jitter.at(-1) || [0, 0];
+  await cdp.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [{ x: x + last[0], y: y + last[1], id }],
+  });
+  await page.waitForTimeout(120);
+  const frames = await page.evaluate(() => {
+    const state = window.__pressWatch;
+    state.on = false;
+    cancelAnimationFrame(state.raf);
+    return state.frames.filter(Boolean);
+  });
+  if (!frames.length) return { frames: 0, spanX: 0, spanY: 0, spanS: 0 };
+  const xs = frames.map((frame) => frame.x);
+  const ys = frames.map((frame) => frame.y);
+  const scales = frames.map((frame) => frame.s);
+  return {
+    frames: frames.length,
+    spanX: round(Math.max(...xs) - Math.min(...xs)),
+    spanY: round(Math.max(...ys) - Math.min(...ys)),
+    spanS: Math.round((Math.max(...scales) - Math.min(...scales)) * 1000) / 1000,
+  };
+}
+
+async function pointOn(page, selector) {
+  return page.evaluate((selector) => {
+    const card = document.querySelector(selector);
+    if (!(card instanceof HTMLElement)) return null;
+    const rect = card.getBoundingClientRect();
+    const x = rect.left + Math.min(rect.width - 8, Math.max(8, rect.width / 2));
+    const y = rect.top + Math.min(rect.height - 8, 36);
+    const visible = rect.left >= 8 && rect.right <= window.innerWidth - 8 && rect.top >= 70 && rect.bottom <= window.innerHeight - 8;
+    const hit = visible ? document.elementFromPoint(x, y) : null;
+    return {
+      x,
+      y,
+      left: rect.left,
+      top: rect.top,
+      right: rect.right,
+      bottom: rect.bottom,
+      onPerson: Boolean(hit?.closest(".portrait-card, .sky-avatar")),
+      visible,
+    };
+  }, selector);
+}
+
+async function nudgeStage(page, stageSelector, dx, dy) {
+  const spot = await page.evaluate((stageSelector) => {
+    const stage = document.querySelector(stageSelector);
+    if (!(stage instanceof HTMLElement)) return null;
+    const rect = stage.getBoundingClientRect();
+    for (let y = rect.top + 90; y < rect.bottom - 70; y += 22) {
+      for (let x = rect.left + 30; x < rect.right - 30; x += 22) {
+        const hit = document.elementFromPoint(x, y);
+        if (!(hit instanceof Element) || !stage.contains(hit)) continue;
+        if (hit.closest(".portrait-card, .sky-avatar, .sky-label, .graph-zoom, .btn, .icon-btn, .graph-toolbar")) continue;
+        return { x, y };
+      }
+    }
+    return null;
+  }, stageSelector);
+  if (!spot) return false;
+  await page.mouse.move(spot.x, spot.y);
+  await page.mouse.down();
+  await page.mouse.move(spot.x + dx, spot.y + dy, { steps: 6 });
+  await page.mouse.up();
+  await page.waitForTimeout(40);
+  return true;
+}
+
+async function cardOnScreen(page, selector, stageSelector) {
+  for (let i = 0; i < 8; i += 1) {
+    const point = await pointOn(page, selector);
+    if (point?.onPerson) return point;
+    if (!point) return null;
+    const dx = point.left < 8 ? 160 : point.right > 382 ? -160 : 0;
+    const dy = point.top < 70 ? 140 : point.bottom > 820 ? -140 : 0;
+    if ((!dx && !dy) || !(await nudgeStage(page, stageSelector, dx || 0, dy || 0))) return point.onPerson ? point : null;
+  }
+  return pointOn(page, selector);
+}
+
+async function settleWorld(page, selector) {
+  let previous = "";
+  let stable = 0;
+  for (let i = 0; i < 50 && stable < 5; i += 1) {
+    const now = await page.evaluate((selector) => {
+      const el = document.querySelector(selector);
+      return el ? getComputedStyle(el).transform : "";
+    }, selector);
+    stable = now && now === previous ? stable + 1 : 0;
+    previous = now;
+    await page.waitForTimeout(40);
+  }
+}
+
+async function dismissMenu(page) {
+  if (await page.getByRole("menu").count()) {
+    await page.keyboard.press("Escape");
+    await page.getByRole("menu").waitFor({ state: "detached", timeout: 2000 }).catch(() => {});
+  }
+}
+
+async function pressPerson(page, cdp, point, world) {
+  const tap = await worldDuringPress(page, cdp, { x: point.x, y: point.y, world, jitter: PRESS_JITTER.slice(0, 4), holdMs: 180 });
+  const menuAfterTap = await page.getByRole("menu").count();
+  const layoutAfterTap = await page.locator(".graph-stage, .orbit-stage").last().getAttribute("data-layout");
+  await dismissMenu(page);
+  const hold = await worldDuringPress(page, cdp, { x: point.x, y: point.y, world, jitter: PRESS_JITTER, holdMs: 720 });
+  const menu = await page.getByRole("menu").count();
+  const layout = await page.locator(".graph-stage, .orbit-stage").last().getAttribute("data-layout");
+  await dismissMenu(page);
+  return { onPerson: point.onPerson, tap, hold, menuAfterTap, layoutAfterTap, menu, layout };
+}
+
+async function setPressed(page, name, pressed) {
+  const button = page.getByRole("button", { name, exact: true });
+  await button.scrollIntoViewIfNeeded();
+  if ((await button.getAttribute("aria-pressed")) === pressed) return;
+  await button.click();
+}
+
+async function pressStill(page, cdp) {
+  await setPressed(page, "Families", "false");
+  await page.locator(".family-sky").waitFor({ state: "detached" });
+  await page.locator('.graph-stage[data-layout="tree"]').waitFor();
+  await settleWorld(page, ".graph-stage .graph-world");
+  const classicPoint = await cardOnScreen(page, '.graph-stage .portrait-card[data-person-id="fx-eli"]', ".graph-stage");
+  if (!classicPoint?.onPerson) throw new Error("classic Eli Fixture is not on screen");
+  const classic = await pressPerson(page, cdp, classicPoint, ".graph-stage .graph-world");
+
+  await setPressed(page, "Families", "true");
+  await page.locator('.family-sky[data-level="far"][data-layout="sky"]').waitFor({ timeout: 8000 });
+  const star = await page.evaluate(() => {
+    const el = document.querySelector('.sky-star[data-members~="fx-eli"] .sky-star-core') || document.querySelector(".sky-star-core");
+    const rect = el.getBoundingClientRect();
+    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+  });
+  await page.mouse.click(star.x, star.y);
+  await page.waitForFunction(() => document.querySelector(".family-sky")?.getAttribute("data-level") !== "far", null, { timeout: 8000 });
+  for (let i = 0; i < 6; i += 1) {
+    if (await page.locator('.family-sky .portrait-card[data-person-id="fx-eli"]').count()) break;
+    await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+    await page.waitForTimeout(420);
+  }
+  await settleWorld(page, ".sky-world");
+  const skyPoint = await cardOnScreen(page, '.family-sky .portrait-card[data-person-id="fx-eli"]', ".family-sky");
+  if (!skyPoint?.onPerson) throw new Error("sky Eli Fixture is not on screen");
+  const sky = await pressPerson(page, cdp, skyPoint, ".sky-world");
+
+  await setPressed(page, "Families", "false");
+  await page.locator(".family-sky").waitFor({ state: "detached" });
+  await setPressed(page, "Orbit", "true");
+  await page.locator('.orbit-stage[data-ready="true"][data-layout="rows"]').waitFor({ timeout: 15000 });
+  await settleWorld(page, ".orbit-camera");
+  const orbitPoint = await cardOnScreen(page, '.orbit-stage .portrait-card[data-person-id="fx-eli"]', ".orbit-stage");
+  if (!orbitPoint?.onPerson) throw new Error("orbit Eli Fixture is not on screen");
+  const orbit = await pressPerson(page, cdp, orbitPoint, ".orbit-camera");
+
+  await setPressed(page, "Orbit", "false");
+  await page.locator(".orbit-stage").waitFor({ state: "detached" });
+  await setPressed(page, "Families", "true");
+  await page.locator(".family-sky").waitFor();
+  await dismissMenu(page);
+  return { classic, sky, orbit };
+}
+
 async function hit(page, point) {
   return page.evaluate(({ x, y }) => {
     const el = document.elementFromPoint(x, y);
@@ -200,11 +398,14 @@ const report = {
   budget,
   gapBudget,
   runs: [],
+  press: null,
 };
 
 try {
   await boot(page);
   await install(page);
+  report.press = await pressStill(page, cdp);
+  console.log("press", JSON.stringify(report.press));
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 6 });
   await page.waitForTimeout(200);
 
@@ -407,6 +608,24 @@ if (check) {
     }
     if (entry.edgeCardPan.layout !== "sky") notes.push(`run ${entry.run} panning a person gathered the sky`);
   }
+  const press = report.press;
+  if (!press) notes.push("press check did not run");
+  for (const [name, view] of [["classic", press?.classic], ["sky", press?.sky], ["orbit", press?.orbit]]) {
+    if (!view?.onPerson) notes.push(`${name} press missed the person`);
+    for (const [gesture, sample] of [["tap", view?.tap], ["hold", view?.hold]]) {
+      if (!sample || sample.frames < 4) notes.push(`${name} ${gesture} recorded ${sample?.frames || 0} frames`);
+      if (sample && (Math.abs(sample.spanX) > 0.5 || Math.abs(sample.spanY) > 0.5 || sample.spanS > 0.01)) {
+        notes.push(`${name} ${gesture} moved the world by ${sample.spanX},${sample.spanY} scale ${sample.spanS}`);
+      }
+    }
+  }
+  if (press?.classic?.menuAfterTap) notes.push("classic tap opened the hold menu");
+  if (press?.classic?.layoutAfterTap !== "tree" || press?.classic?.layout !== "tree") notes.push("classic press gathered the tree");
+  if (!press?.classic?.menu) notes.push("classic press-and-hold did not open the menu");
+  if (press?.sky?.menuAfterTap) notes.push("sky tap opened the hold menu");
+  if (press?.sky?.layoutAfterTap !== "sky" || press?.sky?.layout !== "sky") notes.push("sky press gathered the sky");
+  if (!press?.sky?.menu) notes.push("sky press-and-hold did not open the menu");
+  if (press?.orbit?.layoutAfterTap !== "rows") notes.push(`orbit tap left the rows (${press?.orbit?.layoutAfterTap})`);
   if (notes.length) {
     console.error(`sky gestures failed: ${notes.join("; ")}`);
     process.exit(1);

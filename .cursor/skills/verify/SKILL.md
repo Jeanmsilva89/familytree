@@ -214,5 +214,6 @@ Frame times are measured at 390×844, deviceScaleFactor 3, with CPU throttle 4, 
 1. A one-finger pan that starts within 12px of the left edge moves the sky by the finger's distance.
 2. A one-finger pan that starts on a person's portrait, with that portrait near the screen edge, moves the sky by the finger's distance. A tap still does not gather.
 3. Wheel zoom from the star view to one family, a two-finger pinch, and the focus glide (tap a family star) each keep p95 frame time at or under 18.7 ms.
+4. A touch with 1–6px of tremor, and a press-and-hold, on Eli Fixture leaves the world transform unchanged on the classic tree, the Families sky, and Orbit. On the classic tree and the sky the hold opens the menu and does not gather. Choosing Gather family from that menu is still what moves people.
 
-The script prints p50 and p95 for each gesture. It fails if an edge pan misses the finger by more than 2px.
+The script prints p50 and p95 for each gesture. It fails if an edge pan misses the finger by more than 2px, or if a press moves the world.
