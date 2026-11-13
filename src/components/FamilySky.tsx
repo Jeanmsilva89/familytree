@@ -36,7 +36,7 @@ import {
   type ZoomLevel,
 } from "@/lib/familySky";
 import { coupleBarGeometry, curvesPath, forkGuides, glideMotion } from "@/lib/skyGlide";
-import { panFromPointer, shouldCapturePan, skyCameraAt, skyCameraFrames } from "@/lib/skyMotion";
+import { cameraForPress, skyCameraAt, skyCameraFrames } from "@/lib/skyMotion";
 import { bindSkyGlide, clearSkyGlide, stepSkyGlide } from "@/lib/skyGlideDom";
 import { routePersonLink } from "@/lib/familySkyRoute";
 import type { UnitLinkKind } from "@/lib/familyUnits";
@@ -267,7 +267,7 @@ export function FamilySky({
   const labelsRef = useRef<LabelsHandle>(null);
   const [level, setLevel] = useState<ZoomLevel>("far");
   const pointers = useRef(new Map<number, { x: number; y: number }>());
-  const drag = useRef<{ id: number; x: number; y: number; vx: number; vy: number } | null>(null);
+  const drag = useRef<{ id: number; x: number; y: number; vx: number; vy: number; panning: boolean } | null>(null);
   const pinch = useRef<PinchStart | null>(null);
   const suppressTap = useRef(false);
   const raf = useRef<number | null>(null);
@@ -1053,7 +1053,7 @@ export function FamilySky({
     if (target?.closest(".graph-zoom")) return;
     // Capturing on a button would retarget its click to the stage.
     if (!target?.closest(".portrait-card, .sky-avatar, .sky-label")) stageRef.current?.setPointerCapture(event.pointerId);
-    drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, vx: viewRef.current.x, vy: viewRef.current.y };
+    drag.current = { id: event.pointerId, x: event.clientX, y: event.clientY, vx: viewRef.current.x, vy: viewRef.current.y, panning: false };
   }
 
   function onPointerMove(event: PointerEvent<HTMLDivElement>) {
@@ -1078,9 +1078,15 @@ export function FamilySky({
     if (pinch.current) return;
     const d = drag.current;
     if (!d || d.id !== event.pointerId) return;
-    const dx = event.clientX - d.x;
-    const dy = event.clientY - d.y;
-    if (shouldCapturePan(dx, dy)) {
+    const step = cameraForPress(
+      { x: d.vx, y: d.vy, s: viewRef.current.s },
+      d,
+      { x: event.clientX, y: event.clientY },
+      d.panning,
+    );
+    if (!step.panning) return;
+    if (!d.panning) {
+      d.panning = true;
       suppressTap.current = true;
       const stage = stageRef.current;
       if (stage && !stage.hasPointerCapture(event.pointerId)) {
@@ -1091,10 +1097,7 @@ export function FamilySky({
         }
       }
     }
-    viewRef.current = panFromPointer({ x: d.vx, y: d.vy, s: viewRef.current.s }, d, {
-      x: event.clientX,
-      y: event.clientY,
-    });
+    viewRef.current = step.camera;
     scheduleApply();
   }
 
