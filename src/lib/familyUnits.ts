@@ -1,5 +1,7 @@
-import type { FamilyUnitOverride, KinKind, ParentRole, TreeData, Union } from "./types";
-import { kinOf } from "./types";
+import { kinMembership, parentsAreUnknown } from "./kinMembership";
+import type { FamilyUnitOverride, KinKind, TreeData, Union } from "./types";
+
+export { parentsAreUnknown };
 
 /**
  * Family units are the "buckets" of the family sky: each person belongs to
@@ -24,7 +26,10 @@ import { kinOf } from "./types";
  *    into a step-parent's bucket, and it does not pull the step-parent into
  *    the child's. An unknown parent is never filled in from a partner.
  * 3. Parents. Someone who is not joining a partner joins their line parent.
- *    Which parent links pull a child into a parent's bucket, strongest first:
+ *    The order, and the rule that a couple does not share a home across a
+ *    step boundary, live in `kinMembership`. Classic household areas use that
+ *    same function. Which parent links pull a child into a parent's bucket,
+ *    strongest first:
  *    blood and adopted are equal, then foster. A step link never does. Among
  *    equal links, the mother comes before a parent with no role, before the
  *    father, before the parent listed first. Role is the recorded parent
@@ -102,43 +107,14 @@ export type FamilyUnits = {
   ignoredOverrides: FamilyUnitOverride[];
 };
 
-/** Blood and adopted place a child. Foster places them only after those. Step is not a rank: it never places. */
-const LINE_RANK: Record<Exclude<KinKind, "step">, number> = { blood: 0, adopted: 0, foster: 1 };
-const ROLE_RANK = (role?: ParentRole) => (role === "mother" ? 0 : role === "father" ? 2 : 1);
-
 export const unitIdFor = (rootId: string) => `fu-${rootId}`;
 
 export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride[]): FamilyUnits {
   const index = new Map(tree.people.map((p, i) => [p.id, i]));
   const known = (id: string | null | undefined): id is string => typeof id === "string" && index.has(id);
-
-  // Parents, with the role and kin recorded on each link.
-  const parentsOf = new Map<string, { id: string; role?: ParentRole; kin: KinKind; order: number }[]>();
-  const roleSeen = new Map<string, Set<ParentRole>>();
-  let order = 0;
-  for (const link of tree.childLinks) {
-    for (const parentId of link.parentIds) {
-      const role = link.roles?.[parentId];
-      if (role) roleSeen.set(parentId, new Set([...(roleSeen.get(parentId) ?? []), role]));
-      if (!known(link.childId) || !known(parentId) || parentId === link.childId) continue;
-      const list = parentsOf.get(link.childId) ?? [];
-      if (list.some((p) => p.id === parentId)) continue;
-      list.push({ id: parentId, role, kin: kinOf(link, parentId), order: order++ });
-      parentsOf.set(link.childId, list);
-    }
-  }
-  const isMother = (id: string) => {
-    const roles = roleSeen.get(id);
-    return Boolean(roles?.has("mother") && !roles.has("father"));
-  };
-  // Step is recorded on the link, and drawn when it crosses units, but it is
-  // not membership. Blood and adopted outrank foster; role breaks the rest.
-  const lineParent = (id: string): string | undefined =>
-    [...(parentsOf.get(id) ?? [])]
-      .filter((parent): parent is { id: string; role?: ParentRole; kin: Exclude<KinKind, "step">; order: number } => parent.kin !== "step")
-      .sort(
-        (a, b) => LINE_RANK[a.kin] - LINE_RANK[b.kin] || ROLE_RANK(a.role) - ROLE_RANK(b.role) || a.order - b.order,
-      )[0]?.id;
+  const membership = kinMembership(tree);
+  const isMother = membership.isMother;
+  const lineParent = membership.lineParent;
 
   // 1. Each person's couple.
   const unionIndex = new Map(tree.unions.map((u, i) => [u.id, i]));
@@ -161,19 +137,8 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
     if (options[0]) coupleOf.set(person.id, options[0]);
   }
 
-  // A placing child of one partner, and not of the other, is a step boundary.
-  // Walking the partner edge would put that child in the step-parent's bucket.
-  const placingIds = (childId: string) =>
-    (parentsOf.get(childId) ?? []).filter((parent) => parent.kin !== "step").map((parent) => parent.id);
-  const hasExclusiveChild = (personId: string, otherId: string) => {
-    for (const childId of parentsOf.keys()) {
-      const placing = placingIds(childId);
-      if (placing.includes(personId) && !placing.includes(otherId)) return true;
-    }
-    return false;
-  };
-
-  // 2. Who anchors a couple.
+  // 2. Who anchors a couple. A placing child of only one partner is a step
+  // boundary: walking the partner edge would put that child in the other bucket.
   const anchorOf = (union: Union, a: string, b: string): string => {
     const [first, second] = union.partnerIds.indexOf(a) <= union.partnerIds.indexOf(b) ? [a, b] : [b, a];
     const firstMother = isMother(first);
@@ -190,8 +155,7 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
   for (const person of tree.people) {
     const couple = coupleOf.get(person.id);
     if (couple && anchorOf(couple.union, person.id, couple.partnerId) === couple.partnerId) {
-      const blended =
-        hasExclusiveChild(person.id, couple.partnerId) || hasExclusiveChild(couple.partnerId, person.id);
+      const blended = !membership.sharesHome(person.id, couple.partnerId);
       if (!blended) {
         via.set(person.id, { kind: "partner", personId: couple.partnerId });
         continue;
@@ -312,7 +276,7 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
     links.push({ id, kind, fromPersonId, toPersonId, fromUnitId, toUnitId });
   };
   for (const person of tree.people) {
-    for (const parent of parentsOf.get(person.id) ?? []) push(parent.kin, parent.id, person.id);
+    for (const parent of membership.parentsOf(person.id)) push(parent.kin, parent.id, person.id);
   }
   for (const union of tree.unions) {
     // Separated is two households and draws no couple line. Divorce is the
@@ -332,31 +296,6 @@ export function deriveFamilyUnits(tree: TreeData, overrides?: FamilyUnitOverride
   const viaOut: Record<string, JoinReason> = {};
   for (const person of tree.people) viaOut[person.id] = via.get(person.id)!;
   return { units, unitOf, via: viaOut, links, ignoredOverrides: ignored };
-}
-
-/**
- * The person's placing parents are not on the tree, and the tree says so:
- * an explicit unknown parent, a parent id that names nobody, or only step
- * links. A person with no child link at all is a root, not an unknown parent.
- */
-export function parentsAreUnknown(tree: TreeData, personId: string): boolean {
-  const known = new Set(tree.people.map((person) => person.id));
-  let recorded = false;
-  let placing = false;
-  for (const link of tree.childLinks) {
-    if (link.childId !== personId) continue;
-    if (link.unknownParents?.length) recorded = true;
-    for (const parentId of link.parentIds) {
-      if (!known.has(parentId)) {
-        recorded = true;
-        continue;
-      }
-      if (parentId === personId) continue;
-      if (kinOf(link, parentId) === "step") recorded = true;
-      else placing = true;
-    }
-  }
-  return recorded && !placing;
 }
 
 export function unitOfPerson(result: FamilyUnits, personId: string): FamilyUnit | undefined {

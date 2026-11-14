@@ -1,5 +1,8 @@
 import { deriveFamilyUnits, type FamilyUnits, type UnitLinkKind } from "./familyUnits";
-import type { ChildLink, FamilyUnitOverride, TreeData, Union } from "./types";
+import type { TreeData } from "./types";
+import { treeForLens } from "./visibleTree";
+
+export { treeForLens, visibleChildLinks } from "./visibleTree";
 
 /**
  * Where a family sits in the sky.
@@ -51,55 +54,6 @@ const CHILD_KIN: ReadonlySet<UnitLinkKind> = new Set(["blood", "adopted", "foste
 
 function byText(a: string, b: string) {
   return a < b ? -1 : a > b ? 1 : 0;
-}
-
-function pickRecord<T>(record: Partial<Record<string, T>> | undefined, ids: string[]) {
-  if (!record) return undefined;
-  const next: Partial<Record<string, T>> = {};
-  for (const id of ids) {
-    const value = record[id];
-    if (value !== undefined) next[id] = value;
-  }
-  return Object.keys(next).length ? next : undefined;
-}
-
-/**
- * The tree a lens is allowed to draw. Hidden people are removed before any
- * bucket, label, link, or saved nudge is computed, so a saved place cannot
- * show them or reserve a hole that names them.
- */
-export function treeForLens(tree: TreeData, visibleIds: ReadonlySet<string>): TreeData {
-  const people = tree.people.filter((person) => visibleIds.has(person.id));
-  const ids = new Set(people.map((person) => person.id));
-  const unions: Union[] = tree.unions.flatMap((union) => {
-    const partnerIds = union.partnerIds.filter((id) => ids.has(id));
-    if (partnerIds.length < 2) return [];
-    return [{ ...union, partnerIds }];
-  });
-  const childLinks: ChildLink[] = tree.childLinks.flatMap((link) => {
-    if (!ids.has(link.childId)) return [];
-    const parentIds = link.parentIds.filter((id) => ids.has(id));
-    if (!parentIds.length) return [];
-    const roles = pickRecord(link.roles, parentIds);
-    const kin = pickRecord(link.kin, parentIds);
-    return [{
-      ...link,
-      parentIds,
-      ...(roles ? { roles } : { roles: undefined }),
-      ...(kin ? { kin } : { kin: undefined }),
-    }];
-  });
-  const overrides: FamilyUnitOverride[] = (tree.familyUnitOverrides ?? []).filter(
-    (item) => ids.has(item.personId) && (item.unitOf === null || ids.has(item.unitOf)),
-  );
-  const focus = tree.focusPersonId && ids.has(tree.focusPersonId) ? tree.focusPersonId : people[0]?.id;
-  return {
-    people,
-    unions,
-    childLinks,
-    ...(focus ? { focusPersonId: focus } : {}),
-    ...(overrides.length ? { familyUnitOverrides: overrides } : {}),
-  };
 }
 
 type ParentChoice = Map<string, string>;
