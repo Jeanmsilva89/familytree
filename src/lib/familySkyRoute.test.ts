@@ -2,8 +2,9 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CARD } from "./layout";
-import { layoutFamilySky, type Curve } from "./familySky";
+import { type Curve } from "./familySky";
 import type { TreeData } from "./types";
+import { layoutFamilySky, skyLinksOnScreen } from "./familySky";
 import {
   LINK_BOW_LIMIT,
   curveBowRatio,
@@ -81,6 +82,73 @@ describe("routePersonLink (FIXTURE geometry)", () => {
           assert.equal(curveEntersBucket(curve, bucket), false, `${link.id} crosses ${bucket.label}`);
         }
       }
+    }
+  });
+
+  it("routes around a third family near one end when a midpoint bow still cuts it", () => {
+    // FIXTURE geometry. The third circle sits on the chord, close to one
+    // person. Bulging from the midpoint, even at the bow limit, still enters
+    // that circle. A bend slid toward that end goes around it.
+    const from = { x: 0, y: 0 };
+    const to = { x: 1100, y: 0 };
+    const third: RouteBucket = { cx: 900, cy: midY(0) - 10, rx: 100, ry: 170, n: 4 };
+    const straight = routePersonLink({ from, to, foreign: [], bowLimit: 0 });
+    assert.equal(curveEntersBucket(straight, third), true);
+    const routed = routePersonLink({ from, to, foreign: [third] });
+    const again = routePersonLink({ from, to, foreign: [third] });
+    assert.deepEqual(routed, again);
+    assert.equal(curveEntersBucket(routed, third), false);
+    const ratio = curveBowRatio(routed);
+    assert.ok(ratio <= LINK_BOW_LIMIT + 1e-9, `bow ${(ratio * 100).toFixed(1)}%`);
+    const dx = routed.x2 - routed.x1;
+    const dy = routed.y2 - routed.y1;
+    const len = Math.hypot(dx, dy);
+    const nx = -dy / len;
+    const ny = dx / len;
+    const midpointClears = [0, 0.04, -0.04, 0.08, -0.08, 0.12, -0.12, 0.16, -0.16].some((bend) => {
+      const q = {
+        x1: routed.x1,
+        y1: routed.y1,
+        cx: (routed.x1 + routed.x2) / 2 + nx * len * bend * 2,
+        cy: (routed.y1 + routed.y2) / 2 + ny * len * bend * 2,
+        x2: routed.x2,
+        y2: routed.y2,
+      };
+      return !curveEntersBucket(q, third);
+    });
+    assert.equal(midpointClears, false);
+  });
+
+  it("returns the same curve for the same cards and families", () => {
+    const from = { x: 40, y: 10 };
+    const to = { x: 520, y: 80 };
+    const foreign: RouteBucket[] = [{ cx: 280, cy: midY(40), rx: 70, ry: 48, n: 4 }];
+    assert.deepEqual(routePersonLink({ from, to, foreign }), routePersonLink({ from, to, foreign }));
+  });
+
+  it("does not draw a link to someone a lens has hidden", () => {
+    const hidden = new Set(verifyTree.people.map((person) => person.id).filter((id) => id !== "fx-eli"));
+    const sky = layoutFamilySky(verifyTree, routePersonLink, hidden);
+    assert.equal(sky.cards.some((card) => card.id === "fx-eli"), false);
+    assert.equal(
+      sky.links.some((link) => link.fromPersonId === "fx-eli" || link.toPersonId === "fx-eli"),
+      false,
+    );
+    assert.ok(sky.links.length >= 1);
+  });
+
+  it("keeps the verify fixture's drawn links within the measured bow and crossing bounds", () => {
+    const sky = layoutFamilySky(verifyTree);
+    for (const [name, vw, vh] of [
+      ["phone", 390, 844],
+      ["desktop", 1280, 800],
+    ] as const) {
+      const shown = skyLinksOnScreen(vw, vh, sky);
+      assert.notEqual(shown.level, "far", name);
+      assert.equal(shown.measure.foreignCrossings, 0, name);
+      assert.equal(shown.measure.pairwiseCrossings, 0, name);
+      assert.ok(shown.measure.maxBow <= 0.115, `${name} bow ${shown.measure.maxBow}`);
+      assert.ok(shown.measure.linkCount >= 3, name);
     }
   });
 });
