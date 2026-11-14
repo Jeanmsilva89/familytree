@@ -1,5 +1,6 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
+import { deriveFamilyUnits, unitOfPerson } from "./familyUnits";
 import { deriveHouseholds, householdOfPerson, siblingHouseholds, type Households } from "./households";
 import {
   FIXTURE_ADOPTED_SINGLE_PARENT,
@@ -11,7 +12,11 @@ import {
   FIXTURE_UNKNOWN_PARENT,
   fxId,
 } from "./households.fixtures";
-import type { TreeData } from "./types";
+import { treeForLens } from "./layoutSeed";
+import type { KinKind, ParentRole, TreeData, UnionKind } from "./types";
+import blendedFixture from "../../scripts/fixtures/verify-blended-family.json";
+
+const BLENDED = blendedFixture as TreeData;
 
 const ids = (names: string[]) => names.map(fxId).sort();
 
@@ -89,31 +94,35 @@ describe("deriveHouseholds", () => {
     assert.deepEqual(a, b);
   });
 
-  it("remarriage: only the current marriage is a household, the shared child lives there, the ex is linked", () => {
+  it("remarriage: each child follows a line parent, and the ex keeps her own household", () => {
     const tree = FIXTURE_REMARRIAGE;
     const result = deriveHouseholds(tree);
     assertWellFormed(tree, result);
-    const home = headedBy(result, "dad", "stepmom");
-    assert.deepEqual([...home.childIds].sort(), ids(["kid", "stepkid", "baby"]));
-    assert.equal(result.households.length, 1, "a separated couple is not a household");
-    assert.deepEqual(result.loose, [fxId("mom")]);
-    const coparent = result.links.find((l) => l.kind === "coparent" && l.personId === fxId("mom"));
-    assert.ok(coparent, "Mom stays connected to the household where her child lives");
-    assert.equal(coparent?.toId, home.id);
+    const dad = headedBy(result, "dad");
+    assert.deepEqual([...dad.childIds].sort(), ids(["baby", "kid"]));
+    const stepmom = headedBy(result, "stepmom");
+    assert.deepEqual(stepmom.childIds, ids(["stepkid"]));
+    const mom = headedBy(result, "mom");
+    assert.deepEqual(mom.childIds, []);
+    assert.equal(dad.childIds.includes(fxId("stepkid")), false);
+    assert.notEqual(dad.id, mom.id);
+    assert.notEqual(dad.id, stepmom.id);
+    const fromMom = result.links.find((l) => l.kind === "child" && l.personId === fxId("kid") && l.fromId === mom.id);
+    assert.equal(fromMom?.toId, dad.id);
   });
 
   it("remarriage on both sides: the child has exactly one home and a link from the other", () => {
     const tree = FIXTURE_BOTH_REMARRIED;
     const result = deriveHouseholds(tree);
     assertWellFormed(tree, result);
-    const dads = headedBy(result, "dad", "stepmom");
-    const moms = headedBy(result, "mom", "stepdad");
-    const home = homeOf(result, "kid");
-    assert.ok(home.id === dads.id || home.id === moms.id);
-    const other = home.id === dads.id ? moms : dads;
+    const dad = headedBy(result, "dad");
+    const mom = headedBy(result, "mom");
+    assert.deepEqual(dad.childIds, ids(["kid"]));
+    assert.equal(headedBy(result, "stepmom").childIds.includes(fxId("kid")), false);
+    assert.equal(headedBy(result, "stepdad").childIds.includes(fxId("kid")), false);
     const link = result.links.find((l) => l.kind === "child" && l.personId === fxId("kid"));
-    assert.equal(link?.fromId, other.id);
-    assert.equal(link?.toId, home.id);
+    assert.equal(link?.fromId, mom.id);
+    assert.equal(link?.toId, dad.id);
   });
 
   it("adopted child with one parent: a single-parent household that still connects when she grows up", () => {
@@ -131,13 +140,17 @@ describe("deriveHouseholds", () => {
     assert.equal(link?.kin, "adopted");
   });
 
-  it("step-parent: a partner's child from before lives in the couple's household", () => {
+  it("step-parent: a partner's child from before lives with that parent, not in the step-parent's household", () => {
     const tree = FIXTURE_STEP_PARENT;
     const result = deriveHouseholds(tree);
     assertWellFormed(tree, result);
-    const home = headedBy(result, "mom", "stepdad");
+    const home = headedBy(result, "mom");
     assert.deepEqual([...home.childIds].sort(), ids(["child", "stepchild"]));
-    assert.equal(result.households.length, 1);
+    const stepdad = headedBy(result, "stepdad");
+    assert.deepEqual(stepdad.childIds, []);
+    const step = result.links.find((link) => link.kind === "step" && link.personId === fxId("stepchild"));
+    assert.equal(step?.fromId, stepdad.id);
+    assert.equal(step?.toId, home.id);
   });
 
   it("step alone does not put the child in the step-parent's household", () => {
@@ -156,8 +169,15 @@ describe("deriveHouseholds", () => {
     assertWellFormed(tree, result);
     const home = headedBy(result, "mae", "stu");
     assert.deepEqual(home.childIds, []);
-    assert.deepEqual(result.loose, ["fx-wynn"]);
-    assert.equal(result.links.some((item) => item.personId === "fx-wynn"), false);
+    const wynn = homeOf(result, "wynn");
+    assert.deepEqual(wynn.headIds, ["fx-wynn"]);
+    assert.deepEqual(wynn.childIds, []);
+    assert.equal(wynn.label, "Parents unknown");
+    assert.equal(wynn.parentsUnknown, true);
+    const step = result.links.find((item) => item.kind === "step" && item.personId === "fx-wynn");
+    assert.equal(step?.kin, "step");
+    assert.equal(step?.toId, wynn.id);
+    assert.notEqual(step?.fromId, wynn.id);
   });
 
   it("unmarried co-parents: one parent heads the household, the other stays linked", () => {
@@ -218,5 +238,255 @@ describe("deriveHouseholds", () => {
     assert.deepEqual(result.households, []);
     assert.deepEqual(result.links, []);
     assert.deepEqual(result.loose, []);
+  });
+});
+
+/**
+ * FIXTURE people only. The classic household area and the Families bucket
+ * have to place these the same way: blood, adopted, and foster count, and a
+ * step link never does.
+ */
+function honestTree(
+  people: string[],
+  kids: {
+    child: string;
+    parents: [string, ParentRole | "", KinKind?][];
+    unknownParents?: { role?: ParentRole }[];
+  }[],
+  unions: [string, string, UnionKind][] = [],
+): TreeData {
+  return {
+    people: people.map((id) => ({
+      id: fxId(id),
+      givenName: id,
+      familyName: "FIXTURE",
+      createdAt: "2024-01-01T00:00:00.000Z",
+      updatedAt: "2024-01-01T00:00:00.000Z",
+    })),
+    unions: unions.map(([a, b, kind], index) => ({
+      id: `fx-u-${index}-${a}-${b}`,
+      partnerIds: [fxId(a), fxId(b)],
+      kind,
+    })),
+    childLinks: kids.map((kid, index) => {
+      const roles: Partial<Record<string, ParentRole>> = {};
+      const kin: Partial<Record<string, KinKind>> = {};
+      for (const [id, role, kind] of kid.parents) {
+        if (role) roles[fxId(id)] = role;
+        if (kind && kind !== "blood") kin[fxId(id)] = kind;
+      }
+      return {
+        id: `fx-c-${index}-${kid.child}`,
+        childId: fxId(kid.child),
+        parentIds: kid.parents.map(([id]) => fxId(id)),
+        ...(Object.keys(roles).length ? { roles } : {}),
+        ...(Object.keys(kin).length ? { kin } : {}),
+        ...(kid.unknownParents?.length ? { unknownParents: kid.unknownParents } : {}),
+      };
+    }),
+  };
+}
+
+function housed(result: Households, name: string) {
+  const household = homeOf(result, name);
+  return {
+    household,
+    ids: [...household.headIds, ...household.childIds],
+  };
+}
+
+describe("honest household membership (FIXTURE)", () => {
+  it("keeps a step-child in their own parent's household, joined by a step link", () => {
+    const tree = honestTree(
+      ["Mom", "Stepdad", "Earlier"],
+      [{ child: "Earlier", parents: [["Mom", "mother"], ["Stepdad", "father", "step"]] }],
+      [["Mom", "Stepdad", "partnered"]],
+    );
+    const result = deriveHouseholds(tree);
+    assertWellFormed(tree, result);
+    const earlier = housed(result, "Earlier");
+    assert.ok(earlier.ids.includes(fxId("Mom")));
+    assert.equal(earlier.ids.includes(fxId("Stepdad")), false);
+    const stepdad = housed(result, "Stepdad");
+    assert.equal(stepdad.ids.includes(fxId("Earlier")), false);
+    assert.notEqual(earlier.household.id, stepdad.household.id);
+    const step = result.links.find((link) => link.kind === "step" && link.personId === fxId("Earlier"));
+    assert.equal(step?.kin, "step");
+    assert.equal(step?.toId, earlier.household.id);
+    assert.notEqual(step?.fromId, earlier.household.id);
+    const units = deriveFamilyUnits(tree);
+    const bucket = unitOfPerson(units, fxId("Earlier"));
+    assert.ok(bucket?.memberIds.includes(fxId("Mom")));
+    assert.equal(bucket?.memberIds.includes(fxId("Stepdad")), false);
+  });
+
+  it("puts half-siblings in their own mother's household", () => {
+    const tree = honestTree(
+      ["Dad", "Mom", "Stepmom", "Kid", "Baby"],
+      [
+        { child: "Kid", parents: [["Dad", "father"], ["Mom", "mother"]] },
+        { child: "Baby", parents: [["Dad", "father"], ["Stepmom", "mother"]] },
+      ],
+      [["Dad", "Mom", "divorced"], ["Dad", "Stepmom", "married"]],
+    );
+    const result = deriveHouseholds(tree);
+    assertWellFormed(tree, result);
+    const kid = housed(result, "Kid");
+    const baby = housed(result, "Baby");
+    assert.ok(kid.ids.includes(fxId("Mom")));
+    assert.equal(kid.ids.includes(fxId("Baby")), false);
+    assert.equal(kid.ids.includes(fxId("Stepmom")), false);
+    assert.ok(baby.ids.includes(fxId("Stepmom")));
+    assert.equal(baby.ids.includes(fxId("Kid")), false);
+    assert.notEqual(kid.household.id, baby.household.id);
+    assert.notEqual(householdOfPerson(result, fxId("Mom"))?.id, householdOfPerson(result, fxId("Stepmom"))?.id);
+  });
+
+  it("includes adopted and foster children with that parent, not a later spouse", () => {
+    const tree = honestTree(
+      ["Ada", "Kit", "Spouse", "Vic", "Foster"],
+      [
+        { child: "Kit", parents: [["Ada", "mother", "adopted"]] },
+        { child: "Foster", parents: [["Vic", "mother", "foster"]] },
+      ],
+      [["Ada", "Spouse", "married"]],
+    );
+    const result = deriveHouseholds(tree);
+    assertWellFormed(tree, result);
+    const kit = housed(result, "Kit");
+    const foster = housed(result, "Foster");
+    assert.ok(kit.ids.includes(fxId("Ada")));
+    assert.equal(kit.ids.includes(fxId("Spouse")), false);
+    assert.ok(foster.ids.includes(fxId("Vic")));
+    assert.equal(foster.household.label.includes("Spouse"), false);
+  });
+
+  it("keeps a child of two mothers, or two fathers, in that couple's household", () => {
+    const mothers = honestTree(
+      ["Mia", "Noa", "Tot"],
+      [{ child: "Tot", parents: [["Mia", "mother"], ["Noa", "mother"]] }],
+      [["Mia", "Noa", "married"]],
+    );
+    const motherHome = housed(deriveHouseholds(mothers), "Tot");
+    assert.deepEqual([...motherHome.household.headIds].sort(), ids(["Mia", "Noa"]));
+    assert.deepEqual(motherHome.household.childIds, [fxId("Tot")]);
+
+    const fathers = honestTree(
+      ["Leo", "Max", "Tot"],
+      [{ child: "Tot", parents: [["Leo", "father"], ["Max", "father"]] }],
+      [["Leo", "Max", "married"]],
+    );
+    const fatherHome = housed(deriveHouseholds(fathers), "Tot");
+    assert.deepEqual([...fatherHome.household.headIds].sort(), ids(["Leo", "Max"]));
+    assert.deepEqual(fatherHome.household.childIds, [fxId("Tot")]);
+  });
+
+  it("keeps a child with one known parent in that parent's household", () => {
+    const tree = honestTree(
+      ["Dale", "Step", "Kip"],
+      [{ child: "Kip", parents: [["Dale", "father"]], unknownParents: [{}] }],
+      [["Dale", "Step", "married"]],
+    );
+    const result = deriveHouseholds(tree);
+    assertWellFormed(tree, result);
+    const kip = housed(result, "Kip");
+    assert.ok(kip.ids.includes(fxId("Dale")));
+    assert.equal(kip.ids.includes(fxId("Step")), false);
+    assert.equal(kip.household.label, "Dale");
+  });
+
+  it("makes a child with no known parents a household of one, Parents unknown", () => {
+    const tree = honestTree(
+      ["Mae", "Step", "Pip"],
+      [{
+        child: "Pip",
+        parents: [["Step", "father", "step"]],
+        unknownParents: [{ role: "mother" }, { role: "father" }],
+      }],
+      [["Mae", "Step", "married"]],
+    );
+    const result = deriveHouseholds(tree);
+    assertWellFormed(tree, result);
+    const pip = housed(result, "Pip");
+    assert.deepEqual(pip.ids, [fxId("Pip")]);
+    assert.equal(pip.household.label, "Parents unknown");
+    assert.equal(pip.household.parentsUnknown, true);
+    const step = housed(result, "Step");
+    assert.equal(step.ids.includes(fxId("Pip")), false);
+    const link = result.links.find((item) => item.kind === "step" && item.personId === fxId("Pip"));
+    assert.equal(link?.kin, "step");
+    assert.equal(link?.toId, pip.household.id);
+  });
+
+  it("keeps an ex-partner's household separate after divorce and remarriage", () => {
+    const tree = honestTree(
+      ["Ada", "Bea", "Cora", "Kit"],
+      [{ child: "Kit", parents: [["Ada", "mother"], ["Bea", "mother"]] }],
+      [["Ada", "Bea", "divorced"], ["Ada", "Cora", "married"]],
+    );
+    const result = deriveHouseholds(tree);
+    assertWellFormed(tree, result);
+    const kit = housed(result, "Kit");
+    const bea = housed(result, "Bea");
+    assert.equal(kit.ids.includes(fxId("Cora")), false);
+    assert.equal(kit.ids.includes(fxId("Bea")), false);
+    assert.equal(bea.ids.includes(fxId("Kit")), false);
+    assert.equal(bea.ids.includes(fxId("Cora")), false);
+    assert.notEqual(bea.household.id, kit.household.id);
+    assert.notEqual(bea.household.id, householdOfPerson(result, fxId("Cora"))?.id);
+    const units = deriveFamilyUnits(tree);
+    assert.notEqual(units.unitOf[fxId("Ada")], units.unitOf[fxId("Bea")]);
+    assert.equal(units.unitOf[fxId("Kit")], units.unitOf[fxId("Ada")]);
+    assert.notEqual(units.unitOf[fxId("Kit")], units.unitOf[fxId("Cora")]);
+  });
+
+  it("places the blended fixture the same way the Families bucket does", () => {
+    const result = deriveHouseholds(BLENDED);
+    assertWellFormed(BLENDED, result);
+    const kip = housed(result, "kip");
+    const pip = housed(result, "pip");
+    assert.ok(kip.ids.includes(fxId("dale")));
+    assert.equal(kip.ids.includes(fxId("step")), false);
+    assert.deepEqual(pip.ids, [fxId("pip")]);
+    assert.equal(pip.household.label, "Parents unknown");
+    const step = result.links.find((link) => link.kind === "step" && link.personId === fxId("pip"));
+    assert.equal(step?.kin, "step");
+    const units = deriveFamilyUnits(BLENDED);
+    assert.equal(units.unitOf[fxId("kip")], units.unitOf[fxId("dale")]);
+    assert.notEqual(units.unitOf[fxId("kip")], units.unitOf[fxId("step")]);
+    assert.deepEqual(unitOfPerson(units, fxId("pip"))?.memberIds, [fxId("pip")]);
+  });
+
+  it("does not change when the people array is reversed", () => {
+    const tree = honestTree(
+      ["Mom", "Stepdad", "Earlier", "Baby"],
+      [
+        { child: "Earlier", parents: [["Mom", "mother"], ["Stepdad", "father", "step"]] },
+        { child: "Baby", parents: [["Mom", "mother"], ["Stepdad", "father"]] },
+      ],
+      [["Mom", "Stepdad", "married"]],
+    );
+    const forward = deriveHouseholds(tree);
+    const backward = deriveHouseholds({ ...tree, people: [...tree.people].reverse() });
+    assert.deepEqual(forward, backward);
+    const again = deriveHouseholds(structuredClone(tree));
+    assert.deepEqual(forward, again);
+  });
+
+  it("drops a person a visibility lens has hidden, and does not let them shape the rest", () => {
+    const visible = new Set(BLENDED.people.map((person) => person.id).filter((id) => id !== fxId("step")));
+    const hidden = deriveHouseholds(BLENDED, visible);
+    const filtered = deriveHouseholds(treeForLens(BLENDED, visible));
+    assert.deepEqual(hidden, filtered);
+    const dumped = JSON.stringify(hidden);
+    assert.equal(dumped.includes(fxId("step")), false);
+    assert.equal(dumped.includes("Step"), false);
+    const kip = housed(hidden, "kip");
+    assert.ok(kip.ids.includes(fxId("dale")));
+    assert.equal(kip.ids.includes(fxId("step")), false);
+    const pip = housed(hidden, "pip");
+    assert.deepEqual(pip.ids, [fxId("pip")]);
+    assert.equal(pip.household.label, "Parents unknown");
+    assert.equal(pip.household.parentsUnknown, true);
   });
 });

@@ -859,6 +859,10 @@ select {
   stroke: color-mix(in srgb, var(--accent) 70%, transparent);
 }
 .household-area.is-dim { opacity: 0.45; }
+.household-area.is-unknown {
+  fill: color-mix(in srgb, var(--muted) 8%, transparent);
+  stroke: color-mix(in srgb, var(--muted) 42%, transparent);
+}
 .household-bridge path {
   fill: none;
   stroke: var(--graph-spouse);

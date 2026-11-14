@@ -1,13 +1,19 @@
+import { kinMembership, type KinMembership } from "./kinMembership";
+import { treeForLens } from "./visibleTree";
 import type { KinKind, Person, TreeData, Union } from "./types";
-import { kinOf, strongestKin } from "./types";
+import { strongestKin } from "./types";
 
 /**
- * A household is a couple (a married or partnered union), or a single parent,
- * plus the children who still live there. Blood and adopted children count
- * before foster. A step link does not move a child into that household.
+ * A household is a couple, or one parent, plus the children who still live
+ * there. Membership is the same rule as a Families bucket: blood, adopted,
+ * and foster place a child, and a step link does not. A couple shares a
+ * household only when neither partner has a placing child the other is not
+ * a parent of. Otherwise each keeps their own household, and the step-child
+ * stays in their parent's.
  *
  * Households are derived, never stored: `deriveHouseholds` is a pure function
- * of the people, unions and child links already on the tree.
+ * of the people, unions and child links already on the tree. Pass `visibleIds`
+ * to drop everyone a lens has hidden before any household is shaped.
  */
 export type Household = {
   id: string;
@@ -17,8 +23,10 @@ export type Household = {
   headIds: string[];
   /** Children of a head who do not head a household of their own, oldest first. */
   childIds: string[];
-  /** Quiet label such as "Jon & Lena". */
+  /** Quiet label such as "Jon & Lena", or "Parents unknown" for a household of one. */
   label: string;
+  /** Every member's placing parents are absent, and the tree says so. */
+  parentsUnknown?: boolean;
 };
 
 export type HouseholdLinkKind =
@@ -27,7 +35,9 @@ export type HouseholdLinkKind =
   /** `personId` shares a child with a head of `toId` but is not a head there. */
   | "coparent"
   /** `personId` has another recorded couple union with a head of `toId`. */
-  | "partner";
+  | "partner"
+  /** `personId` is a step-child. The link connects the homes. It does not share them. */
+  | "step";
 
 export type HouseholdLink = {
   id: string;
@@ -57,51 +67,52 @@ function byBirthThenName(a: Person, b: Person): number {
   return a.givenName.localeCompare(b.givenName) || a.id.localeCompare(b.id);
 }
 
-export function deriveHouseholds(tree: TreeData): Households {
-  const people = new Map(tree.people.map((p) => [p.id, p]));
+function kinBetween(membership: KinMembership, childId: string, parentId: string): KinKind {
+  return membership.parentsOf(childId).find((parent) => parent.id === parentId)?.kin ?? "blood";
+}
+
+export function deriveHouseholds(tree: TreeData, visibleIds?: ReadonlySet<string>): Households {
+  const source = visibleIds ? treeForLens(tree, visibleIds) : tree;
+  const people = new Map(source.people.map((p) => [p.id, p]));
   const known = (id: string) => people.has(id);
-
-  const parentsOf = new Map<string, string[]>();
-  const childrenOf = new Map<string, string[]>();
-  const kinOfPair = new Map<string, KinKind>();
-  for (const link of tree.childLinks) {
-    if (!known(link.childId)) continue;
-    for (const parentId of link.parentIds) {
-      if (!known(parentId) || parentId === link.childId) continue;
-      const ps = parentsOf.get(link.childId) ?? [];
-      if (!ps.includes(parentId)) ps.push(parentId);
-      parentsOf.set(link.childId, ps);
-      const cs = childrenOf.get(parentId) ?? [];
-      if (!cs.includes(link.childId)) cs.push(link.childId);
-      childrenOf.set(parentId, cs);
-      kinOfPair.set(`${link.childId}|${parentId}`, kinOf(link, parentId));
-    }
-  }
-  const parents = (id: string) => parentsOf.get(id) ?? [];
-  const children = (id: string) => childrenOf.get(id) ?? [];
-  const kin = (childId: string, parentId: string): KinKind => kinOfPair.get(`${childId}|${parentId}`) ?? "blood";
-
+  const membership = kinMembership(source);
   const households: Household[] = [];
   const headOf = new Map<string, Household>();
 
-  // 1. Couples. A person heads at most one household; married beats partnered,
-  //    then more shared children, then the more recently recorded union.
-  const unionIndex = new Map(tree.unions.map((u, i) => [u.id, i]));
-  const sharedKids = (union: Union) => {
-    const partners = union.partnerIds.filter(known);
-    return new Set(
-      tree.childLinks
-        .filter(
-          (l) =>
-            known(l.childId) &&
-            (l.unionId === union.id || (partners.length > 1 && partners.every((p) => l.parentIds.includes(p)))),
-        )
-        .map((l) => l.childId),
-    ).size;
+  const ensure = (id: string) => {
+    const existing = headOf.get(id);
+    if (existing) return existing;
+    const household: Household = { id: `hh-solo-${id}`, headIds: [id], childIds: [], label: "" };
+    households.push(household);
+    headOf.set(id, household);
+    return household;
   };
-  const couples = tree.unions
-    .filter((u) => isCoupleKind(u) && new Set(u.partnerIds.filter(known)).size >= 2)
-    .map((u) => ({ union: u, kids: sharedKids(u), married: u.kind === "married" ? 1 : 0 }))
+
+  // Id order, not the saved array. Two devices that added the same people
+  // in a different sequence still build the same households.
+  const peopleInOrder = [...source.people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+
+  // 1. Couples who share a home. A step boundary keeps the partners apart.
+  //    A person heads at most one household; married beats partnered, then
+  //    more shared placing children, then the more recently recorded union.
+  const unionIndex = new Map(source.unions.map((u, i) => [u.id, i]));
+  const sharedKids = (union: Union) => {
+    const partners = [...new Set(union.partnerIds.filter(known))];
+    if (partners.length < 2) return 0;
+    let count = 0;
+    for (const person of peopleInOrder) {
+      const placing = new Set(membership.placingOf(person.id).map((parent) => parent.id));
+      if (partners.every((id) => placing.has(id))) count += 1;
+    }
+    return count;
+  };
+  const couples = source.unions
+    .filter((union) => isCoupleKind(union) && new Set(union.partnerIds.filter(known)).size >= 2)
+    .filter((union) => {
+      const partners = [...new Set(union.partnerIds.filter(known))];
+      return partners.length >= 2 && membership.sharesHome(partners[0], partners[1]);
+    })
+    .map((union) => ({ union, kids: sharedKids(union), married: union.kind === "married" ? 1 : 0 }))
     .sort(
       (a, b) =>
         b.married - a.married || b.kids - a.kids || unionIndex.get(b.union.id)! - unionIndex.get(a.union.id)!,
@@ -114,73 +125,70 @@ export function deriveHouseholds(tree: TreeData): Households {
     for (const id of heads) headOf.set(id, household);
   }
 
-  // 2. Children whose parents head no couple household pick one "home parent".
-  //    That parent heads a single-parent household. Prefer a parent who already
-  //    heads one, then the parent with more children, then one whose own
-  //    parents are on the tree, then the parent listed first.
-  // Id order, not the saved array. Two devices that added the same people
-  // in a different sequence still build the same households.
-  const peopleInOrder = [...tree.people].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const homeParent = new Map<string, string>();
+  // 2. A line parent heads a home when nobody else already does. That is true
+  //    for a child still at home, and for a grown child whose parents are a
+  //    household the child has left. The parent is the line parent, never a
+  //    step-parent and never whichever parent has more children.
   for (const person of peopleInOrder) {
-    const ps = parents(person.id);
-    if (!ps.length || ps.some((p) => headOf.has(p))) continue;
-    const ranked = [...ps].sort((a, b) => {
-      const aSolo = [...homeParent.values()].includes(a) ? 1 : 0;
-      const bSolo = [...homeParent.values()].includes(b) ? 1 : 0;
-      if (aSolo !== bSolo) return bSolo - aSolo;
-      if (children(a).length !== children(b).length) return children(b).length - children(a).length;
-      const aUp = parents(a).length ? 1 : 0;
-      const bUp = parents(b).length ? 1 : 0;
-      if (aUp !== bUp) return bUp - aUp;
-      return ps.indexOf(a) - ps.indexOf(b);
-    });
-    homeParent.set(person.id, ranked[0]);
-  }
-  for (const person of peopleInOrder) {
-    const parentId = homeParent.get(person.id);
+    const parentId = membership.lineParent(person.id);
     if (!parentId || headOf.has(parentId)) continue;
-    const household: Household = { id: `hh-solo-${parentId}`, headIds: [parentId], childIds: [], label: "" };
-    households.push(household);
-    headOf.set(parentId, household);
+    ensure(parentId);
   }
 
-  // 3. Everyone who heads nothing lives with a line parent who heads a household.
-  //    Blood and adopted outrank foster. A step parent does not claim the child,
-  //    so step alone leaves them outside that household.
+  // 3. Someone whose parents are unknown heads a household of one. A current
+  //    partner who does not share the other household does too, so the
+  //    step-parent has an area the step-child is not inside. A divorced or
+  //    separated parent whose child lives with the other parent does too.
+  for (const person of peopleInOrder) {
+    if (headOf.has(person.id)) continue;
+    if (membership.parentsUnknown(person.id)) ensure(person.id);
+  }
+  for (const person of peopleInOrder) {
+    if (headOf.has(person.id)) continue;
+    const current = source.unions.some(
+      (union) =>
+        isCoupleKind(union) &&
+        union.partnerIds.includes(person.id) &&
+        union.partnerIds.some((id) => id !== person.id && known(id)),
+    );
+    if (current) ensure(person.id);
+  }
+  for (const union of source.unions) {
+    if (union.kind !== "divorced" && union.kind !== "separated") continue;
+    const partners = [...new Set(union.partnerIds.filter(known))];
+    if (partners.length < 2) continue;
+    const sharedChild = peopleInOrder.some((person) => {
+      const placing = membership.placingOf(person.id).map((parent) => parent.id);
+      return partners.every((id) => placing.includes(id));
+    });
+    if (!sharedChild) continue;
+    for (const id of partners) if (!headOf.has(id)) ensure(id);
+  }
+
+  // 4. A person who heads nothing lives with their line parent.
   const homeOf: Record<string, string> = {};
   for (const household of households) for (const id of household.headIds) homeOf[id] = household.id;
   for (const person of peopleInOrder) {
     if (headOf.has(person.id)) continue;
-    const candidates = new Map<string, { household: Household; count: number; line: number }>();
-    for (const parentId of parents(person.id)) {
-      if (kin(person.id, parentId) === "step") continue;
-      const household = headOf.get(parentId);
-      if (!household) continue;
-      const entry = candidates.get(household.id) ?? { household, count: 0, line: 0 };
-      entry.count += 1;
-      const kind = kin(person.id, parentId);
-      if (kind === "blood" || kind === "adopted") entry.line += 1;
-      candidates.set(household.id, entry);
-    }
-    const best = [...candidates.values()].sort(
-      (a, b) =>
-        b.line - a.line ||
-        b.count - a.count ||
-        (a.household.id < b.household.id ? -1 : a.household.id > b.household.id ? 1 : 0),
-    )[0];
-    if (!best) continue;
-    best.household.childIds.push(person.id);
-    homeOf[person.id] = best.household.id;
+    const parentId = membership.lineParent(person.id);
+    const household = parentId ? headOf.get(parentId) : undefined;
+    if (!household) continue;
+    household.childIds.push(person.id);
+    homeOf[person.id] = household.id;
   }
   for (const household of households) {
     household.childIds.sort((a, b) => byBirthThenName(people.get(a)!, people.get(b)!));
-    household.label = household.headIds.map((id) => people.get(id)!.givenName.trim() || "?").join(" & ");
+    const members = [...household.headIds, ...household.childIds];
+    household.parentsUnknown = members.length > 0 && members.every((id) => membership.parentsUnknown(id));
+    household.label =
+      household.parentsUnknown && members.length === 1
+        ? "Parents unknown"
+        : household.headIds.map((id) => people.get(id)!.givenName.trim() || "?").join(" & ");
   }
 
-  const loose = peopleInOrder.map((p) => p.id).filter((id) => !homeOf[id]);
+  const loose = peopleInOrder.map((person) => person.id).filter((id) => !homeOf[id]);
 
-  // 4. Links between households.
+  // 5. Links between households. A step link connects the homes and does not merge them.
   const links: HouseholdLink[] = [];
   const seen = new Set<string>();
   const push = (link: Omit<HouseholdLink, "id">) => {
@@ -193,33 +201,48 @@ export function deriveHouseholds(tree: TreeData): Households {
     const toId = homeOf[person.id];
     if (!toId) continue;
     const byHousehold = new Map<string, string[]>();
-    for (const parentId of parents(person.id)) {
-      const fromId = homeOf[parentId];
-      if (!fromId || fromId === toId || !headOf.has(parentId)) continue;
-      byHousehold.set(fromId, [...(byHousehold.get(fromId) ?? []), parentId]);
+    for (const parent of membership.parentsOf(person.id)) {
+      if (parent.kin === "step") {
+        const fromId = homeOf[parent.id];
+        if (fromId && fromId !== toId && headOf.has(parent.id)) {
+          push({ kind: "step", fromId, toId, personId: person.id, kin: "step" });
+        }
+        continue;
+      }
+      const fromId = homeOf[parent.id];
+      if (!fromId || fromId === toId || !headOf.has(parent.id)) continue;
+      byHousehold.set(fromId, [...(byHousehold.get(fromId) ?? []), parent.id]);
     }
-    for (const [fromId, ps] of byHousehold) {
-      push({ kind: "child", fromId, toId, personId: person.id, kin: strongestKin(ps.map((p) => kin(person.id, p))) });
+    for (const [fromId, parents] of byHousehold) {
+      push({
+        kind: "child",
+        fromId,
+        toId,
+        personId: person.id,
+        kin: strongestKin(parents.map((parentId) => kinBetween(membership, person.id, parentId))),
+      });
     }
   }
   for (const person of peopleInOrder) {
     if (headOf.has(person.id)) continue;
-    for (const childId of children(person.id)) {
-      const toId = homeOf[childId];
+    for (const child of peopleInOrder) {
+      const parent = membership.parentsOf(child.id).find((item) => item.id === person.id);
+      if (!parent || parent.kin === "step") continue;
+      const toId = homeOf[child.id];
       if (!toId || toId === homeOf[person.id]) continue;
-      push({ kind: "coparent", fromId: homeOf[person.id], toId, personId: person.id, kin: kin(childId, person.id) });
+      push({ kind: "coparent", fromId: homeOf[person.id], toId, personId: person.id, kin: parent.kin });
     }
   }
-  for (const union of tree.unions) {
+  for (const union of source.unions) {
     const partners = [...new Set(union.partnerIds.filter(known))];
     if (partners.length < 2) continue;
-    if (households.some((h) => h.unionId === union.id)) continue;
+    if (households.some((household) => household.unionId === union.id)) continue;
     for (const a of partners) {
       for (const b of partners) {
         if (a === b || !headOf.has(b)) continue;
         const toId = homeOf[b];
         if (homeOf[a] === toId) continue;
-        if (links.some((l) => l.kind === "coparent" && l.personId === a && l.toId === toId)) continue;
+        if (links.some((link) => link.kind === "coparent" && link.personId === a && link.toId === toId)) continue;
         push({ kind: "partner", fromId: homeOf[a], toId, personId: a, kin: "blood" });
       }
     }

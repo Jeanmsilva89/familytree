@@ -1,4 +1,5 @@
 import { CARD, showsCoupleBar } from "./layout";
+import { visibleChildLinks } from "./visibleTree";
 import { childrenOfPerson, kinBetween, parentsOf, unionsFor } from "./tree";
 import { lineFilterAllows, lineFilterAllowsCouples, type LineFilter, DEFAULT_LINE_FILTER } from "./kinFilter";
 import type { KinKind, TreeData } from "./types";
@@ -213,25 +214,7 @@ export function sceneTree(tree: TreeData, seen?: ReadonlyMap<string, SeenPerson>
     if (partnerIds.length < 2) return [];
     return [{ ...union, partnerIds }];
   });
-  const childLinks = tree.childLinks.flatMap((link) => {
-    if (!ids.has(link.childId)) return [];
-    const parentIds = link.parentIds.filter((id) => ids.has(id));
-    if (!parentIds.length) return [];
-    const roles = pickRecord(link.roles, parentIds);
-    const kin = pickRecord(link.kin, parentIds);
-    return [{ ...link, parentIds, ...(roles ? { roles } : { roles: undefined }), ...(kin ? { kin } : { kin: undefined }) }];
-  });
-  return { ...tree, people, unions, childLinks };
-}
-
-function pickRecord<T>(record: Partial<Record<string, T>> | undefined, ids: string[]): Partial<Record<string, T>> | undefined {
-  if (!record) return undefined;
-  const next: Partial<Record<string, T>> = {};
-  for (const id of ids) {
-    const value = record[id];
-    if (value !== undefined) next[id] = value;
-  }
-  return Object.keys(next).length ? next : undefined;
+  return { ...tree, people, unions, childLinks: visibleChildLinks(tree, ids) };
 }
 
 /** Guest edit, owner edit, and a shared family. A shared person is never editable. */

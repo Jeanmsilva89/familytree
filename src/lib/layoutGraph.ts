@@ -114,6 +114,16 @@ function sittingDistance(left: number, right: number) {
   return right - left <= CARD.w + CARD.coupleGap + 0.51;
 }
 
+/**
+ * A marriage bar across the gap between two household areas. Partners who do
+ * not share a home still sit one area apart, and the bar is what shows the
+ * marriage. A couple on opposite sides of the tree stays too far for a bar.
+ */
+function partnerBarReach(left: number, right: number) {
+  const adjacentAreas = CARD.w + CARD.coupleGap + AREA.gap + 2 * AREA.padX + 12;
+  return Math.abs(right - left) <= adjacentAreas;
+}
+
 function makeFork(
   id: string,
   parents: LaidCard[],
@@ -235,7 +245,7 @@ export function connectLaidCards(
       partnerIds: union.partnerIds,
       kind: union.kind,
       status: partnerStatus(tree, union),
-      bar: sittingDistance(l.x, r.x) && showsCoupleBar(union.kind, partners.length),
+      bar: partnerBarReach(l.x, r.x) && showsCoupleBar(union.kind, partners.length),
       cx: (l.x + r.x) / 2,
       cy: l.y + CARD.h * 0.5,
     });
@@ -344,7 +354,7 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     const to = blockById.get(link.toId);
     const from = link.fromId ? blockById.get(link.fromId) : blockOfPerson.get(link.personId);
     if (!to || !from || to === from) continue;
-    if (link.kind === "child") {
+    if (link.kind === "child" || link.kind === "step") {
       neighbors.get(to.id)!.push({ block: from, via: link.personId, rel: "up" });
       neighbors.get(from.id)!.push({ block: to, via: link.personId, rel: "down" });
     } else {
@@ -591,10 +601,14 @@ export function buildGraph(tree: TreeData, focusHint?: string): GraphLayout {
     const heads = [...block.headIds].sort((a, b) => (byCard.get(a)?.x ?? 0) - (byCard.get(b)?.x ?? 0));
     areas.push({
       id: block.household.id,
-      label: heads.map((id) => personById(tree, id)?.givenName.trim() || "?").join(" & "),
+      label:
+        block.household.label === "Parents unknown"
+          ? block.household.label
+          : heads.map((id) => personById(tree, id)?.givenName.trim() || "?").join(" & "),
       headIds: heads,
       memberIds: [...block.headIds, ...block.childIds],
       isHome: block === homeBlock,
+      parentsUnknown: block.household.parentsUnknown,
       cx: (minX + maxX) / 2,
       cy: (minY + maxY) / 2,
       ...shape,

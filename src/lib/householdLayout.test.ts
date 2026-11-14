@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { CARD, buildGraph, type GraphLayout, type LaidArea } from "./layout";
+import { treeForLens } from "./layoutSeed";
 import { bridgePath, superellipsePath } from "./graphView";
 import {
   FIXTURE_ADOPTED_SINGLE_PARENT,
@@ -13,6 +14,9 @@ import {
   fxId,
 } from "./households.fixtures";
 import type { TreeData } from "./types";
+import blendedFixture from "../../scripts/fixtures/verify-blended-family.json";
+
+const BLENDED = blendedFixture as TreeData;
 
 const ALL: [string, TreeData][] = [
   ["sibling households", FIXTURE_SIBLING_HOUSEHOLDS],
@@ -148,6 +152,56 @@ describe("area and connector paths", () => {
     assert.match(d, /^M 0 0/);
     assert.match(d, /200 100$/);
     assert.equal(bridgePath({ fromX: 10, fromY: 0, toX: 10, toY: 80 }), "M 10 0 L 10 80");
+  });
+});
+
+describe("blended household areas", () => {
+  it("draws Kip in Dale's area and Pip as Parents unknown, with a step link", () => {
+    const layout = buildGraph(BLENDED, fxId("dale"));
+    const dale = layout.areas.find((area) => area.memberIds.includes(fxId("dale")));
+    const step = layout.areas.find((area) => area.memberIds.includes(fxId("step")));
+    const pip = layout.areas.find((area) => area.memberIds.includes(fxId("pip")));
+    assert.ok(dale, "Dale has a household area");
+    assert.ok(pip, "Pip has a household area");
+    assert.ok(dale.memberIds.includes(fxId("kip")));
+    assert.equal(dale.memberIds.includes(fxId("step")), false);
+    assert.equal(dale.memberIds.includes(fxId("pip")), false);
+    assert.deepEqual(pip.memberIds, [fxId("pip")]);
+    assert.equal(pip.label, "Parents unknown");
+    assert.equal(pip.parentsUnknown, true);
+    if (step) {
+      assert.equal(step.memberIds.includes(fxId("kip")), false);
+      assert.equal(step.memberIds.includes(fxId("pip")), false);
+    }
+    const fork = layout.forks.find(
+      (item) => item.parentIds.includes(fxId("step")) && item.childIds.includes(fxId("pip")),
+    );
+    assert.equal(fork?.kin, "step");
+    const center = (id: string) => {
+      const card = layout.cards.find((item) => item.id === fxId(id))!;
+      return { x: card.x, y: card.y + CARD.h / 2 };
+    };
+    const kipAt = center("kip");
+    assert.ok(insideArea(dale, kipAt.x, kipAt.y));
+    const stepAt = center("step");
+    const pipAt = center("pip");
+    assert.equal(insideArea(dale, stepAt.x, stepAt.y), false);
+    assert.equal(insideArea(dale, pipAt.x, pipAt.y), false);
+    assert.ok(insideArea(pip, pipAt.x, pipAt.y));
+    if (step) assert.equal(insideArea(step, pipAt.x, pipAt.y), false);
+  });
+
+  it("does not draw a hidden step-parent or let them shape Kip's area", () => {
+    const visible = new Set(BLENDED.people.map((person) => person.id).filter((id) => id !== fxId("step")));
+    const layout = buildGraph(treeForLens(BLENDED, visible), fxId("dale"));
+    const dumped = JSON.stringify(layout.areas);
+    assert.equal(dumped.includes(fxId("step")), false);
+    assert.equal(layout.cards.some((card) => card.id === fxId("step")), false);
+    const dale = layout.areas.find((area) => area.memberIds.includes(fxId("dale")));
+    assert.ok(dale?.memberIds.includes(fxId("kip")));
+    assert.equal(dale?.memberIds.includes(fxId("step")), false);
+    const pip = layout.areas.find((area) => area.memberIds.includes(fxId("pip")));
+    assert.equal(pip?.label, "Parents unknown");
   });
 });
 

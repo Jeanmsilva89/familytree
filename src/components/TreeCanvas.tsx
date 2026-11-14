@@ -3,6 +3,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type PointerEvent } from "react";
 import type { KinKind, LinkRole, ParentRole, Person, TreeData, UnionKind } from "@/lib/types";
 import { displayName, kinKindLabel } from "@/lib/types";
+import { parentsAreUnknown } from "@/lib/kinMembership";
 import { PartnerStatusMark } from "./PartnerStatusMark";
 import { CARD, ageLabel, buildGraph, lineageIds, type GraphLayout } from "@/lib/layout";
 import { GeneratedAvatar } from "./GeneratedAvatar";
@@ -684,7 +685,9 @@ export function TreeCanvas({
                 return (
                   <path
                     key={area.id}
-                    className={`household-area${area.isHome ? " is-home" : ""}${lit ? " is-lit" : ""}${linked && !lit ? " is-dim" : ""}`}
+                    className={`household-area${area.isHome ? " is-home" : ""}${area.parentsUnknown ? " is-unknown" : ""}${lit ? " is-lit" : ""}${linked && !lit ? " is-dim" : ""}`}
+                    data-members={area.memberIds.join(" ")}
+                    data-parents={area.parentsUnknown ? "unknown" : undefined}
                     d={superellipsePath(area)}
                     vectorEffect="non-scaling-stroke"
                   />
@@ -720,7 +723,13 @@ export function TreeCanvas({
             const forkKin = kids.every((drop) => drop.kin === kids[0].kin) ? kids[0].kin : fork.kin;
             const barStyle = kinStyle(forkKin, lit, fork.dotted && forkKin === "blood");
             return (
-              <g key={fork.id} className={fork.dotted ? "graph-fork is-split" : "graph-fork"}>
+              <g
+                key={fork.id}
+                className={fork.dotted ? "graph-fork is-split" : "graph-fork"}
+                data-kin={forkKin}
+                data-parents={fork.parentIds.join(" ")}
+                data-children={fork.childIds.join(" ")}
+              >
                 {parents.map((drop) => {
                   const w = kinStyle(drop.kin, lit, fork.dotted && drop.kin === "blood");
                   return (
@@ -1025,6 +1034,7 @@ export function TreeCanvas({
           const active = selected || connected || isHome;
           const dim = Boolean(linked && !connected);
           const age = ageLabel(card.person.birthDate);
+          const unknownParents = parentsAreUnknown(tree, card.person.id);
           const left = card.x - CARD.w / 2;
           if (!isFiniteBox(left, card.y, CARD.w, CARD.h)) return null;
           const photo = card.person.photo;
@@ -1033,6 +1043,7 @@ export function TreeCanvas({
               key={card.id}
               type="button"
               data-person-id={card.id}
+              data-parents={unknownParents ? "unknown" : undefined}
               data-ring={rings.get(card.id)}
               className={`portrait-card${photo ? " has-photo" : ""}${isHome ? " is-home" : ""}${active ? " is-active" : ""}${dim ? " is-dim" : ""}${editMode ? " is-movable" : ""}`}
               style={{ left, top: card.y, width: CARD.w, height: CARD.h }}
@@ -1048,7 +1059,7 @@ export function TreeCanvas({
               )}
               <span className="identity">
                 <strong title={displayName(card.person)}>{card.person.givenName || displayName(card.person)}</strong>
-                <em>{age ?? "—"}</em>
+                {unknownParents && !age ? <em className="is-unknown-parents">Parents unknown</em> : <em>{age ?? "—"}</em>}
               </span>
             </button>
           );

@@ -1,4 +1,4 @@
 {
-  "note": "Uncompressed bytes of the client files the home route loads. The webpack runtime is excluded: it only lists chunk ids, and it must not contain three.js. Orbit's renderer is a separate chunk and is not in this list. The largest file grew when the family sky stopped using a force layout and placed families from a kinship seed, and again when zoom and focus glides became one camera transform. It grew once more when a step boundary kept a child out of a step-parent's bucket and a card could say parents unknown.",
-  "sizes": [557, 2531, 6218, 8537, 14370, 18369, 43623, 173019, 174133, 231579]
+  "note": "Uncompressed bytes of the client files the home route loads. The webpack runtime is excluded: it only lists chunk ids, and it must not contain three.js. Orbit's renderer is a separate chunk and is not in this list. The largest file grew when the family sky stopped using a force layout and placed families from a kinship seed, and again when zoom and focus glides became one camera transform. It grew once more when a step boundary kept a child out of a step-parent's bucket and a card could say parents unknown. Classic household areas now use that same membership rule, so one home-route file grew by the shared function and the parents-unknown label.",
+  "sizes": [557, 2531, 6218, 8537, 14370, 20901, 43757, 173019, 174133, 229694]
 }

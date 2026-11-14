@@ -74,6 +74,8 @@ export type LaidArea = {
   headIds: string[];
   memberIds: string[];
   isHome: boolean;
+  /** A household of one whose placing parents are not on the tree. */
+  parentsUnknown?: boolean;
   /** Superellipse centre, radii and exponent: |x/rx|^n + |y/ry|^n = 1. */
   cx: number;
   cy: number;
