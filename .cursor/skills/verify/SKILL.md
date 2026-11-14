@@ -16,7 +16,7 @@ At desktop (1280×800) and phone (390×844), in the dark theme:
 1. Import the fixture through the backup JSON control.
 2. Open Visualize.
 3. Turn on the Families lens.
-4. Zoom until family buckets and a blood link are on screen. No person-to-person link may cross the soft background of a family that neither endpoint belongs to.
+4. Zoom until family buckets and a blood link are on screen. No person-to-person link may cross the soft background of a family that neither endpoint belongs to. On the rendered fixture the same measurement stays within the routed ceilings: unrelated backgrounds crossed `0`, pairwise link crossings `0`, and the widest bow (farthest the stroke leaves the straight chord, divided by that chord) at most `0.115`. The script prints the three numbers for each size.
 5. Zoom out to the star view (`data-level="far"`) and confirm the "Tap a family to zoom in" hint. Record the star centers, reload, and confirm they match before any family is moved.
 6. Tap the Ada & Ben star and confirm the sky zooms back in.
 7. Open Cora Fixture's person sheet and move her into Dee Fixture's family unit. The choice must stick in IndexedDB.

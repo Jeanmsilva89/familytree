@@ -5,7 +5,7 @@ import { buildGraph } from "./layoutGraph";
 import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type JoinReason, type UnitLinkKind } from "./familyUnits";
 import { placeFamilySkySeed, seedFromUnits, treeForLens } from "./layoutSeed";
 import type { Camera } from "./graphView";
-import { routePersonLink, type RouteBucket, type RouteCurve } from "./familySkyRoute";
+import { measureCrossBucketLinks, routePersonLink, type RouteBucket, type RouteCurve } from "./familySkyRoute";
 
 /**
  * The family sky: every family unit is a soft bucket holding today's
@@ -434,8 +434,9 @@ function routeLink(
   otherCards: { x: number; y: number }[],
   foreign: RouteBucket[],
   route: typeof routePersonLink,
-): { near: Curve; mid: Curve; nearPieces: Curve[]; midPieces: Curve[] } {
-  const q: RouteCurve = route({ from: a, to: b, cards: otherCards, foreign });
+  avoid: RouteCurve[],
+): { raw: RouteCurve; near: Curve; mid: Curve; nearPieces: Curve[]; midPieces: Curve[] } {
+  const q: RouteCurve = route({ from: a, to: b, cards: otherCards, foreign, avoid });
   const ra = cardRect(a, LINK_GAP);
   const rb = cardRect(b, LINK_GAP);
   const nearCurve = trim(q, (p) => inRect(ra, p), (p) => inRect(rb, p));
@@ -461,7 +462,7 @@ function routeLink(
       .filter((c) => c.x > minX && c.x < maxX && c.y > minY && c.y < maxY)
       .map((c) => (p: { x: number; y: number }) => Math.hypot(p.x - c.x, p.y - c.y - CARD.h / 2) < AVATAR_ROOM),
   );
-  return { near: nearCurve, mid: midCurve, nearPieces, midPieces };
+  return { raw: q, near: nearCurve, mid: midCurve, nearPieces, midPieces };
 }
 
 /** How many points along a curve fall inside any of the given cards (for tests and checks). */
@@ -570,14 +571,20 @@ export function layoutFamilySky(
   const cardOf = new Map(cards.map((c) => [c.id, c]));
 
   // 5. Links between buckets: person to person, and one edge per bucket pair.
-  const links: SkyLink[] = units.links.map((link) => {
-    const a = cardOf.get(link.fromPersonId)!;
-    const b = cardOf.get(link.toPersonId)!;
-    const otherCards = cards.filter((c) => c.id !== a.id && c.id !== b.id);
-    const foreign = buckets.filter((bucket) => bucket.id !== link.fromUnitId && bucket.id !== link.toUnitId);
-    const { near, mid, nearPieces, midPieces } = routeLink(a, b, otherCards, foreign, route);
-    return { ...link, ...near, mid, pieces: nearPieces, midPieces };
-  });
+  // Routed in id order so a later link can stay beside an earlier one. The
+  // route runs once per layout, never while the sky is panning or gliding.
+  const avoid: RouteCurve[] = [];
+  const links: SkyLink[] = [...units.links]
+    .sort(byId)
+    .map((link) => {
+      const a = cardOf.get(link.fromPersonId)!;
+      const b = cardOf.get(link.toPersonId)!;
+      const otherCards = cards.filter((c) => c.id !== a.id && c.id !== b.id);
+      const foreign = buckets.filter((bucket) => bucket.id !== link.fromUnitId && bucket.id !== link.toUnitId);
+      const { raw, near, mid, nearPieces, midPieces } = routeLink(a, b, otherCards, foreign, route, avoid);
+      avoid.push(raw);
+      return { ...link, ...near, mid, pieces: nearPieces, midPieces };
+    });
   const bucketOf = new Map(buckets.map((b) => [b.id, b]));
   const edges = new Map<string, SkyUnitEdge>();
   for (const link of units.links) {
@@ -621,6 +628,35 @@ export function cameraToFit(vw: number, vh: number, box: Box, pad = 20, maxScale
   const h = Math.max(1, box.maxY - box.minY);
   const s = Math.min(maxScale, Math.max(1e-4, Math.min((vw - pad * 2) / w, (vh - pad * 2) / h)));
   return { x: vw / 2 - ((box.minX + box.maxX) / 2) * s, y: vh / 2 - ((box.minY + box.maxY) / 2) * s, s };
+}
+
+/**
+ * The zoom a Families check lands on: fit the whole sky, then step in by
+ * 1.4 until the view is no longer the star field. That is the scale at
+ * which family backgrounds and person-to-person links are on screen.
+ */
+export function skyLinksOnScreen(vw: number, vh: number, sky: FamilySky, zoomClicks = 8) {
+  const overview = overviewZoom(vw, vh, sky);
+  let scale = overview.s;
+  let level = zoomLevel(scale, undefined, overview.farAt);
+  for (let i = 0; i < zoomClicks && level === "far"; i++) {
+    scale *= 1.4;
+    level = zoomLevel(scale, level, overview.farAt);
+  }
+  const drawn = level === "near" ? "pieces" : "midPieces";
+  return {
+    level,
+    scale,
+    measure: measureCrossBucketLinks(
+      sky.links.map((link) => ({
+        id: link.id,
+        fromUnitId: link.fromUnitId,
+        toUnitId: link.toUnitId,
+        curves: link[drawn],
+      })),
+      sky.buckets,
+    ),
+  };
 }
 
 /** Scale for the star-sky overview, and the far threshold that keeps it starry. */

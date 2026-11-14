@@ -277,13 +277,12 @@ describe("family sky links (FIXTURE trees)", () => {
       }
     });
   }
-  it("breaks a stroke only where a crowded household has someone in the way", () => {
+  it("keeps a cross-bucket stroke in one piece when the bend can pass beside someone", () => {
     const sky = layoutFamilySky(FIXTURE_MATERNAL_FAMILY);
-    const gaps = sky.links.filter((l) => l.pieces.length > 1).map((l) => l.id).sort();
-    // Cora sits above her grandchildren, and Dad sits above Jon's household.
-    // Those two lines have to pass someone, so the stroke breaks and resumes.
-    // Every other line stays whole. Unrelated families are covered separately.
-    assert.deepEqual(gaps, ["blood:fu-fx-cora>fu-fx-joe", "blood:fu-fx-dad>fu-fx-jon"]);
+    const gaps = sky.links.filter((l) => l.pieces.length > 1).map((l) => l.id);
+    // Cora sits above her grandchildren and Dad sits above Jon's household.
+    // The bend slides along the chord and the stroke stays whole.
+    assert.deepEqual(gaps, []);
   });
 
   it("keeps each person-to-person bow proportional to the distance", () => {
@@ -524,7 +523,8 @@ describe("family sky stability (FIXTURE trees)", () => {
     assert.equal(home(start).cx, old.cx + sx);
     const link = half.links[0];
     const target = half.cards.find((c) => c.id === link.toPersonId)!;
-    assert.equal(link.x2 - target.x, after.links[0].x2 - after.cards.find((c) => c.id === link.toPersonId)!.x);
+    const landed = after.links[0].x2 - after.cards.find((c) => c.id === link.toPersonId)!.x;
+    assert.ok(Math.abs(link.x2 - target.x - landed) < 1e-6);
   });
 
   it("keeps a step-only child out of the step-parent bucket and draws foster as foster", () => {

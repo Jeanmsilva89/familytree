@@ -683,38 +683,109 @@ async function turnFamiliesOn(page, viewport) {
 }
 
 async function assertLinksStayClear(page, viewport) {
-  const crossed = await page.evaluate(() => {
-    const links = [...document.querySelectorAll(".family-sky .sky-link")];
-    const buckets = [...document.querySelectorAll(".family-sky .sky-bucket")];
+  const measured = await page.evaluate(() => {
+    const links = [...document.querySelectorAll(".family-sky .sky-link")].filter((link) => link instanceof SVGPathElement);
+    const buckets = [...document.querySelectorAll(".family-sky .sky-bucket")].filter((bucket) => bucket instanceof SVGPathElement);
+    const steps = 48;
+    const pointsOf = (link) => {
+      const len = link.getTotalLength();
+      const points = [];
+      for (let i = 0; i <= steps; i += 1) points.push(link.getPointAtLength((len * i) / steps));
+      return points;
+    };
+    const bowOf = (points) => {
+      const origin = points[0];
+      const end = points[points.length - 1];
+      const dx = end.x - origin.x;
+      const dy = end.y - origin.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1e-6) return 0;
+      let max = 0;
+      for (const point of points) {
+        const dist = Math.abs(dx * (origin.y - point.y) - dy * (origin.x - point.x)) / len;
+        if (dist > max) max = dist;
+      }
+      return max / len;
+    };
+    const crosses = (a, b) => {
+      const hit = (p, q, r, s) => {
+        const rx = q.x - p.x;
+        const ry = q.y - p.y;
+        const sx = s.x - r.x;
+        const sy = s.y - r.y;
+        const den = rx * sy - ry * sx;
+        if (Math.abs(den) < 1e-9) return false;
+        const t = ((r.x - p.x) * sy - (r.y - p.y) * sx) / den;
+        const u = ((r.x - p.x) * ry - (r.y - p.y) * rx) / den;
+        return t > 0.04 && t < 0.96 && u > 0.04 && u < 0.96;
+      };
+      for (let i = 0; i < a.length - 1; i += 1) {
+        for (let j = 0; j < b.length - 1; j += 1) {
+          if (hit(a[i], a[i + 1], b[j], b[j + 1])) return true;
+        }
+      }
+      return false;
+    };
+    const drawn = [];
     const hits = [];
+    let foreignCrossings = 0;
+    let maxBow = 0;
     for (const link of links) {
-      if (!(link instanceof SVGPathElement)) continue;
       const from = link.getAttribute("data-from") || "";
       const to = link.getAttribute("data-to") || "";
-      const len = link.getTotalLength();
-      const steps = 48;
-      for (let i = 0; i <= steps; i += 1) {
-        const point = link.getPointAtLength((len * i) / steps);
+      const points = pointsOf(link);
+      const seen = new Set();
+      for (const point of points) {
         for (const bucket of buckets) {
-          if (!(bucket instanceof SVGPathElement)) continue;
+          const id = bucket.getAttribute("data-unit-id") || "";
+          if (seen.has(id)) continue;
           const members = (bucket.getAttribute("data-members") || "").split(/\s+/).filter(Boolean);
           if (members.includes(from) || members.includes(to)) continue;
           if (bucket.isPointInFill(new DOMPoint(point.x, point.y))) {
-            hits.push({ from, to, bucket: bucket.getAttribute("data-unit-id") });
-            i = steps;
-            break;
+            seen.add(id);
+            hits.push({ from, to, bucket: id });
           }
         }
       }
+      foreignCrossings += seen.size;
+      maxBow = Math.max(maxBow, bowOf(points));
+      drawn.push(points);
     }
-    return { links: links.length, buckets: buckets.length, hits };
+    let pairwiseCrossings = 0;
+    for (let i = 0; i < drawn.length; i += 1) {
+      for (let j = i + 1; j < drawn.length; j += 1) {
+        if (crosses(drawn[i], drawn[j])) pairwiseCrossings += 1;
+      }
+    }
+    return {
+      links: links.length,
+      buckets: buckets.length,
+      hits,
+      foreignCrossings,
+      maxBow,
+      pairwiseCrossings,
+      level: document.querySelector(".family-sky")?.getAttribute("data-level") || "",
+    };
   });
-  if (crossed.links < 1 || crossed.buckets < 2) {
-    fail(`${viewport.name}: expected links and family backgrounds, saw ${crossed.links} links and ${crossed.buckets} buckets`);
+  if (measured.links < 1 || measured.buckets < 2) {
+    fail(`${viewport.name}: expected links and family backgrounds, saw ${measured.links} links and ${measured.buckets} buckets`);
   }
-  if (crossed.hits.length) {
-    fail(`${viewport.name}: a link crosses an unrelated family (${JSON.stringify(crossed.hits)})`);
+  if (measured.hits.length) {
+    fail(`${viewport.name}: a link crosses an unrelated family (${JSON.stringify(measured.hits)})`);
   }
+  // Ceilings measured on the fixture after links route around families.
+  // A midpoint bulge on this sky bowed 0.12 and still broke one stroke.
+  const maxBow = 0.115;
+  const foreignCeiling = 0;
+  const pairwiseCeiling = 0;
+  if (measured.foreignCrossings > foreignCeiling || measured.pairwiseCrossings > pairwiseCeiling || measured.maxBow > maxBow) {
+    fail(
+      `${viewport.name}: link routes exceeded the fixture ceilings (foreign ${measured.foreignCrossings}, bow ${measured.maxBow.toFixed(3)}, crossings ${measured.pairwiseCrossings})`,
+    );
+  }
+  console.log(
+    `${viewport.name}: links ${measured.links} at ${measured.level}, foreign crossings ${measured.foreignCrossings}, max bow ${measured.maxBow.toFixed(3)}, pairwise crossings ${measured.pairwiseCrossings}`,
+  );
 }
 
 async function assertStepOnlyChild(page, viewport) {
