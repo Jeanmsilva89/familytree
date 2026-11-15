@@ -5,12 +5,15 @@ import { buildGraph } from "./layoutGraph";
 import { deriveFamilyUnits, type FamilyUnit, type FamilyUnits, type JoinReason, type UnitLinkKind } from "./familyUnits";
 import { placeFamilySkySeed, seedFromUnits, treeForLens } from "./layoutSeed";
 import type { Camera } from "./graphView";
+import { AVATAR_ROOM } from "./familySkyEnds";
 import { measureCrossBucketLinks, routePersonLink, type RouteBucket, type RouteCurve } from "./familySkyRoute";
 
 /**
  * The family sky: every family unit is a soft bucket holding today's
  * generation-row layout of its own people, buckets float apart in one big
- * world, and links run person to person between buckets.
+ * world, and links run person to person between buckets. At family zoom
+ * each end sits on that person's avatar. Close up, on the portrait.
+ * At star zoom the people are collapsed, and one line runs star to star.
  */
 
 export type SkyCard = LaidCard & { unitId: string };
@@ -324,7 +327,6 @@ function shiftFork(fork: LaidFork, dx: number, dy: number, unitId: string): SkyF
 type Rect = { x0: number; y0: number; x1: number; y1: number };
 
 const LINK_GAP = 7;
-const AVATAR_ROOM = 50;
 
 function cardRect(c: { x: number; y: number }, pad = 0): Rect {
   return { x0: c.x - CARD.w / 2 - pad, y0: c.y - pad, x1: c.x + CARD.w / 2 + pad, y1: c.y + CARD.h + pad };
@@ -436,7 +438,10 @@ function routeLink(
   route: typeof routePersonLink,
   avoid: RouteCurve[],
 ): { raw: RouteCurve; near: Curve; mid: Curve; nearPieces: Curve[]; midPieces: Curve[] } {
-  const q: RouteCurve = route({ from: a, to: b, cards: otherCards, foreign, avoid });
+  // Ports sit on the avatar circle. The bend still slides along that chord.
+  // Close up, trim pulls each end out to the portrait. Star zoom does not
+  // use this curve: it draws one line between family stars.
+  const q: RouteCurve = route({ from: a, to: b, nodeRadius: AVATAR_ROOM, cards: otherCards, foreign, avoid });
   const ra = cardRect(a, LINK_GAP);
   const rb = cardRect(b, LINK_GAP);
   const nearCurve = trim(q, (p) => inRect(ra, p), (p) => inRect(rb, p));

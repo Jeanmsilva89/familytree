@@ -119,6 +119,24 @@ describe("routePersonLink (FIXTURE geometry)", () => {
     assert.equal(midpointClears, false);
   });
 
+  it("starts and ends on the person terminals, and still slides the bend along that chord", () => {
+    const from = { x: 0, y: 0 };
+    const to = { x: 900, y: 0 };
+    const terminals = { from: { x: 0, y: midY(0) }, to: { x: 900, y: midY(0) } };
+    const blocker: RouteBucket = { cx: 450, cy: midY(0), rx: 170, ry: 96, n: 4 };
+    const straight = routePersonLink({ from, to, terminals, foreign: [], bowLimit: 0 });
+    assert.deepEqual({ x: straight.x1, y: straight.y1 }, terminals.from);
+    assert.deepEqual({ x: straight.x2, y: straight.y2 }, terminals.to);
+    assert.equal(curveEntersBucket(straight, blocker), true);
+    const routed = routePersonLink({ from, to, terminals, foreign: [blocker] });
+    const again = routePersonLink({ from, to, terminals, foreign: [blocker] });
+    assert.deepEqual(routed, again);
+    assert.deepEqual({ x: routed.x1, y: routed.y1 }, terminals.from);
+    assert.deepEqual({ x: routed.x2, y: routed.y2 }, terminals.to);
+    assert.equal(curveEntersBucket(routed, blocker), false);
+    assert.ok(curveBowRatio(routed) <= LINK_BOW_LIMIT + 1e-9);
+  });
+
   it("returns the same curve for the same cards and families", () => {
     const from = { x: 40, y: 10 };
     const to = { x: 520, y: 80 };
