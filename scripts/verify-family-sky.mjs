@@ -6,8 +6,9 @@
  * out to the star view, taps a star, and moves fixture people between family
  * units. Also checks a step-parent bucket: Wynn Fixture, whose only parent
  * is Stu as step, sits in their own bucket with a step link. Also checks a partnerless move, that a
- * person-to-person link does not cross an unrelated family's background, and
- * that a reload draws the same stars. In Families Edit mode, close up, a
+ * person-to-person link does not cross an unrelated family's background,
+ * that each visible end of those links sits within a few pixels of its person,
+ * and that a reload draws the same stars. In Families Edit mode, close up, a
  * horizontal drag along a row nudges that person and the nudge is still
  * there after a reload. Gather family, not a tap, enters a personal map.
  * Lines hide while relatives travel, then draw back in. A plain tap never gathers.
@@ -786,6 +787,63 @@ async function assertLinksStayClear(page, viewport) {
   console.log(
     `${viewport.name}: links ${measured.links} at ${measured.level}, foreign crossings ${measured.foreignCrossings}, max bow ${measured.maxBow.toFixed(3)}, pairwise crossings ${measured.pairwiseCrossings}`,
   );
+  await assertLinkEndsOnPeople(page, viewport);
+}
+
+/**
+ * A visible link must meet the person it names. At family zoom that person
+ * is the round avatar; close up it is the portrait. Star zoom draws no
+ * person-to-person link: the one line between two families ends on the stars.
+ */
+async function assertLinkEndsOnPeople(page, viewport) {
+  const measured = await page.evaluate(() => {
+    const rows = [];
+    for (const link of document.querySelectorAll(".family-sky .sky-link")) {
+      if (!(link instanceof SVGPathElement)) continue;
+      const len = link.getTotalLength();
+      if (!(len > 1)) continue;
+      const ctm = link.getScreenCTM();
+      const end = (at, id) => {
+        const local = link.getPointAtLength(at);
+        const screen = ctm ? new DOMPoint(local.x, local.y).matrixTransform(ctm) : null;
+        const onScreen = Boolean(screen && screen.x > 0 && screen.y > 0 && screen.x < window.innerWidth && screen.y < window.innerHeight);
+        const node = document.querySelector(`.sky-avatar[data-person-id="${id}"], .portrait-card[data-person-id="${id}"]`);
+        if (!(node instanceof HTMLElement) || !screen) return { id, missing: true, onScreen };
+        const rect = node.getBoundingClientRect();
+        const dx = screen.x - (rect.left + rect.width / 2);
+        const dy = screen.y - (rect.top + rect.height / 2);
+        const center = Math.hypot(dx, dy);
+        let gap;
+        if (node.classList.contains("sky-avatar")) gap = center - rect.width / 2;
+        else {
+          const ox = Math.abs(dx) - rect.width / 2;
+          const oy = Math.abs(dy) - rect.height / 2;
+          gap = ox <= 0 && oy <= 0 ? Math.max(ox, oy) : ox > 0 && oy > 0 ? Math.hypot(ox, oy) : Math.max(ox, oy);
+        }
+        return { id, gap, center, onScreen };
+      };
+      const from = link.getAttribute("data-from") || "";
+      const to = link.getAttribute("data-to") || "";
+      rows.push({ from, to, start: end(0, from), finish: end(len, to) });
+    }
+    return rows;
+  });
+  if (!measured.length) fail(`${viewport.name}: no person-to-person link to measure`);
+  const limit = 6;
+  const bits = [];
+  for (const row of measured) {
+    for (const [side, point] of [["start", row.start], ["end", row.finish]]) {
+      if (point.missing) {
+        if (point.onScreen) fail(`${viewport.name}: ${row.from}→${row.to} ${side} is on screen but its person is not`);
+        continue;
+      }
+      bits.push(`${row.from}→${row.to} ${side} ${point.gap.toFixed(1)}px`);
+      if (point.gap > limit || point.gap < -2) {
+        fail(`${viewport.name}: ${row.from}→${row.to} ${side} is ${point.gap.toFixed(1)}px from the person (limit ${limit}px)`);
+      }
+    }
+  }
+  console.log(`${viewport.name}: link ends on people (${bits.join("; ")})`);
 }
 
 async function assertStepOnlyChild(page, viewport) {

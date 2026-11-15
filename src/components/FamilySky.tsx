@@ -39,6 +39,7 @@ import {
 import { coupleBarGeometry, curvesPath, forkGuides, glideMotion } from "@/lib/skyGlide";
 import { cameraForPress, skyCameraAt, skyCameraFrames } from "@/lib/skyMotion";
 import { bindSkyGlide, clearSkyGlide, stepSkyGlide } from "@/lib/skyGlideDom";
+import { AVATAR_NODE_R, nodeVisibility } from "@/lib/familySkyEnds";
 import { routePersonLink } from "@/lib/familySkyRoute";
 import type { UnitLinkKind } from "@/lib/familyUnits";
 import {
@@ -114,7 +115,7 @@ function portPoint(x: number, y: number, port: Port, side: "left" | "right" = "r
 
 type PinchStart = Camera & { dist: number; midX: number; midY: number };
 
-const AVATAR_R = 44;
+const AVATAR_R = AVATAR_NODE_R;
 
 const DASH: Record<UnitLinkKind, string | undefined> = {
   blood: undefined,
@@ -1168,8 +1169,7 @@ export function FamilySky({
   const shown = new Set(shownKey.split("|"));
   const lensOn = Boolean(lens?.active);
   function lensShows(personId: string) {
-    if (!lensOn || !lens) return true;
-    return lens.marks[personId]?.draw === "shown";
+    return nodeVisibility(lens?.marks[personId], lensOn) !== "hidden";
   }
   function lensDraws(personId: string) {
     if (!lensOn || !lens) return true;
